@@ -1,0 +1,38 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=DM+Sans:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-base: #141414;
+  --bg-surface: #1c1c1c;
+  --bg-card: #222222;
+  --bg-hover: #2a2a2a;
+  --bg-input: #181818;
+  --teal: #00868a;
+  --teal-light: #00a8ad;
+  --teal-dim: rgba(0,134,138,0.12);
+  --teal-dim2: rgba(0,134,138,0.2);
+  --text-primary: #ebebeb;
+  --text-secondary: #999;
+  --text-muted: #666;
+  --border: #2e2e2e;
+  --border-strong: #3a3a3a;
+  --danger: #e05252;
+  --danger-dim: rgba(224,82,82,0.12);
+  --warn: #e0a050;
+  --warn-dim: rgba(224,160,80,0.12);
+  --success: #52b88a;
+  --success-dim: rgba(82,184,138,0.12);
+  --blue: #5ba3d9;
+  --blue-dim: rgba(91,163,217,0.12);
+  --sidebar-w: 220px;
+  --header-h: 56px;
+  --font-main: 'Sora', system-ui, sans-serif;
+  --font-body: 'DM Sans', system-ui, sans-serif;
+}
+
+html, body { height: 100%; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-body); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
