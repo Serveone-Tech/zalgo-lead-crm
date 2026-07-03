@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
+import { AlertTriangle, Bell, CheckCircle2, ChevronRight } from "lucide-react";
 
 function today() {
   const d = new Date();
@@ -45,6 +46,7 @@ export default function NotificationsPage() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoad] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [highlightId, setHighlightId] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("crm_token");
@@ -52,14 +54,23 @@ export default function NotificationsPage() {
       router.push("/login");
       return;
     }
-    load();
+    const params = new URLSearchParams(window.location.search);
+    const leadParam = params.get("lead");
+    if (leadParam) setHighlightId(leadParam);
+    load(leadParam);
   }, []);
 
-  const load = async () => {
+  const load = async (leadParam) => {
     setLoad(true);
     try {
       const { data } = await api.get("/leads");
       setLeads(data);
+      if (leadParam) {
+        setTimeout(() => {
+          const el = document.getElementById(`notif-${leadParam}`);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 150);
+      }
     } catch {
       router.push("/login");
     } finally {
@@ -141,9 +152,9 @@ export default function NotificationsPage() {
             key={tab.key}
             onClick={() => setFilter(tab.key)}
             style={{
-              padding: "7px 16px",
+              padding: "9px 18px",
               borderRadius: 8,
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: 600,
               cursor: "pointer",
               fontFamily: "var(--font-main)",
@@ -210,7 +221,7 @@ export default function NotificationsPage() {
             textAlign: "center",
           }}
         >
-          <div style={{ fontSize: 36, marginBottom: 12 }}>🎉</div>
+          <div style={{ marginBottom: 12, color: "var(--success)", display: "flex", justifyContent: "center" }}><CheckCircle2 size={40} /></div>
           <div
             style={{
               fontFamily: "var(--font-main)",
@@ -241,23 +252,25 @@ export default function NotificationsPage() {
             return (
               <div
                 key={`${lead.id}-${lead.type}`}
+                id={`notif-${lead.id}`}
                 style={{
-                  background: "var(--bg-card)",
-                  border: `1px solid var(--border)`,
-                  borderLeft: `3px solid ${accent}`,
+                  background: String(lead.id) === highlightId ? "var(--teal-dim)" : "var(--bg-card)",
+                  border: `1px solid ${String(lead.id) === highlightId ? "var(--teal)" : "var(--border)"}`,
+                  borderLeft: `3px solid ${String(lead.id) === highlightId ? "var(--teal)" : accent}`,
                   borderRadius: 10,
                   padding: "16px 20px",
                   display: "flex",
                   alignItems: "flex-start",
                   gap: 16,
-                  transition: "background 0.15s",
+                  transition: "background 0.15s, border-color 0.15s",
                   cursor: "pointer",
+                  scrollMarginTop: 80,
                 }}
                 onMouseEnter={(e) =>
                   (e.currentTarget.style.background = "var(--bg-hover)")
                 }
                 onMouseLeave={(e) =>
-                  (e.currentTarget.style.background = "var(--bg-card)")
+                  (e.currentTarget.style.background = String(lead.id) === highlightId ? "var(--teal-dim)" : "var(--bg-card)")
                 }
                 onClick={() => router.push("/leads")}
               >
@@ -272,10 +285,10 @@ export default function NotificationsPage() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: 18,
+                    color: accent,
                   }}
                 >
-                  {isOvr ? "⚠️" : "🔔"}
+                  {isOvr ? <AlertTriangle size={20} /> : <Bell size={20} />}
                 </div>
 
                 {/* Content */}
