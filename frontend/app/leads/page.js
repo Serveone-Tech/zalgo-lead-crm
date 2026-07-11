@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import api from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import KanbanBoard from "../../components/KanbanBoard";
@@ -29,11 +29,13 @@ function fmtDate(d) {
 
 export default function LeadsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [stageF, setStageF] = useState("");
   const [dateF, setDateF] = useState("");
+  const [assigneeF, setAssigneeF] = useState(searchParams.get("assignee") || "");
   const [modalOpen, setModal] = useState(false);
   const [editLead, setEditLead] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -43,6 +45,11 @@ export default function LeadsPage() {
   const [user, setUser] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [dynamicStages, setDynamicStages] = useState([]);
+
+  // Bulk assign state
+  const [selected, setSelected] = useState(new Set());
+  const [bulkAssignTo, setBulkAssignTo] = useState("");
+  const [bulkAssigning, setBulkAssigning] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -75,8 +82,8 @@ export default function LeadsPage() {
     }
   };
 
-  const showToast = (msg) => {
-    setToast(msg);
+  const showToast = (msg, type = "success") => {
+    setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
 
@@ -95,9 +102,11 @@ export default function LeadsPage() {
         if (stageF && l.stage !== stageF) return false;
         if (dateF === "overdue" && !isOverdue(l.follow_up_date)) return false;
         if (dateF === "today" && !isToday(l.follow_up_date)) return false;
+        if (assigneeF === "__unassigned__" && l.assigned_to) return false;
+        if (assigneeF && assigneeF !== "__unassigned__" && String(l.assigned_to) !== assigneeF) return false;
         return true;
       }),
-    [leads, search, stageF, dateF],
+    [leads, search, stageF, dateF, assigneeF],
   );
 
   const openAdd = () => {
@@ -146,12 +155,55 @@ export default function LeadsPage() {
     load();
   };
 
+  // Checkbox helpers
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map((l) => l.id)));
+    }
+  };
+
+  const clearSelection = () => {
+    setSelected(new Set());
+    setBulkAssignTo("");
+  };
+
+  const bulkAssign = async () => {
+    if (selected.size === 0) return;
+    setBulkAssigning(true);
+    try {
+      const { data } = await api.put("/leads/bulk-assign", {
+        lead_ids: Array.from(selected),
+        assigned_to: bulkAssignTo || null,
+      });
+      showToast(`✓ ${data.updated} lead${data.updated !== 1 ? "s" : ""} assigned successfully.`);
+      clearSelection();
+      load();
+    } catch {
+      showToast("Failed to assign leads. Please try again.", "error");
+    } finally {
+      setBulkAssigning(false);
+    }
+  };
+
   const terminalStages = dynamicStages.length
     ? dynamicStages.slice(-2).map(s => s.name)
     : ["Converted", "Closed"];
   const overdueCount = leads.filter(
     (l) => isOverdue(l.follow_up_date) && !terminalStages.includes(l.stage),
   ).length;
+
+  const hasFilters = search || stageF || dateF || assigneeF;
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -163,7 +215,7 @@ export default function LeadsPage() {
             top: 20,
             right: 20,
             zIndex: 9999,
-            background: "var(--success)",
+            background: toast.type === "error" ? "var(--danger)" : "var(--success)",
             color: "#fff",
             borderRadius: 10,
             padding: "12px 20px",
@@ -173,7 +225,7 @@ export default function LeadsPage() {
             boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
           }}
         >
-          {toast}
+          {toast.msg}
         </div>
       )}
 
@@ -330,12 +382,26 @@ export default function LeadsPage() {
           <option value="overdue">Overdue</option>
           <option value="today">Due Today</option>
         </select>
-        {(search || stageF || dateF) && (
+        {canAssign && employees.length > 0 && (
+          <select
+            value={assigneeF}
+            onChange={(e) => setAssigneeF(e.target.value)}
+            style={selStyle}
+          >
+            <option value="">All Assignees</option>
+            <option value="__unassigned__">Unassigned</option>
+            {employees.map((e) => (
+              <option key={e.id} value={String(e.id)}>{e.name}</option>
+            ))}
+          </select>
+        )}
+        {hasFilters && (
           <button
             onClick={() => {
               setSearch("");
               setStageF("");
               setDateF("");
+              setAssigneeF("");
             }}
             style={{
               padding: "10px 16px",
@@ -353,6 +419,87 @@ export default function LeadsPage() {
           </button>
         )}
       </div>
+
+      {/* Bulk assign bar */}
+      {canAssign && selected.size > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 200,
+            background: "var(--bg-surface)",
+            border: "1px solid var(--teal)",
+            borderRadius: 12,
+            padding: "12px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            fontFamily: "var(--font-main)",
+          }}
+        >
+          <span style={{ fontWeight: 700, fontSize: 13, color: "var(--teal-light)" }}>
+            {selected.size} lead{selected.size !== 1 ? "s" : ""} selected
+          </span>
+          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+          <select
+            value={bulkAssignTo}
+            onChange={(e) => setBulkAssignTo(e.target.value)}
+            style={{
+              padding: "7px 12px",
+              background: "var(--bg-input)",
+              border: "1px solid var(--border)",
+              borderRadius: 7,
+              color: "var(--text-primary)",
+              fontSize: 13,
+              fontFamily: "var(--font-main)",
+              outline: "none",
+              cursor: "pointer",
+              minWidth: 160,
+            }}
+          >
+            <option value="">Unassign</option>
+            {employees.map((e) => (
+              <option key={e.id} value={e.id}>{e.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={bulkAssign}
+            disabled={bulkAssigning}
+            style={{
+              background: "var(--gradient-accent)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 7,
+              padding: "8px 18px",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: bulkAssigning ? "not-allowed" : "pointer",
+              opacity: bulkAssigning ? 0.7 : 1,
+              fontFamily: "var(--font-main)",
+            }}
+          >
+            {bulkAssigning ? "Assigning…" : "Assign"}
+          </button>
+          <button
+            onClick={clearSelection}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 7,
+              padding: "8px 14px",
+              fontSize: 13,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontFamily: "var(--font-main)",
+            }}
+          >
+            ✕ Cancel
+          </button>
+        </div>
+      )}
 
       {/* Table or Kanban */}
       {view === "kanban" ? (
@@ -420,7 +567,16 @@ export default function LeadsPage() {
             >
               <thead>
                 <tr style={{ background: "var(--bg-surface)" }}>
-                  {/* Same columns as the form fields */}
+                  {canAssign && (
+                    <th style={thStyle}>
+                      <input
+                        type="checkbox"
+                        checked={selected.size === filtered.length && filtered.length > 0}
+                        onChange={toggleSelectAll}
+                        style={{ cursor: "pointer", accentColor: "var(--teal)" }}
+                      />
+                    </th>
+                  )}
                   {[
                     "#",
                     "Name & Link",
@@ -433,23 +589,7 @@ export default function LeadsPage() {
                     "Notes",
                     "Actions",
                   ].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: "12px 14px",
-                        textAlign: "left",
-                        fontSize: 11,
-                        color: "var(--text-muted)",
-                        fontWeight: 700,
-                        letterSpacing: "0.06em",
-                        textTransform: "uppercase",
-                        borderBottom: "1px solid var(--border)",
-                        fontFamily: "var(--font-main)",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {h}
-                    </th>
+                    <th key={h} style={thStyle}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -461,25 +601,43 @@ export default function LeadsPage() {
                     lead.stage !== "Converted";
                   const tod = isToday(lead.follow_up_date);
                   const sc = stageStyle(lead.stage, dynamicStages);
+                  const isSelected = selected.has(lead.id);
                   return (
                     <tr
                       key={lead.id}
                       style={{
-                        background: over
+                        background: isSelected
+                          ? "var(--teal-dim)"
+                          : over
                           ? "rgba(224,82,82,0.04)"
                           : "transparent",
                         borderBottom: "1px solid var(--border)",
                         transition: "background 0.15s",
                       }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = "var(--bg-hover)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = over
+                      onMouseEnter={(e) => {
+                        if (!isSelected)
+                          e.currentTarget.style.background = "var(--bg-hover)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = isSelected
+                          ? "var(--teal-dim)"
+                          : over
                           ? "rgba(224,82,82,0.04)"
-                          : "transparent")
-                      }
+                          : "transparent";
+                      }}
                     >
+                      {/* Checkbox */}
+                      {canAssign && (
+                        <td style={{ padding: "12px 14px" }} onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(lead.id)}
+                            style={{ cursor: "pointer", accentColor: "var(--teal)" }}
+                          />
+                        </td>
+                      )}
+
                       {/* # */}
                       <td
                         style={{
@@ -729,12 +887,10 @@ export default function LeadsPage() {
                               fontWeight: 600,
                             }}
                             onMouseEnter={(e) =>
-                              (e.currentTarget.style.borderColor =
-                                "var(--teal)")
+                              (e.currentTarget.style.borderColor = "var(--teal)")
                             }
                             onMouseLeave={(e) =>
-                              (e.currentTarget.style.borderColor =
-                                "var(--border)")
+                              (e.currentTarget.style.borderColor = "var(--border)")
                             }
                           >
                             Edit
@@ -755,12 +911,10 @@ export default function LeadsPage() {
                               opacity: deleting === lead.id ? 0.5 : 1,
                             }}
                             onMouseEnter={(e) =>
-                              (e.currentTarget.style.borderColor =
-                                "var(--danger)")
+                              (e.currentTarget.style.borderColor = "var(--danger)")
                             }
                             onMouseLeave={(e) =>
-                              (e.currentTarget.style.borderColor =
-                                "var(--border)")
+                              (e.currentTarget.style.borderColor = "var(--border)")
                             }
                           >
                             {deleting === lead.id ? "…" : "Del"}
@@ -787,6 +941,11 @@ export default function LeadsPage() {
           }}
         >
           Showing {filtered.length} of {leads.length} leads
+          {selected.size > 0 && (
+            <span style={{ color: "var(--teal-light)", marginLeft: 10, fontWeight: 600 }}>
+              • {selected.size} selected
+            </span>
+          )}
         </div>
       )}
 
@@ -808,6 +967,19 @@ export default function LeadsPage() {
     </div>
   );
 }
+
+const thStyle = {
+  padding: "12px 14px",
+  textAlign: "left",
+  fontSize: 11,
+  color: "var(--text-muted)",
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  borderBottom: "1px solid var(--border)",
+  fontFamily: "var(--font-main)",
+  whiteSpace: "nowrap",
+};
 
 const selStyle = {
   padding: "10px 14px",

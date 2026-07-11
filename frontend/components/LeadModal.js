@@ -86,6 +86,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
   };
 
   const canAssign = isOwnerUser(user) || hasPerm(user, "assign_leads");
+  const canEditDetails = isOwnerUser(user) || hasPerm(user, "edit_lead_details");
   const canEditStageOnly =
     !canAssign &&
     !isOwnerUser(user) &&
@@ -167,6 +168,22 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
         </div>
 
         <form onSubmit={submit}>
+          {/* Read-only notice for employees without edit_lead_details */}
+          {lead?.id && !canEditDetails && (
+            <div style={{
+              marginBottom: 14,
+              padding: "9px 13px",
+              background: "rgba(160,120,0,0.08)",
+              border: "1px solid rgba(200,160,0,0.25)",
+              borderRadius: 8,
+              fontSize: 12,
+              color: "var(--warn)",
+              fontFamily: "var(--font-main)",
+            }}>
+              🔒 Name, phone, email and platform details are view-only. Contact your admin to update them.
+            </div>
+          )}
+
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
           >
@@ -176,22 +193,24 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                 <input
                   name="name"
                   value={form.name}
-                  onChange={handle}
+                  onChange={canEditDetails ? handle : undefined}
+                  readOnly={!canEditDetails}
                   placeholder="Lead's full name"
                   required
-                  style={inp}
+                  style={canEditDetails ? inp : inpLocked}
                 />
               </Field>
             </div>
 
-            {/* ✅ Phone + Email — NEW fields */}
+            {/* Phone + Email */}
             <Field label="Phone Number">
               <input
                 name="phone"
                 value={form.phone}
-                onChange={handle}
+                onChange={canEditDetails ? handle : undefined}
+                readOnly={!canEditDetails}
                 placeholder="9876543210"
-                style={inp}
+                style={canEditDetails ? inp : inpLocked}
               />
             </Field>
             <Field label="Email Address">
@@ -199,24 +218,29 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                 name="email"
                 type="email"
                 value={form.email}
-                onChange={handle}
+                onChange={canEditDetails ? handle : undefined}
+                readOnly={!canEditDetails}
                 placeholder="lead@email.com"
-                style={inp}
+                style={canEditDetails ? inp : inpLocked}
               />
             </Field>
 
             {/* Platform + Stage */}
             <Field label="Platform">
-              <select
-                name="platform"
-                value={form.platform}
-                onChange={handle}
-                style={inp}
-              >
-                {PLATFORMS.map((p) => (
-                  <option key={p}>{p}</option>
-                ))}
-              </select>
+              {canEditDetails ? (
+                <select
+                  name="platform"
+                  value={form.platform}
+                  onChange={handle}
+                  style={inp}
+                >
+                  {PLATFORMS.map((p) => (
+                    <option key={p}>{p}</option>
+                  ))}
+                </select>
+              ) : (
+                <div style={inpLocked}>{form.platform}</div>
+              )}
             </Field>
             <Field label="Stage">
               <select
@@ -266,9 +290,10 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                 <input
                   name="platform_link"
                   value={form.platform_link}
-                  onChange={handle}
+                  onChange={canEditDetails ? handle : undefined}
+                  readOnly={!canEditDetails}
                   placeholder="https://linkedin.com/in/..."
-                  style={inp}
+                  style={canEditDetails ? inp : inpLocked}
                 />
               </Field>
             </div>
@@ -537,4 +562,17 @@ const inp = {
   color: "var(--text-primary)",
   fontSize: 13,
   outline: "none",
+};
+
+const inpLocked = {
+  width: "100%",
+  padding: "9px 11px",
+  background: "var(--bg-surface)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  color: "var(--text-muted)",
+  fontSize: 13,
+  outline: "none",
+  cursor: "not-allowed",
+  userSelect: "text",
 };

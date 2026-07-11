@@ -3,7 +3,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import api from "../lib/api";
-import { hasPerm } from "../lib/permissions";
+import { hasPerm, isOwnerUser } from "../lib/permissions";
 
 function today() {
   const d = new Date();
@@ -199,6 +199,21 @@ export default function Sidebar() {
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                     <line x1="19" y1="8" x2="19" y2="14" />
                     <line x1="22" y1="11" x2="16" y2="11" />
+                  </svg>
+                ),
+              },
+            ]
+          : []),
+        ...(hasPlanFeature("employees") && (isOwnerUser(user) || hasPerm(user, "view_all_leads"))
+          ? [
+              {
+                href: "/reports",
+                label: "Reports",
+                icon: (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10" />
+                    <line x1="12" y1="20" x2="12" y2="4" />
+                    <line x1="6" y1="20" x2="6" y2="14" />
                   </svg>
                 ),
               },

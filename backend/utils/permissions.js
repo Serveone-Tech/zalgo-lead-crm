@@ -4,6 +4,7 @@ const PERMISSION_KEYS = [
   "view_all_leads",
   "assign_leads",
   "delete_leads",
+  "edit_lead_details",
   "manage_customers",
   "view_customers",
   "manage_automation",

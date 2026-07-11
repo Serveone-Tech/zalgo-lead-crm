@@ -185,6 +185,55 @@ router.post("/bulk", auth, async (req, res) => {
   res.json({ success, failed });
 });
 
+// PUT bulk assign leads to an employee
+router.put("/bulk-assign", auth, async (req, res) => {
+  const { lead_ids, assigned_to } = req.body;
+  if (!Array.isArray(lead_ids) || lead_ids.length === 0)
+    return res.status(400).json({ error: "No leads selected" });
+  if (!isOwner(req) && !hasPermission(req, "assign_leads"))
+    return res.status(403).json({ error: "Permission denied" });
+  try {
+    const result = await pool.query(
+      `UPDATE leads SET assigned_to=$1, updated_at=NOW()
+       WHERE id = ANY($2::int[]) AND user_id=$3`,
+      [assigned_to || null, lead_ids, req.tenantId],
+    );
+    res.json({ updated: result.rowCount });
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET employee-wise lead report (owner / view_all_leads only)
+router.get("/report/by-employee", auth, async (req, res) => {
+  if (!isOwner(req) && !hasPermission(req, "view_all_leads"))
+    return res.status(403).json({ error: "Permission denied" });
+  try {
+    const emps = await pool.query(
+      `SELECT id, name, role_label FROM users WHERE parent_id=$1 ORDER BY name ASC`,
+      [req.tenantId],
+    );
+
+    // Stage-level counts for all leads under this tenant
+    const stageCounts = await pool.query(
+      `SELECT
+         assigned_to,
+         stage,
+         COUNT(*) AS cnt,
+         COUNT(CASE WHEN follow_up_date < CURRENT_DATE AND stage NOT IN ('Closed','Converted') THEN 1 END) AS overdue
+       FROM leads WHERE user_id=$1
+       GROUP BY assigned_to, stage`,
+      [req.tenantId],
+    );
+
+    res.json({ employees: emps.rows, stage_counts: stageCounts.rows });
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // PUT update lead
 router.put("/:id", auth, async (req, res) => {
   const {
@@ -218,17 +267,26 @@ router.put("/:id", auth, async (req, res) => {
       ? (assigned_to || null)
       : lead.assigned_to;
 
+    // Sensitive fields (name, phone, email, platform, platform_link) can only be
+    // changed by owner or someone with edit_lead_details permission
+    const canEditDetails = isOwner(req) || hasPermission(req, "edit_lead_details");
+    const nextName = canEditDetails ? (name || lead.name) : lead.name;
+    const nextPhone = canEditDetails ? (phone ?? lead.phone) : lead.phone;
+    const nextEmail = canEditDetails ? (email ?? lead.email) : lead.email;
+    const nextPlatform = canEditDetails ? (platform || lead.platform) : lead.platform;
+    const nextPlatformLink = canEditDetails ? (platform_link ?? lead.platform_link) : lead.platform_link;
+
     const oldStage = lead.stage;
     const result = await pool.query(
       `UPDATE leads SET name=$1, phone=$2, email=$3, platform=$4, platform_link=$5,
        stage=$6, last_message=$7, follow_up_date=$8, notes=$9, assigned_to=$10, updated_at=NOW()
        WHERE id=$11 AND user_id=$12 RETURNING *`,
       [
-        name,
-        phone || "",
-        email || "",
-        platform,
-        platform_link,
+        nextName,
+        nextPhone,
+        nextEmail,
+        nextPlatform,
+        nextPlatformLink,
         stage,
         last_message,
         follow_up_date || null,
