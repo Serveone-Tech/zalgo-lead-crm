@@ -5,7 +5,7 @@ import Image from "next/image";
 import axios from "axios";
 
 // Direct axios — no api.js dependency
-const BASE = "http://localhost:5000/api";
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 export default function RegisterPage() {
   const router = useRouter();

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 
-const BASE = "http://localhost:5000/api";
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
 function authHeaders() {
   const token =
