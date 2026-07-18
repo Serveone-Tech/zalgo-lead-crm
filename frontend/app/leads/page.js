@@ -50,6 +50,7 @@ export default function LeadsPage() {
   const [selected, setSelected] = useState(new Set());
   const [bulkAssignTo, setBulkAssignTo] = useState("");
   const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -193,6 +194,22 @@ export default function LeadsPage() {
       showToast("Failed to assign leads. Please try again.", "error");
     } finally {
       setBulkAssigning(false);
+    }
+  };
+
+  const bulkDelete = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Permanently delete ${selected.size} selected lead${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    setBulkDeleting(true);
+    try {
+      const { data } = await api.delete("/leads/bulk", { data: { lead_ids: Array.from(selected) } });
+      showToast(`✓ ${data.deleted} lead${data.deleted !== 1 ? "s" : ""} deleted.`);
+      clearSelection();
+      load();
+    } catch {
+      showToast("Failed to delete leads. Please try again.", "error");
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -482,6 +499,25 @@ export default function LeadsPage() {
             }}
           >
             {bulkAssigning ? "Assigning…" : "Assign"}
+          </button>
+          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+          <button
+            onClick={bulkDelete}
+            disabled={bulkDeleting}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--danger)",
+              borderRadius: 7,
+              padding: "8px 16px",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--danger)",
+              cursor: bulkDeleting ? "not-allowed" : "pointer",
+              opacity: bulkDeleting ? 0.7 : 1,
+              fontFamily: "var(--font-main)",
+            }}
+          >
+            {bulkDeleting ? "Deleting…" : "Delete Selected"}
           </button>
           <button
             onClick={clearSelection}

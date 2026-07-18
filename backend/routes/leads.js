@@ -205,6 +205,25 @@ router.put("/bulk-assign", auth, async (req, res) => {
   }
 });
 
+// DELETE bulk delete leads (owner or delete_leads permission)
+router.delete("/bulk", auth, async (req, res) => {
+  const { lead_ids } = req.body;
+  if (!Array.isArray(lead_ids) || lead_ids.length === 0)
+    return res.status(400).json({ error: "No leads selected" });
+  if (!isOwner(req) && !hasPermission(req, "delete_leads"))
+    return res.status(403).json({ error: "Permission denied" });
+  try {
+    const result = await pool.query(
+      `DELETE FROM leads WHERE id = ANY($1::int[]) AND user_id=$2`,
+      [lead_ids, req.tenantId],
+    );
+    res.json({ deleted: result.rowCount });
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // GET employee-wise lead report (owner / view_all_leads only)
 router.get("/report/by-employee", auth, async (req, res) => {
   if (!isOwner(req) && !hasPermission(req, "view_all_leads"))
