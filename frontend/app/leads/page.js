@@ -1,12 +1,16 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import KanbanBoard from "../../components/KanbanBoard";
 import BulkUploadModal from "../../components/BulkUploadModal";
 import { Upload, Plus } from "lucide-react";
-import { STAGE_COLORS, STAGES as FALLBACK_STAGES, stageStyle } from "../../lib/stages";
+import {
+  STAGE_COLORS,
+  STAGES as FALLBACK_STAGES,
+  stageStyle,
+} from "../../lib/stages";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 
 function today() {
@@ -27,7 +31,7 @@ function fmtDate(d) {
   });
 }
 
-export default function LeadsPage() {
+function LeadsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [leads, setLeads] = useState([]);
@@ -35,7 +39,9 @@ export default function LeadsPage() {
   const [search, setSearch] = useState("");
   const [stageF, setStageF] = useState("");
   const [dateF, setDateF] = useState("");
-  const [assigneeF, setAssigneeF] = useState(searchParams.get("assignee") || "");
+  const [assigneeF, setAssigneeF] = useState(
+    searchParams.get("assignee") || "",
+  );
   const [modalOpen, setModal] = useState(false);
   const [editLead, setEditLead] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -60,8 +66,14 @@ export default function LeadsPage() {
     const u = localStorage.getItem("crm_user");
     if (u) setUser(JSON.parse(u));
     load();
-    api.get("/employees/list").then((r) => setEmployees(r.data)).catch(() => {});
-    api.get("/stages").then((r) => setDynamicStages(r.data)).catch(() => {});
+    api
+      .get("/employees/list")
+      .then((r) => setEmployees(r.data))
+      .catch(() => {});
+    api
+      .get("/stages")
+      .then((r) => setDynamicStages(r.data))
+      .catch(() => {});
   }, []);
 
   const canAssign = isOwnerUser(user) || hasPerm(user, "assign_leads");
@@ -104,7 +116,12 @@ export default function LeadsPage() {
         if (dateF === "overdue" && !isOverdue(l.follow_up_date)) return false;
         if (dateF === "today" && !isToday(l.follow_up_date)) return false;
         if (assigneeF === "__unassigned__" && l.assigned_to) return false;
-        if (assigneeF && assigneeF !== "__unassigned__" && String(l.assigned_to) !== assigneeF) return false;
+        if (
+          assigneeF &&
+          assigneeF !== "__unassigned__" &&
+          String(l.assigned_to) !== assigneeF
+        )
+          return false;
         return true;
       }),
     [leads, search, stageF, dateF, assigneeF],
@@ -187,7 +204,9 @@ export default function LeadsPage() {
         lead_ids: Array.from(selected),
         assigned_to: bulkAssignTo || null,
       });
-      showToast(`✓ ${data.updated} lead${data.updated !== 1 ? "s" : ""} assigned successfully.`);
+      showToast(
+        `✓ ${data.updated} lead${data.updated !== 1 ? "s" : ""} assigned successfully.`,
+      );
       clearSelection();
       load();
     } catch {
@@ -199,11 +218,20 @@ export default function LeadsPage() {
 
   const bulkDelete = async () => {
     if (selected.size === 0) return;
-    if (!confirm(`Permanently delete ${selected.size} selected lead${selected.size !== 1 ? "s" : ""}? This cannot be undone.`)) return;
+    if (
+      !confirm(
+        `Permanently delete ${selected.size} selected lead${selected.size !== 1 ? "s" : ""}? This cannot be undone.`,
+      )
+    )
+      return;
     setBulkDeleting(true);
     try {
-      const { data } = await api.delete("/leads/bulk", { data: { lead_ids: Array.from(selected) } });
-      showToast(`✓ ${data.deleted} lead${data.deleted !== 1 ? "s" : ""} deleted.`);
+      const { data } = await api.delete("/leads/bulk", {
+        data: { lead_ids: Array.from(selected) },
+      });
+      showToast(
+        `✓ ${data.deleted} lead${data.deleted !== 1 ? "s" : ""} deleted.`,
+      );
       clearSelection();
       load();
     } catch {
@@ -214,7 +242,7 @@ export default function LeadsPage() {
   };
 
   const terminalStages = dynamicStages.length
-    ? dynamicStages.slice(-2).map(s => s.name)
+    ? dynamicStages.slice(-2).map((s) => s.name)
     : ["Converted", "Closed"];
   const overdueCount = leads.filter(
     (l) => isOverdue(l.follow_up_date) && !terminalStages.includes(l.stage),
@@ -232,7 +260,8 @@ export default function LeadsPage() {
             top: 20,
             right: 20,
             zIndex: 9999,
-            background: toast.type === "error" ? "var(--danger)" : "var(--success)",
+            background:
+              toast.type === "error" ? "var(--danger)" : "var(--success)",
             color: "#fff",
             borderRadius: 10,
             padding: "12px 20px",
@@ -293,7 +322,8 @@ export default function LeadsPage() {
                   padding: "6px 14px",
                   borderRadius: 6,
                   border: "none",
-                  background: view === v ? "var(--gradient-accent)" : "transparent",
+                  background:
+                    view === v ? "var(--gradient-accent)" : "transparent",
                   color: view === v ? "#fff" : "var(--text-secondary)",
                   fontSize: 12,
                   fontWeight: 600,
@@ -386,8 +416,13 @@ export default function LeadsPage() {
           style={selStyle}
         >
           <option value="">All Stages</option>
-          {(dynamicStages.length ? dynamicStages : FALLBACK_STAGES.map(n => ({ name: n }))).map((s) => (
-            <option key={s.name} value={s.name}>{s.name}</option>
+          {(dynamicStages.length
+            ? dynamicStages
+            : FALLBACK_STAGES.map((n) => ({ name: n }))
+          ).map((s) => (
+            <option key={s.name} value={s.name}>
+              {s.name}
+            </option>
           ))}
         </select>
         <select
@@ -408,7 +443,9 @@ export default function LeadsPage() {
             <option value="">All Assignees</option>
             <option value="__unassigned__">Unassigned</option>
             {employees.map((e) => (
-              <option key={e.id} value={String(e.id)}>{e.name}</option>
+              <option key={e.id} value={String(e.id)}>
+                {e.name}
+              </option>
             ))}
           </select>
         )}
@@ -457,7 +494,13 @@ export default function LeadsPage() {
             fontFamily: "var(--font-main)",
           }}
         >
-          <span style={{ fontWeight: 700, fontSize: 13, color: "var(--teal-light)" }}>
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: 13,
+              color: "var(--teal-light)",
+            }}
+          >
             {selected.size} lead{selected.size !== 1 ? "s" : ""} selected
           </span>
           <div style={{ width: 1, height: 20, background: "var(--border)" }} />
@@ -479,7 +522,9 @@ export default function LeadsPage() {
           >
             <option value="">Unassign</option>
             {employees.map((e) => (
-              <option key={e.id} value={e.id}>{e.name}</option>
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
             ))}
           </select>
           <button
@@ -540,7 +585,13 @@ export default function LeadsPage() {
       {/* Table or Kanban */}
       {view === "kanban" ? (
         loading ? (
-          <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)" }}>
+          <div
+            style={{
+              padding: 48,
+              textAlign: "center",
+              color: "var(--text-muted)",
+            }}
+          >
             Loading leads...
           </div>
         ) : (
@@ -554,417 +605,470 @@ export default function LeadsPage() {
           />
         )
       ) : (
-      <div
-        style={{
-          background: "var(--bg-card)",
-          border: "1px solid var(--border)",
-          borderRadius: "var(--radius-md)",
-          overflow: "hidden",
-          boxShadow: "var(--shadow-sm)",
-        }}
-      >
-        {loading ? (
-          <div
-            style={{
-              padding: 48,
-              textAlign: "center",
-              color: "var(--text-muted)",
-            }}
-          >
-            Loading leads...
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ padding: 48, textAlign: "center" }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+        <div
+          style={{
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius-md)",
+            overflow: "hidden",
+            boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          {loading ? (
             <div
               style={{
-                color: "var(--text-secondary)",
-                fontFamily: "var(--font-main)",
-                fontWeight: 600,
-                marginBottom: 6,
+                padding: 48,
+                textAlign: "center",
+                color: "var(--text-muted)",
               }}
             >
-              {leads.length === 0 ? "No leads yet" : "No matching leads"}
+              Loading leads...
             </div>
-            <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
-              {leads.length === 0
-                ? 'Click "+ Add Lead" to get started'
-                : "Try adjusting your filters"}
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 48, textAlign: "center" }}>
+              <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+              <div
+                style={{
+                  color: "var(--text-secondary)",
+                  fontFamily: "var(--font-main)",
+                  fontWeight: 600,
+                  marginBottom: 6,
+                }}
+              >
+                {leads.length === 0 ? "No leads yet" : "No matching leads"}
+              </div>
+              <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
+                {leads.length === 0
+                  ? 'Click "+ Add Lead" to get started'
+                  : "Try adjusting your filters"}
+              </div>
             </div>
-          </div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                minWidth: 900,
-              }}
-            >
-              <thead>
-                <tr style={{ background: "var(--bg-surface)" }}>
-                  {canAssign && (
-                    <th style={thStyle}>
-                      <input
-                        type="checkbox"
-                        checked={selected.size === filtered.length && filtered.length > 0}
-                        onChange={toggleSelectAll}
-                        style={{ cursor: "pointer", accentColor: "var(--teal)" }}
-                      />
-                    </th>
-                  )}
-                  {[
-                    "#",
-                    "Name & Link",
-                    "Phone",
-                    "Platform",
-                    "Stage",
-                    "Assigned",
-                    "Last Message",
-                    "Follow-up",
-                    "Notes",
-                    "Actions",
-                  ].map((h) => (
-                    <th key={h} style={thStyle}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((lead, i) => {
-                  const over =
-                    isOverdue(lead.follow_up_date) &&
-                    lead.stage !== "Closed" &&
-                    lead.stage !== "Converted";
-                  const tod = isToday(lead.follow_up_date);
-                  const sc = stageStyle(lead.stage, dynamicStages);
-                  const isSelected = selected.has(lead.id);
-                  return (
-                    <tr
-                      key={lead.id}
-                      style={{
-                        background: isSelected
-                          ? "var(--teal-dim)"
-                          : over
-                          ? "rgba(224,82,82,0.04)"
-                          : "transparent",
-                        borderBottom: "1px solid var(--border)",
-                        transition: "background 0.15s",
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isSelected)
-                          e.currentTarget.style.background = "var(--bg-hover)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = isSelected
-                          ? "var(--teal-dim)"
-                          : over
-                          ? "rgba(224,82,82,0.04)"
-                          : "transparent";
-                      }}
-                    >
-                      {/* Checkbox */}
-                      {canAssign && (
-                        <td style={{ padding: "12px 14px" }} onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSelect(lead.id)}
-                            style={{ cursor: "pointer", accentColor: "var(--teal)" }}
-                          />
-                        </td>
-                      )}
-
-                      {/* # */}
-                      <td
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  minWidth: 900,
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "var(--bg-surface)" }}>
+                    {canAssign && (
+                      <th style={thStyle}>
+                        <input
+                          type="checkbox"
+                          checked={
+                            selected.size === filtered.length &&
+                            filtered.length > 0
+                          }
+                          onChange={toggleSelectAll}
+                          style={{
+                            cursor: "pointer",
+                            accentColor: "var(--teal)",
+                          }}
+                        />
+                      </th>
+                    )}
+                    {[
+                      "#",
+                      "Name & Link",
+                      "Phone",
+                      "Platform",
+                      "Stage",
+                      "Assigned",
+                      "Last Message",
+                      "Follow-up",
+                      "Notes",
+                      "Actions",
+                    ].map((h) => (
+                      <th key={h} style={thStyle}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((lead, i) => {
+                    const over =
+                      isOverdue(lead.follow_up_date) &&
+                      lead.stage !== "Closed" &&
+                      lead.stage !== "Converted";
+                    const tod = isToday(lead.follow_up_date);
+                    const sc = stageStyle(lead.stage, dynamicStages);
+                    const isSelected = selected.has(lead.id);
+                    return (
+                      <tr
+                        key={lead.id}
                         style={{
-                          padding: "12px 14px",
-                          color: "var(--text-muted)",
-                          fontSize: 12,
+                          background: isSelected
+                            ? "var(--teal-dim)"
+                            : over
+                              ? "rgba(224,82,82,0.04)"
+                              : "transparent",
+                          borderBottom: "1px solid var(--border)",
+                          transition: "background 0.15s",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected)
+                            e.currentTarget.style.background =
+                              "var(--bg-hover)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = isSelected
+                            ? "var(--teal-dim)"
+                            : over
+                              ? "rgba(224,82,82,0.04)"
+                              : "transparent";
                         }}
                       >
-                        {i + 1}
-                      </td>
+                        {/* Checkbox */}
+                        {canAssign && (
+                          <td
+                            style={{ padding: "12px 14px" }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(lead.id)}
+                              style={{
+                                cursor: "pointer",
+                                accentColor: "var(--teal)",
+                              }}
+                            />
+                          </td>
+                        )}
 
-                      {/* Name & Link */}
-                      <td style={{ padding: "12px 14px" }}>
-                        <div
+                        {/* # */}
+                        <td
                           style={{
-                            fontFamily: "var(--font-main)",
-                            fontWeight: 600,
-                            fontSize: 13,
-                            color: "var(--text-primary)",
+                            padding: "12px 14px",
+                            color: "var(--text-muted)",
+                            fontSize: 12,
                           }}
                         >
-                          {lead.name}
-                        </div>
-                        {lead.platform_link ? (
-                          <a
-                            href={lead.platform_link}
-                            target="_blank"
-                            rel="noreferrer"
+                          {i + 1}
+                        </td>
+
+                        {/* Name & Link */}
+                        <td style={{ padding: "12px 14px" }}>
+                          <div
                             style={{
-                              fontSize: 11,
-                              color: "var(--teal)",
-                              display: "block",
-                              marginTop: 2,
+                              fontFamily: "var(--font-main)",
+                              fontWeight: 600,
+                              fontSize: 13,
+                              color: "var(--text-primary)",
                             }}
                           >
-                            {lead.platform_link
-                              .replace("https://", "")
-                              .substring(0, 30)}
-                            {lead.platform_link.length > 33 ? "…" : ""}
-                          </a>
-                        ) : (
+                            {lead.name}
+                          </div>
+                          {lead.platform_link ? (
+                            <a
+                              href={lead.platform_link}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                fontSize: 11,
+                                color: "var(--teal)",
+                                display: "block",
+                                marginTop: 2,
+                              }}
+                            >
+                              {lead.platform_link
+                                .replace("https://", "")
+                                .substring(0, 30)}
+                              {lead.platform_link.length > 33 ? "…" : ""}
+                            </a>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 11,
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              No link
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Phone */}
+                        <td
+                          style={{ padding: "12px 14px", whiteSpace: "nowrap" }}
+                        >
+                          {lead.phone ? (
+                            <a
+                              href={`tel:${lead.phone}`}
+                              style={{
+                                fontSize: 12,
+                                color: "var(--teal-light)",
+                                fontFamily: "var(--font-main)",
+                                textDecoration: "none",
+                              }}
+                            >
+                              {lead.phone}
+                            </a>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: 12,
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              —
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Platform */}
+                        <td style={{ padding: "12px 14px" }}>
                           <span
-                            style={{ fontSize: 11, color: "var(--text-muted)" }}
-                          >
-                            No link
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Phone */}
-                      <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
-                        {lead.phone ? (
-                          <a
-                            href={`tel:${lead.phone}`}
-                            style={{ fontSize: 12, color: "var(--teal-light)", fontFamily: "var(--font-main)", textDecoration: "none" }}
-                          >
-                            {lead.phone}
-                          </a>
-                        ) : (
-                          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>—</span>
-                        )}
-                      </td>
-
-                      {/* Platform */}
-                      <td style={{ padding: "12px 14px" }}>
-                        <span
-                          style={{
-                            background: "rgba(91,163,217,0.13)",
-                            color: "var(--blue)",
-                            borderRadius: 5,
-                            padding: "3px 8px",
-                            fontSize: 11,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {lead.platform}
-                        </span>
-                      </td>
-
-                      {/* Stage dropdown */}
-                      <td
-                        style={{ padding: "12px 14px" }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <select
-                          value={lead.stage}
-                          onChange={(e) => changeStage(lead, e.target.value)}
-                          style={{
-                            background: sc.bg,
-                            color: sc.color,
-                            border: `1px solid ${sc.color}44`,
-                            borderRadius: 20,
-                            padding: "3px 10px",
-                            fontSize: 11,
-                            fontWeight: 700,
-                            fontFamily: "var(--font-main)",
-                            cursor: "pointer",
-                            outline: "none",
-                          }}
-                        >
-                          {(dynamicStages.length ? dynamicStages : FALLBACK_STAGES.map(n => ({ name: n }))).map((s) => (
-                            <option key={s.name} value={s.name}>{s.name}</option>
-                          ))}
-                        </select>
-                      </td>
-
-                      {/* Assigned employee */}
-                      <td
-                        style={{ padding: "12px 14px", fontSize: 12 }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {canAssign ? (
-                          <select
-                            value={lead.assigned_to || ""}
-                            onChange={(e) => changeAssignee(lead, e.target.value)}
                             style={{
-                              background: lead.assigned_to ? "var(--teal-dim)" : "var(--bg-input)",
-                              color: lead.assigned_to ? "var(--teal-light)" : "var(--text-muted)",
-                              border: "1px solid var(--border)",
-                              borderRadius: 6,
-                              padding: "4px 8px",
+                              background: "rgba(91,163,217,0.13)",
+                              color: "var(--blue)",
+                              borderRadius: 5,
+                              padding: "3px 8px",
                               fontSize: 11,
                               fontWeight: 600,
+                            }}
+                          >
+                            {lead.platform}
+                          </span>
+                        </td>
+
+                        {/* Stage dropdown */}
+                        <td
+                          style={{ padding: "12px 14px" }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <select
+                            value={lead.stage}
+                            onChange={(e) => changeStage(lead, e.target.value)}
+                            style={{
+                              background: sc.bg,
+                              color: sc.color,
+                              border: `1px solid ${sc.color}44`,
+                              borderRadius: 20,
+                              padding: "3px 10px",
+                              fontSize: 11,
+                              fontWeight: 700,
                               fontFamily: "var(--font-main)",
                               cursor: "pointer",
                               outline: "none",
-                              maxWidth: 150,
                             }}
                           >
-                            <option value="">Unassigned</option>
-                            {employees.map((emp) => (
-                              <option key={emp.id} value={emp.id}>
-                                {emp.name}
+                            {(dynamicStages.length
+                              ? dynamicStages
+                              : FALLBACK_STAGES.map((n) => ({ name: n }))
+                            ).map((s) => (
+                              <option key={s.name} value={s.name}>
+                                {s.name}
                               </option>
                             ))}
                           </select>
-                        ) : lead.assigned_to ? (
-                          <span
-                            style={{
-                              color: "var(--teal-light)",
-                              background: "var(--teal-dim)",
-                              borderRadius: 6,
-                              padding: "2px 8px",
-                              fontSize: 11,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {employeeNames[lead.assigned_to] ||
-                              (lead.assigned_to === user?.id ? "You" : "Assigned")}
-                          </span>
-                        ) : (
-                          <span style={{ color: "var(--text-muted)" }}>Unassigned</span>
-                        )}
-                      </td>
+                        </td>
 
-                      {/* Last Message */}
-                      <td
-                        style={{
-                          padding: "12px 14px",
-                          fontSize: 12,
-                          color: "var(--text-secondary)",
-                          maxWidth: 180,
-                        }}
-                      >
-                        <div
-                          style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={lead.last_message}
+                        {/* Assigned employee */}
+                        <td
+                          style={{ padding: "12px 14px", fontSize: 12 }}
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          {lead.last_message || (
+                          {canAssign ? (
+                            <select
+                              value={lead.assigned_to || ""}
+                              onChange={(e) =>
+                                changeAssignee(lead, e.target.value)
+                              }
+                              style={{
+                                background: lead.assigned_to
+                                  ? "var(--teal-dim)"
+                                  : "var(--bg-input)",
+                                color: lead.assigned_to
+                                  ? "var(--teal-light)"
+                                  : "var(--text-muted)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "4px 8px",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                fontFamily: "var(--font-main)",
+                                cursor: "pointer",
+                                outline: "none",
+                                maxWidth: 150,
+                              }}
+                            >
+                              <option value="">Unassigned</option>
+                              {employees.map((emp) => (
+                                <option key={emp.id} value={emp.id}>
+                                  {emp.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : lead.assigned_to ? (
+                            <span
+                              style={{
+                                color: "var(--teal-light)",
+                                background: "var(--teal-dim)",
+                                borderRadius: 6,
+                                padding: "2px 8px",
+                                fontSize: 11,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {employeeNames[lead.assigned_to] ||
+                                (lead.assigned_to === user?.id
+                                  ? "You"
+                                  : "Assigned")}
+                            </span>
+                          ) : (
+                            <span style={{ color: "var(--text-muted)" }}>
+                              Unassigned
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Last Message */}
+                        <td
+                          style={{
+                            padding: "12px 14px",
+                            fontSize: 12,
+                            color: "var(--text-secondary)",
+                            maxWidth: 180,
+                          }}
+                        >
+                          <div
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={lead.last_message}
+                          >
+                            {lead.last_message || (
+                              <span style={{ color: "var(--text-muted)" }}>
+                                —
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Follow-up Date */}
+                        <td
+                          style={{
+                            padding: "12px 14px",
+                            whiteSpace: "nowrap",
+                            fontSize: 12,
+                          }}
+                        >
+                          {lead.follow_up_date ? (
+                            <span
+                              style={{
+                                color: over
+                                  ? "var(--danger)"
+                                  : tod
+                                    ? "var(--warn)"
+                                    : "var(--text-secondary)",
+                                fontWeight: over || tod ? 700 : 400,
+                              }}
+                            >
+                              {over ? "⚠ " : tod ? "● " : ""}
+                              {fmtDate(lead.follow_up_date)}
+                            </span>
+                          ) : (
                             <span style={{ color: "var(--text-muted)" }}>
                               —
                             </span>
                           )}
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* Follow-up Date */}
-                      <td
-                        style={{
-                          padding: "12px 14px",
-                          whiteSpace: "nowrap",
-                          fontSize: 12,
-                        }}
-                      >
-                        {lead.follow_up_date ? (
-                          <span
-                            style={{
-                              color: over
-                                ? "var(--danger)"
-                                : tod
-                                  ? "var(--warn)"
-                                  : "var(--text-secondary)",
-                              fontWeight: over || tod ? 700 : 400,
-                            }}
-                          >
-                            {over ? "⚠ " : tod ? "● " : ""}
-                            {fmtDate(lead.follow_up_date)}
-                          </span>
-                        ) : (
-                          <span style={{ color: "var(--text-muted)" }}>—</span>
-                        )}
-                      </td>
-
-                      {/* Notes */}
-                      <td
-                        style={{
-                          padding: "12px 14px",
-                          fontSize: 12,
-                          color: "var(--text-secondary)",
-                          maxWidth: 160,
-                        }}
-                      >
-                        <div
+                        {/* Notes */}
+                        <td
                           style={{
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
+                            padding: "12px 14px",
+                            fontSize: 12,
+                            color: "var(--text-secondary)",
+                            maxWidth: 160,
                           }}
-                          title={lead.notes}
                         >
-                          {lead.notes || (
-                            <span style={{ color: "var(--text-muted)" }}>
-                              —
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                          <div
+                            style={{
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                            title={lead.notes}
+                          >
+                            {lead.notes || (
+                              <span style={{ color: "var(--text-muted)" }}>
+                                —
+                              </span>
+                            )}
+                          </div>
+                        </td>
 
-                      {/* Actions */}
-                      <td style={{ padding: "12px 14px" }}>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button
-                            onClick={() => openEdit(lead)}
-                            style={{
-                              background: "transparent",
-                              border: "1px solid var(--border)",
-                              borderRadius: 6,
-                              padding: "5px 10px",
-                              color: "var(--teal)",
-                              fontSize: 11,
-                              cursor: "pointer",
-                              fontFamily: "var(--font-main)",
-                              fontWeight: 600,
-                            }}
-                            onMouseEnter={(e) =>
-                              (e.currentTarget.style.borderColor = "var(--teal)")
-                            }
-                            onMouseLeave={(e) =>
-                              (e.currentTarget.style.borderColor = "var(--border)")
-                            }
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => deleteLead(lead.id)}
-                            disabled={deleting === lead.id}
-                            style={{
-                              background: "transparent",
-                              border: "1px solid var(--border)",
-                              borderRadius: 6,
-                              padding: "5px 10px",
-                              color: "var(--danger)",
-                              fontSize: 11,
-                              cursor: "pointer",
-                              fontFamily: "var(--font-main)",
-                              fontWeight: 600,
-                              opacity: deleting === lead.id ? 0.5 : 1,
-                            }}
-                            onMouseEnter={(e) =>
-                              (e.currentTarget.style.borderColor = "var(--danger)")
-                            }
-                            onMouseLeave={(e) =>
-                              (e.currentTarget.style.borderColor = "var(--border)")
-                            }
-                          >
-                            {deleting === lead.id ? "…" : "Del"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                        {/* Actions */}
+                        <td style={{ padding: "12px 14px" }}>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button
+                              onClick={() => openEdit(lead)}
+                              style={{
+                                background: "transparent",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "5px 10px",
+                                color: "var(--teal)",
+                                fontSize: 11,
+                                cursor: "pointer",
+                                fontFamily: "var(--font-main)",
+                                fontWeight: 600,
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.borderColor =
+                                  "var(--teal)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.borderColor =
+                                  "var(--border)")
+                              }
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deleteLead(lead.id)}
+                              disabled={deleting === lead.id}
+                              style={{
+                                background: "transparent",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "5px 10px",
+                                color: "var(--danger)",
+                                fontSize: 11,
+                                cursor: "pointer",
+                                fontFamily: "var(--font-main)",
+                                fontWeight: 600,
+                                opacity: deleting === lead.id ? 0.5 : 1,
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.borderColor =
+                                  "var(--danger)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.borderColor =
+                                  "var(--border)")
+                              }
+                            >
+                              {deleting === lead.id ? "…" : "Del"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
       {!loading && filtered.length > 0 && view === "table" && (
@@ -978,7 +1082,13 @@ export default function LeadsPage() {
         >
           Showing {filtered.length} of {leads.length} leads
           {selected.size > 0 && (
-            <span style={{ color: "var(--teal-light)", marginLeft: 10, fontWeight: 600 }}>
+            <span
+              style={{
+                color: "var(--teal-light)",
+                marginLeft: 10,
+                fontWeight: 600,
+              }}
+            >
               • {selected.size} selected
             </span>
           )}
@@ -995,12 +1105,29 @@ export default function LeadsPage() {
         />
       )}
       {bulkOpen && (
-        <BulkUploadModal
-          onClose={() => setBulkOpen(false)}
-          onSuccess={load}
-        />
+        <BulkUploadModal onClose={() => setBulkOpen(false)} onSuccess={load} />
       )}
     </div>
+  );
+}
+
+export default function LeadsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            padding: 48,
+            textAlign: "center",
+            color: "var(--text-muted)",
+          }}
+        >
+          Loading leads...
+        </div>
+      }
+    >
+      <LeadsContent />
+    </Suspense>
   );
 }
 
