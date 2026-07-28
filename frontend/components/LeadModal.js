@@ -12,8 +12,15 @@ const PLATFORMS = [
   "Other",
 ];
 
-function today() {
-  return new Date().toISOString().split("T")[0];
+// "YYYY-MM-DDTHH:mm" in local wall-clock time, for <input type="datetime-local">
+function nowLocal() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+// Backend sends "YYYY-MM-DDTHH:mm:ss" — trim to minute precision for the input
+function toLocalInput(d) {
+  return d ? d.slice(0, 16) : "";
 }
 
 export default function LeadModal({ lead, employees = [], stages = [], onClose, onSave }) {
@@ -31,10 +38,11 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
     assigned_to: "",
   });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [user, setUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
-  const [newMsgDate, setNewMsgDate] = useState(today());
+  const [newMsgDate, setNewMsgDate] = useState(nowLocal());
   const [msgSaving, setMsgSaving] = useState(false);
 
   useEffect(() => {
@@ -52,9 +60,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
         platform_link: lead.platform_link || "",
         stage: lead.stage || "New",
         last_message: lead.last_message || "",
-        follow_up_date: lead.follow_up_date
-          ? lead.follow_up_date.split("T")[0]
-          : "",
+        follow_up_date: toLocalInput(lead.follow_up_date),
         notes: lead.notes || "",
         assigned_to: lead.assigned_to || "",
       });
@@ -78,7 +84,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
         message_date: newMsgDate,
       });
       setNewMsg("");
-      setNewMsgDate(today());
+      setNewMsgDate(nowLocal());
       loadMessages();
     } finally {
       setMsgSaving(false);
@@ -99,9 +105,19 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
   const submit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+    setError("");
     setSaving(true);
-    await onSave(form);
-    setSaving(false);
+    try {
+      await onSave(form);
+    } catch (err) {
+      setError(
+        err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          "Failed to save lead. Please try again.",
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -168,6 +184,23 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
         </div>
 
         <form onSubmit={submit}>
+          {error && (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: "9px 13px",
+                background: "var(--danger-dim)",
+                border: "1px solid var(--danger)",
+                borderRadius: 8,
+                fontSize: 12,
+                color: "var(--danger)",
+                fontFamily: "var(--font-main)",
+              }}
+            >
+              ⚠ {error}
+            </div>
+          )}
+
           {/* Read-only notice for employees without edit_lead_details */}
           {lead?.id && !canEditDetails && (
             <div style={{
@@ -312,10 +345,10 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
             </div>
 
             {/* Follow-up Date */}
-            <Field label="Next Follow-up Date">
+            <Field label="Next Follow-up Date & Time">
               <input
                 name="follow_up_date"
-                type="date"
+                type="datetime-local"
                 value={form.follow_up_date}
                 onChange={handle}
                 style={inp}
@@ -398,11 +431,14 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                           }}
                         >
                           {m.message_date
-                            ? new Date(m.message_date).toLocaleDateString("en-IN", {
+                            ? `${new Date(m.message_date).toLocaleDateString("en-IN", {
                                 day: "2-digit",
                                 month: "short",
                                 year: "numeric",
-                              })
+                              })}, ${new Date(m.message_date).toLocaleTimeString("en-IN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}`
                             : ""}
                         </span>
                         <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
@@ -419,10 +455,10 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
 
               <div style={{ display: "flex", gap: 8 }}>
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={newMsgDate}
                   onChange={(e) => setNewMsgDate(e.target.value)}
-                  style={{ ...inp, width: 140, flexShrink: 0 }}
+                  style={{ ...inp, width: 190, flexShrink: 0 }}
                 />
                 <input
                   value={newMsg}

@@ -5,7 +5,7 @@ import api from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import KanbanBoard from "../../components/KanbanBoard";
 import BulkUploadModal from "../../components/BulkUploadModal";
-import { Upload, Plus } from "lucide-react";
+import { Upload, Plus, Calendar } from "lucide-react";
 import {
   STAGE_COLORS,
   STAGES as FALLBACK_STAGES,
@@ -13,22 +13,36 @@ import {
 } from "../../lib/stages";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 
-function today() {
-  return new Date().toISOString().split("T")[0];
-}
+// Overdue = the exact scheduled moment (date + time) has already passed —
+// not just that the calendar day has rolled over.
 function isOverdue(d) {
-  return d && d.split("T")[0] < today();
+  return d && new Date(d) < new Date();
 }
+// Due today = same calendar day as today, and the moment hasn't passed yet.
 function isToday(d) {
-  return d && d.split("T")[0] === today();
+  if (!d) return false;
+  const dt = new Date(d);
+  const now = new Date();
+  return (
+    dt.getFullYear() === now.getFullYear() &&
+    dt.getMonth() === now.getMonth() &&
+    dt.getDate() === now.getDate() &&
+    dt >= now
+  );
 }
 function fmtDate(d) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-IN", {
+  const dt = new Date(d);
+  const datePart = dt.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+  const timePart = dt.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${datePart}, ${timePart}`;
 }
 
 function LeadsContent() {
@@ -39,6 +53,8 @@ function LeadsContent() {
   const [search, setSearch] = useState("");
   const [stageF, setStageF] = useState("");
   const [dateF, setDateF] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [assigneeF, setAssigneeF] = useState(
     searchParams.get("assignee") || "",
   );
@@ -122,9 +138,12 @@ function LeadsContent() {
           String(l.assigned_to) !== assigneeF
         )
           return false;
+        const createdDate = l.created_at ? l.created_at.split("T")[0] : null;
+        if (dateFrom && (!createdDate || createdDate < dateFrom)) return false;
+        if (dateTo && (!createdDate || createdDate > dateTo)) return false;
         return true;
       }),
-    [leads, search, stageF, dateF, assigneeF],
+    [leads, search, stageF, dateF, assigneeF, dateFrom, dateTo],
   );
 
   const openAdd = () => {
@@ -248,7 +267,8 @@ function LeadsContent() {
     (l) => isOverdue(l.follow_up_date) && !terminalStages.includes(l.stage),
   ).length;
 
-  const hasFilters = search || stageF || dateF || assigneeF;
+  const hasFilters =
+    search || stageF || dateF || assigneeF || dateFrom || dateTo;
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -434,6 +454,60 @@ function LeadsContent() {
           <option value="overdue">Overdue</option>
           <option value="today">Due Today</option>
         </select>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "var(--bg-input)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "0 12px",
+          }}
+        >
+          <Calendar
+            size={14}
+            style={{ color: "var(--text-muted)", flexShrink: 0 }}
+          />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            max={dateTo || undefined}
+            title="Added from"
+            style={dateInputStyle}
+          />
+          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            min={dateFrom || undefined}
+            title="Added until"
+            style={dateInputStyle}
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+              }}
+              title="Clear date range"
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                fontSize: 13,
+                padding: "4px 0 4px 2px",
+                lineHeight: 1,
+                flexShrink: 0,
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
         {canAssign && employees.length > 0 && (
           <select
             value={assigneeF}
@@ -456,6 +530,8 @@ function LeadsContent() {
               setStageF("");
               setDateF("");
               setAssigneeF("");
+              setDateFrom("");
+              setDateTo("");
             }}
             style={{
               padding: "10px 16px",
@@ -879,6 +955,11 @@ function LeadsContent() {
                               onChange={(e) =>
                                 changeAssignee(lead, e.target.value)
                               }
+                              title={
+                                lead.assigned_to
+                                  ? employeeNames[lead.assigned_to]
+                                  : "Unassigned"
+                              }
                               style={{
                                 background: lead.assigned_to
                                   ? "var(--teal-dim)"
@@ -888,13 +969,16 @@ function LeadsContent() {
                                   : "var(--text-muted)",
                                 border: "1px solid var(--border)",
                                 borderRadius: 6,
-                                padding: "4px 8px",
+                                padding: "4px 22px 4px 8px",
                                 fontSize: 11,
                                 fontWeight: 600,
                                 fontFamily: "var(--font-main)",
                                 cursor: "pointer",
                                 outline: "none",
-                                maxWidth: 150,
+                                width: 150,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
                               }}
                             >
                               <option value="">Unassigned</option>
@@ -1155,4 +1239,16 @@ const selStyle = {
   cursor: "pointer",
   fontFamily: "var(--font-main)",
   minWidth: 140,
+};
+
+const dateInputStyle = {
+  padding: "10px 2px",
+  background: "transparent",
+  border: "none",
+  color: "var(--text-primary)",
+  fontSize: 13,
+  outline: "none",
+  cursor: "pointer",
+  fontFamily: "var(--font-main)",
+  width: 118,
 };

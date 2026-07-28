@@ -4,15 +4,21 @@ import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import { AlertTriangle, Bell, CheckCircle2, ChevronRight } from "lucide-react";
 
-function today() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+// Overdue = the exact scheduled moment (date + time) has already passed.
 function isOverdue(d) {
-  return d && d.split("T")[0] < today();
+  return d && new Date(d) < new Date();
 }
+// Due today = same calendar day as today, and the moment hasn't passed yet.
 function isToday(d) {
-  return d && d.split("T")[0] === today();
+  if (!d) return false;
+  const dt = new Date(d);
+  const now = new Date();
+  return (
+    dt.getFullYear() === now.getFullYear() &&
+    dt.getMonth() === now.getMonth() &&
+    dt.getDate() === now.getDate() &&
+    dt >= now
+  );
 }
 function fmtDate(d) {
   if (!d) return "—";
@@ -32,6 +38,14 @@ function fmtDate(d) {
     "Dec",
   ];
   return `${day} ${months[parseInt(m) - 1]} ${y}`;
+}
+function fmtDateTime(d) {
+  if (!d) return "—";
+  const timePart = new Date(d).toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${fmtDate(d)}, ${timePart}`;
 }
 function timeAgo(d) {
   if (!d) return "";
@@ -243,12 +257,16 @@ export default function NotificationsPage() {
             const isOvr = lead.type === "overdue";
             const accent = isOvr ? "var(--danger)" : "var(--warn)";
             const accentDim = isOvr ? "var(--danger-dim)" : "var(--warn-dim)";
-            const daysDiff = lead.follow_up_date
-              ? Math.floor(
-                  (new Date() - new Date(lead.follow_up_date.split("T")[0])) /
-                    86400000,
-                )
+            const overdueMs = lead.follow_up_date
+              ? new Date() - new Date(lead.follow_up_date)
               : 0;
+            const overdueHours = Math.floor(overdueMs / 3600000);
+            const overdueLabel =
+              overdueHours < 1
+                ? "Overdue by <1 hour"
+                : overdueHours < 24
+                  ? `Overdue by ${overdueHours} hour${overdueHours !== 1 ? "s" : ""}`
+                  : `Overdue by ${Math.floor(overdueHours / 24)} day${Math.floor(overdueHours / 24) !== 1 ? "s" : ""}`;
             return (
               <div
                 key={`${lead.id}-${lead.type}`}
@@ -323,9 +341,7 @@ export default function NotificationsPage() {
                         fontFamily: "var(--font-main)",
                       }}
                     >
-                      {isOvr
-                        ? `Overdue by ${daysDiff} day${daysDiff !== 1 ? "s" : ""}`
-                        : "Follow-up Today"}
+                      {isOvr ? overdueLabel : "Follow-up Today"}
                     </span>
                     <span
                       style={{
@@ -349,8 +365,8 @@ export default function NotificationsPage() {
                     }}
                   >
                     {isOvr
-                      ? `Follow-up was scheduled for ${fmtDate(lead.follow_up_date)} — needs immediate attention`
-                      : `Scheduled follow-up for today — ${fmtDate(lead.follow_up_date)}`}
+                      ? `Follow-up was scheduled for ${fmtDateTime(lead.follow_up_date)} — needs immediate attention`
+                      : `Scheduled follow-up for today — ${fmtDateTime(lead.follow_up_date)}`}
                   </div>
 
                   {lead.last_message && (

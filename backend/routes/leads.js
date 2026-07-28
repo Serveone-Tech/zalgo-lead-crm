@@ -16,6 +16,32 @@ const visibilityClause = (req, paramIndex) => {
   return { clause: ` AND assigned_to=$${paramIndex}`, params: [req.user.id] };
 };
 
+// Normalise a phone number for duplicate comparison: strip everything but
+// digits and compare the last 10 (so "+91 98765 43210", "919876543210" and
+// "9876543210" are all treated as the same number).
+const phoneKey = (phone) => {
+  const digits = String(phone || "").replace(/\D/g, "");
+  return digits ? digits.slice(-10) : "";
+};
+
+// Find an existing lead in this tenant with the same phone number.
+// excludeId lets an update skip matching itself.
+async function findDuplicateLeadByPhone(tenantId, phone, excludeId = null) {
+  const key = phoneKey(phone);
+  if (!key) return null;
+  const params = [tenantId, key];
+  let query = `SELECT id, name FROM leads WHERE user_id=$1
+               AND right(regexp_replace(phone, '\\D', '', 'g'), 10) = $2
+               AND regexp_replace(phone, '\\D', '', 'g') != ''`;
+  if (excludeId) {
+    params.push(excludeId);
+    query += ` AND id != $${params.length}`;
+  }
+  query += ` LIMIT 1`;
+  const { rows } = await pool.query(query, params);
+  return rows[0] || null;
+}
+
 // GET all leads
 router.get("/", auth, async (req, res) => {
   try {
@@ -31,13 +57,14 @@ router.get("/", auth, async (req, res) => {
 });
 
 // GET overdue
+// "Overdue" = the exact scheduled moment (date+time) has already passed —
+// not just that the calendar day has rolled over.
 router.get("/overdue", auth, async (req, res) => {
   try {
-    const today = new Date().toISOString().split("T")[0];
-    const vis = visibilityClause(req, 3);
+    const vis = visibilityClause(req, 2);
     const result = await pool.query(
-      `SELECT * FROM leads WHERE user_id=$1 AND follow_up_date<$2 AND stage NOT IN ('Closed','Converted')${vis.clause} ORDER BY follow_up_date ASC`,
-      [req.tenantId, today, ...vis.params],
+      `SELECT * FROM leads WHERE user_id=$1 AND follow_up_date<NOW() AND stage NOT IN ('Closed','Converted')${vis.clause} ORDER BY follow_up_date ASC`,
+      [req.tenantId, ...vis.params],
     );
     res.json(result.rows);
   } catch {
@@ -48,9 +75,8 @@ router.get("/overdue", auth, async (req, res) => {
 // GET stats
 router.get("/stats", auth, async (req, res) => {
   try {
-    const today = new Date().toISOString().split("T")[0];
     const vis = visibilityClause(req, 2);
-    const visToday = visibilityClause(req, 3);
+    const visToday = visibilityClause(req, 2);
     const [total, active, booked, overdue, followup, customers] =
       await Promise.all([
         pool.query(`SELECT COUNT(*) FROM leads WHERE user_id=$1${vis.clause}`, [
@@ -65,13 +91,15 @@ router.get("/stats", auth, async (req, res) => {
           `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage='Booked'${vis.clause}`,
           [req.tenantId, ...vis.params],
         ),
+        // Overdue: scheduled moment already passed (date+time), lead still open
         pool.query(
-          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND follow_up_date<$2 AND stage NOT IN ('Closed','Converted')${visToday.clause}`,
-          [req.tenantId, today, ...visToday.params],
+          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND follow_up_date<NOW() AND stage NOT IN ('Closed','Converted')${visToday.clause}`,
+          [req.tenantId, ...visToday.params],
         ),
+        // Due today: same calendar day as today, and the moment hasn't passed yet
         pool.query(
-          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND follow_up_date=$2${visToday.clause}`,
-          [req.tenantId, today, ...visToday.params],
+          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND follow_up_date::date=CURRENT_DATE AND follow_up_date>=NOW()${visToday.clause}`,
+          [req.tenantId, ...visToday.params],
         ),
         pool.query(`SELECT COUNT(*) FROM customers WHERE user_id=$1`, [req.tenantId]),
       ]);
@@ -120,6 +148,16 @@ router.post("/", auth, requireSubscription, async (req, res) => {
       }
     }
 
+    if (phone && phoneKey(phone)) {
+      const dup = await findDuplicateLeadByPhone(req.tenantId, phone);
+      if (dup) {
+        return res.status(409).json({
+          error: "DUPLICATE_PHONE",
+          message: `A lead with this phone number already exists: "${dup.name}"`,
+        });
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO leads (user_id, assigned_to, name, phone, email, platform, platform_link, stage, last_message, follow_up_date, notes)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
@@ -159,9 +197,32 @@ router.post("/bulk", auth, async (req, res) => {
   if (!Array.isArray(leads) || leads.length === 0)
     return res.status(400).json({ error: "No leads provided" });
 
-  let success = 0, failed = 0;
+  // Preload existing phone numbers for this tenant once, so duplicate checks
+  // are O(1) per row instead of a query per row. Also catches duplicates
+  // that appear more than once within the same uploaded batch.
+  const existing = await pool.query(
+    `SELECT regexp_replace(phone, '\\D', '', 'g') AS digits FROM leads
+     WHERE user_id=$1 AND phone IS NOT NULL AND phone != ''`,
+    [req.tenantId],
+  );
+  const seenPhones = new Set(
+    existing.rows.map((r) => r.digits.slice(-10)).filter(Boolean),
+  );
+
+  let success = 0, failed = 0, duplicates = 0;
+  const duplicateEntries = [];
   for (const lead of leads) {
     if (!lead.name?.trim()) { failed++; continue; }
+
+    const key = phoneKey(lead.phone);
+    if (key && seenPhones.has(key)) {
+      duplicates++;
+      if (duplicateEntries.length < 20) {
+        duplicateEntries.push({ name: lead.name.trim(), phone: lead.phone });
+      }
+      continue;
+    }
+
     try {
       await pool.query(
         `INSERT INTO leads (user_id, name, phone, email, platform, platform_link, stage, last_message, follow_up_date, notes)
@@ -180,9 +241,10 @@ router.post("/bulk", auth, async (req, res) => {
         ]
       );
       success++;
+      if (key) seenPhones.add(key);
     } catch { failed++; }
   }
-  res.json({ success, failed });
+  res.json({ success, failed, duplicates, duplicateEntries });
 });
 
 // PUT bulk assign leads to an employee
@@ -240,7 +302,7 @@ router.get("/report/by-employee", auth, async (req, res) => {
          assigned_to,
          stage,
          COUNT(*) AS cnt,
-         COUNT(CASE WHEN follow_up_date < CURRENT_DATE AND stage NOT IN ('Closed','Converted') THEN 1 END) AS overdue
+         COUNT(CASE WHEN follow_up_date < NOW() AND stage NOT IN ('Closed','Converted') THEN 1 END) AS overdue
        FROM leads WHERE user_id=$1
        GROUP BY assigned_to, stage`,
       [req.tenantId],
@@ -294,6 +356,16 @@ router.put("/:id", auth, async (req, res) => {
     const nextEmail = canEditDetails ? (email ?? lead.email) : lead.email;
     const nextPlatform = canEditDetails ? (platform || lead.platform) : lead.platform;
     const nextPlatformLink = canEditDetails ? (platform_link ?? lead.platform_link) : lead.platform_link;
+
+    if (nextPhone && phoneKey(nextPhone) !== phoneKey(lead.phone)) {
+      const dup = await findDuplicateLeadByPhone(req.tenantId, nextPhone, lead.id);
+      if (dup) {
+        return res.status(409).json({
+          error: "DUPLICATE_PHONE",
+          message: `A lead with this phone number already exists: "${dup.name}"`,
+        });
+      }
+    }
 
     const oldStage = lead.stage;
     const result = await pool.query(
@@ -434,7 +506,7 @@ router.post("/:id/messages", auth, async (req, res) => {
     const result = await pool.query(
       `INSERT INTO lead_messages (lead_id, user_id, message, message_date)
        VALUES ($1,$2,$3,$4) RETURNING *`,
-      [req.params.id, req.user.id, message, message_date || new Date().toISOString().split("T")[0]],
+      [req.params.id, req.user.id, message, message_date || new Date().toISOString()],
     );
 
     await pool.query(

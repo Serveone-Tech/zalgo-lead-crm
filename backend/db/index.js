@@ -1,5 +1,17 @@
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
 require("dotenv").config();
+
+// node-postgres parses DATE/TIMESTAMP columns into local-timezone JS Date
+// objects by default. Serializing those via JSON later (toISOString, always
+// UTC) shifts the calendar day/time backwards for any positive UTC offset
+// (e.g. IST), so a lead due "today" ends up reported as "yesterday" to the
+// frontend. Returning the raw string sidesteps the timezone round-trip
+// entirely. TIMESTAMP values get their space separator swapped for 'T' so
+// they parse the same way plain DATE strings already do (d.split("T")[0]).
+types.setTypeParser(types.builtins.DATE, (val) => val);
+types.setTypeParser(types.builtins.TIMESTAMP, (val) =>
+  val ? val.replace(" ", "T") : val,
+);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -117,7 +129,7 @@ const initDB = async () => {
         platform_link TEXT DEFAULT '',
         stage VARCHAR(50) DEFAULT 'New',
         last_message TEXT DEFAULT '',
-        follow_up_date DATE,
+        follow_up_date TIMESTAMP,
         notes TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -128,7 +140,7 @@ const initDB = async () => {
         lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
         user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         message TEXT NOT NULL,
-        message_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        message_date TIMESTAMP NOT NULL DEFAULT NOW(),
         created_at TIMESTAMP DEFAULT NOW()
       );
 
@@ -211,6 +223,16 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    // ── STEP 3.5: Widen follow-up date columns to carry a time too ──
+    // (safe to re-run: altering a column to the type it already is is a no-op)
+    const alterDateTimeCols = [
+      `ALTER TABLE leads ALTER COLUMN follow_up_date TYPE TIMESTAMP USING follow_up_date::timestamp`,
+      `ALTER TABLE lead_messages ALTER COLUMN message_date TYPE TIMESTAMP USING message_date::timestamp`,
+    ];
+    for (const q of alterDateTimeCols) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
 
     // ── STEP 4: Seed default plans ───────────────────────────
     const planCount = await client.query("SELECT COUNT(*) FROM plans");

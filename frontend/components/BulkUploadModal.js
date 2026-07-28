@@ -328,6 +328,12 @@ export default function BulkUploadModal({ onClose, onSuccess }) {
                 <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 28, color: "var(--success)" }}>{result.success}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Leads Added</div>
               </div>
+              {result.duplicates > 0 && (
+                <div style={{ background: "var(--warn-dim)", border: "1px solid var(--warn)", borderRadius: 10, padding: "14px 24px", minWidth: 100 }}>
+                  <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 28, color: "var(--warn)" }}>{result.duplicates}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Duplicate Phone</div>
+                </div>
+              )}
               {result.failed > 0 && (
                 <div style={{ background: "var(--danger-dim)", border: "1px solid var(--danger)", borderRadius: 10, padding: "14px 24px", minWidth: 100 }}>
                   <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 28, color: "var(--danger)" }}>{result.failed}</div>
@@ -335,6 +341,26 @@ export default function BulkUploadModal({ onClose, onSuccess }) {
                 </div>
               )}
             </div>
+
+            {result.duplicateEntries?.length > 0 && (
+              <div style={{ textAlign: "left", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", marginBottom: 24, maxHeight: 180, overflowY: "auto" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "var(--warn)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>
+                  Skipped as duplicates (phone already exists)
+                </div>
+                {result.duplicateEntries.map((d, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "4px 0", color: "var(--text-secondary)" }}>
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>{d.name}</span>
+                    <span>{d.phone}</span>
+                  </div>
+                ))}
+                {result.duplicates > result.duplicateEntries.length && (
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                    +{result.duplicates - result.duplicateEntries.length} more not shown
+                  </div>
+                )}
+              </div>
+            )}
+
             <button
               onClick={() => { onSuccess(); onClose(); }}
               style={{ padding: "10px 28px", borderRadius: "var(--radius-sm)", background: "var(--gradient-accent)", border: "none", color: "#fff", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 14, cursor: "pointer", boxShadow: "var(--shadow-glow)" }}

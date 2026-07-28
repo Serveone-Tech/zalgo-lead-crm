@@ -2,21 +2,34 @@
 import { useState } from "react";
 import { STAGES as FALLBACK_STAGES, STAGE_COLORS, stageStyle } from "../lib/stages";
 
-function today() {
-  return new Date().toISOString().split("T")[0];
-}
+// Overdue = the exact scheduled moment (date + time) has already passed.
 function isOverdue(d) {
-  return d && d.split("T")[0] < today();
+  return d && new Date(d) < new Date();
 }
+// Due today = same calendar day as today, and the moment hasn't passed yet.
 function isToday(d) {
-  return d && d.split("T")[0] === today();
+  if (!d) return false;
+  const dt = new Date(d);
+  const now = new Date();
+  return (
+    dt.getFullYear() === now.getFullYear() &&
+    dt.getMonth() === now.getMonth() &&
+    dt.getDate() === now.getDate() &&
+    dt >= now
+  );
 }
 function fmtDate(d) {
   if (!d) return null;
-  return new Date(d).toLocaleDateString("en-IN", {
+  const dt = new Date(d);
+  const datePart = dt.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
   });
+  const timePart = dt.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${datePart}, ${timePart}`;
 }
 
 export default function KanbanBoard({ leads, stages = [], onStageChange, onEdit, employeeNames, currentUserId }) {

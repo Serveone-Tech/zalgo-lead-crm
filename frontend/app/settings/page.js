@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
+import { hasPerm } from '../../lib/permissions';
 import { Pencil, Trash2, Plus, GripVertical, Check, X } from 'lucide-react';
 
 const COLOR_PALETTE = [
@@ -45,7 +46,9 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!localStorage.getItem('crm_token')) { router.push('/login'); return; }
     const u = localStorage.getItem('crm_user');
-    if (u) setUser(JSON.parse(u));
+    const parsed = u ? JSON.parse(u) : null;
+    if (parsed && !hasPerm(parsed, 'manage_settings')) { router.push('/dashboard'); return; }
+    setUser(parsed);
     loadAll();
     loadStages();
   }, []);

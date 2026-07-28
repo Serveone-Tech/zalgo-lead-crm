@@ -11,11 +11,26 @@ function today() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+// Overdue = the exact scheduled moment (date + time) has already passed.
+// Used for lead follow-up dates, which now carry a time.
 function isOverdue(d) {
-  return d && d.split("T")[0] < today();
+  return d && new Date(d) < new Date();
 }
+// Due today = same calendar day as today, and the moment hasn't passed yet.
 function isToday(d) {
-  return d && d.split("T")[0] === today();
+  if (!d) return false;
+  const dt = new Date(d);
+  const now = new Date();
+  return (
+    dt.getFullYear() === now.getFullYear() &&
+    dt.getMonth() === now.getMonth() &&
+    dt.getDate() === now.getDate() &&
+    dt >= now
+  );
+}
+// Payment due dates are plain calendar dates (no time) — day-level comparison only.
+function isDateOverdue(d) {
+  return d && d.split("T")[0] < today();
 }
 function fmtDate(d) {
   if (!d) return "—";
@@ -35,6 +50,15 @@ function fmtDate(d) {
     "Dec",
   ];
   return `${day} ${months[parseInt(m) - 1]} ${y}`;
+}
+function fmtDateTime(d) {
+  if (!d) return "—";
+  const dt = new Date(d);
+  const timePart = dt.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${fmtDate(d)}, ${timePart}`;
 }
 
 export default function DashboardPage() {
@@ -291,7 +315,7 @@ export default function DashboardPage() {
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{lead.name}</div>
                                 <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 1 }}>
-                                  Follow-up: {fmtDate(lead.follow_up_date)}
+                                  Follow-up: {fmtDateTime(lead.follow_up_date)}
                                 </div>
                               </div>
                               <span style={{ color: "var(--text-muted)", flexShrink: 0, display: "flex" }}><ChevronRight size={14} /></span>
@@ -645,7 +669,7 @@ export default function DashboardPage() {
               </thead>
               <tbody>
                 {duePay.slice(0, 5).map((p) => {
-                  const overp = isOverdue(p.due_date || p.payment_date);
+                  const overp = isDateOverdue(p.due_date || p.payment_date);
                   return (
                     <tr
                       key={p.id}
@@ -986,7 +1010,7 @@ function LeadTable({ leads, onEdit }) {
                       }}
                     >
                       {over ? "⚠ " : tod ? "● " : ""}
-                      {fmtDate(lead.follow_up_date)}
+                      {fmtDateTime(lead.follow_up_date)}
                     </span>
                   ) : (
                     <span style={{ color: "var(--text-muted)" }}>—</span>

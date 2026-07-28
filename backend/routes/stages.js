@@ -67,27 +67,52 @@ router.post('/', auth, async (req, res) => {
 // PUT /api/stages/:id
 router.put('/:id', auth, async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage stages' });
+  const client = await pool.connect();
   try {
     const { name, color, sort_order } = req.body;
     if (name !== undefined) {
-      const dup = await pool.query(
+      const dup = await client.query(
         'SELECT id FROM stages WHERE user_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3',
         [req.tenantId, name.trim(), req.params.id]
       );
       if (dup.rows.length > 0) return res.status(400).json({ error: 'A stage with this name already exists' });
     }
-    const { rows } = await pool.query(
+    await client.query('BEGIN');
+    const before = await client.query(
+      'SELECT name FROM stages WHERE id=$1 AND user_id=$2',
+      [req.params.id, req.tenantId]
+    );
+    if (before.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Stage not found' });
+    }
+    const oldName = before.rows[0].name;
+    const newName = name?.trim() ?? null;
+
+    const { rows } = await client.query(
       `UPDATE stages SET
          name       = COALESCE($1, name),
          color      = COALESCE($2, color),
          sort_order = COALESCE($3, sort_order)
        WHERE id=$4 AND user_id=$5 RETURNING *`,
-      [name?.trim() ?? null, color ?? null, sort_order ?? null, req.params.id, req.tenantId]
+      [newName, color ?? null, sort_order ?? null, req.params.id, req.tenantId]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'Stage not found' });
+
+    // Renaming a stage must not orphan leads already sitting on the old name.
+    if (newName && newName !== oldName) {
+      await client.query(
+        'UPDATE leads SET stage=$1 WHERE user_id=$2 AND stage=$3',
+        [newName, req.tenantId, oldName]
+      );
+    }
+
+    await client.query('COMMIT');
     res.json(rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
