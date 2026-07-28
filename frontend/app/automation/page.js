@@ -53,6 +53,51 @@ const VARS = [
   "{institute_name}",
 ];
 
+function buildAppsScript(webhookUrl) {
+  return `// ── EDIT THESE 4 LINES to match your Sheet's actual column headers ──
+var COLUMN_MAP = {
+  name:  'Full Name',    // <- change to your header text, or '' to skip
+  phone: 'Phone Number',
+  email: 'Email',
+  notes: ''               // e.g. 'Campaign' — optional
+};
+var WEBHOOK_URL = '${webhookUrl || "PASTE_YOUR_WEBHOOK_URL_HERE"}';
+// ──────────────────────────────────────────────────────────────────
+
+function syncNewLeads() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var props = PropertiesService.getScriptProperties();
+  var lastRow = parseInt(props.getProperty('lastSyncedRow') || '1', 10);
+  var lastCol = sheet.getLastColumn();
+  var totalRows = sheet.getLastRow();
+  if (totalRows <= lastRow) return; // nothing new since last run
+
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  var colIndex = {};
+  headers.forEach(function (h, i) { colIndex[h.trim()] = i; });
+
+  var rows = sheet.getRange(lastRow + 1, 1, totalRows - lastRow, lastCol).getValues();
+  rows.forEach(function (values) {
+    var get = function (key) {
+      var header = COLUMN_MAP[key];
+      if (!header || !(header in colIndex)) return '';
+      return String(values[colIndex[header]] || '').trim();
+    };
+    var lead = { name: get('name'), phone: get('phone'), email: get('email'), notes: get('notes') };
+    if (!lead.name && !lead.phone) return; // skip blank rows
+
+    UrlFetchApp.fetch(WEBHOOK_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify(lead),
+      muteHttpExceptions: true
+    });
+  });
+
+  props.setProperty('lastSyncedRow', String(totalRows));
+}`;
+}
+
 export default function AutomationPage() {
   const router = useRouter();
   const [tab, setTab] = useState("channels");
@@ -82,6 +127,8 @@ export default function AutomationPage() {
     subject: "",
     message: "",
   });
+  const [webhooks, setWebhooks] = useState(null);
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -99,11 +146,13 @@ export default function AutomationPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [cr, tr] = await Promise.all([
+      const [cr, tr, wh] = await Promise.all([
         api.get("/automation/credentials"),
         api.get("/automation/triggers"),
+        api.get("/automation/webhook-urls").catch(() => ({ data: null })),
       ]);
       setCreds((c) => ({ ...c, ...cr.data }));
+      setWebhooks(wh.data);
       const map = {};
       tr.data.forEach((t) => {
         const def = TRIGGER_DEFS.find((d) => d.id === t.trigger_id);
@@ -151,6 +200,29 @@ export default function AutomationPage() {
       showToast("Save failed", "error");
     }
     setSavingTrig(null);
+  };
+
+  const regenerateWebhooks = async () => {
+    if (
+      !confirm(
+        "This will invalidate your current webhook URLs. Any Google Ads or WhatsApp connection using the old URL will stop working until you update it. Continue?",
+      )
+    )
+      return;
+    setRegenerating(true);
+    try {
+      const { data } = await api.post("/automation/webhook-urls/regenerate");
+      setWebhooks(data);
+      showToast("Webhook URLs regenerated. Update your connections with the new URL.");
+    } catch {
+      showToast("Failed to regenerate", "error");
+    }
+    setRegenerating(false);
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    showToast("Copied to clipboard!");
   };
 
   const toggleChan = (tid, ch) => {
@@ -258,6 +330,7 @@ export default function AutomationPage() {
           { k: "channels", l: "⚡ Channel Setup" },
           { k: "triggers", l: "🔔 Triggers" },
           { k: "manual", l: "✉ Manual Send" },
+          { k: "sources", l: "🔗 Lead Sources" },
         ].map((t) => (
           <button
             key={t.k}
@@ -929,6 +1002,165 @@ export default function AutomationPage() {
         </div>
       )}
 
+      {/* TAB 4 — LEAD SOURCES */}
+      {tab === "sources" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div
+            style={{
+              background: "rgba(0,134,138,0.08)",
+              border: "1px solid rgba(0,134,138,0.25)",
+              borderRadius: 10,
+              padding: "12px 18px",
+              fontSize: 12,
+              color: "var(--teal-light)",
+            }}
+          >
+            💡 Connect Google Ads Lead Forms and WhatsApp so new leads land in
+            this CRM automatically — no manual entry needed.
+          </div>
+
+          {!webhooks ? (
+            <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "20px 0" }}>
+              Loading webhook URLs...
+            </div>
+          ) : (
+            <>
+              {/* Google Ads card */}
+              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>🎯</span>
+                  <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                    Google Ads Lead Form
+                  </span>
+                </div>
+                <div style={{ padding: "18px 20px" }}>
+                  <label style={lbl}>Webhook URL</label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                    <input readOnly value={webhooks.google_webhook_url} style={{ ...inp, fontSize: 12 }} onFocus={(e) => e.target.select()} />
+                    <button onClick={() => copyToClipboard(webhooks.google_webhook_url)} style={copyBtn}>Copy</button>
+                  </div>
+                  <label style={lbl}>Key</label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                    <input readOnly value={webhooks.token} style={{ ...inp, fontSize: 12 }} onFocus={(e) => e.target.select()} />
+                    <button onClick={() => copyToClipboard(webhooks.token)} style={copyBtn}>Copy</button>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
+                    <strong style={{ color: "var(--text-secondary)" }}>Setup:</strong> Google Ads → your Lead Form asset → Lead delivery →
+                    Webhook → paste the URL above in "Webhook URL" and the Key above in "Webhook key" → Save.
+                  </div>
+                </div>
+              </div>
+
+              {/* WhatsApp card */}
+              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>🟢</span>
+                  <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                    WhatsApp (incoming messages)
+                  </span>
+                </div>
+                <div style={{ padding: "18px 20px" }}>
+                  <label style={lbl}>Callback URL</label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                    <input readOnly value={webhooks.whatsapp_webhook_url} style={{ ...inp, fontSize: 12 }} onFocus={(e) => e.target.select()} />
+                    <button onClick={() => copyToClipboard(webhooks.whatsapp_webhook_url)} style={copyBtn}>Copy</button>
+                  </div>
+                  <label style={lbl}>Verify Token</label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                    <input readOnly value={webhooks.token} style={{ ...inp, fontSize: 12 }} onFocus={(e) => e.target.select()} />
+                    <button onClick={() => copyToClipboard(webhooks.token)} style={copyBtn}>Copy</button>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
+                    <strong style={{ color: "var(--text-secondary)" }}>Setup:</strong> Go to{" "}
+                    <a href="https://developers.facebook.com/" target="_blank" rel="noreferrer" style={{ color: "var(--teal-light)" }}>
+                      Meta for Developers
+                    </a>{" "}
+                    → your App → WhatsApp → Configuration → paste the Callback URL and Verify Token above → Verify and Save → subscribe
+                    to the <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>messages</code> field.
+                  </div>
+                </div>
+              </div>
+
+              {/* Google Sheet card */}
+              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>📊</span>
+                  <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                    Google Sheet
+                  </span>
+                </div>
+                <div style={{ padding: "18px 20px" }}>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.7 }}>
+                    If your ad leads land in a Google Sheet, a small script checks the sheet every few minutes and
+                    sends any new rows here automatically.
+                  </div>
+
+                  <label style={lbl}>Webhook URL</label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                    <input readOnly value={webhooks.sheets_webhook_url} style={{ ...inp, fontSize: 12 }} onFocus={(e) => e.target.select()} />
+                    <button onClick={() => copyToClipboard(webhooks.sheets_webhook_url)} style={copyBtn}>Copy</button>
+                  </div>
+
+                  <label style={lbl}>Apps Script (paste into your Sheet)</label>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6, marginBottom: 14, alignItems: "flex-start" }}>
+                    <pre
+                      style={{
+                        flex: 1,
+                        margin: 0,
+                        padding: "12px 14px",
+                        background: "var(--bg-input)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        color: "var(--text-secondary)",
+                        fontSize: 11,
+                        lineHeight: 1.6,
+                        overflowX: "auto",
+                        maxHeight: 220,
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {buildAppsScript(webhooks.sheets_webhook_url)}
+                    </pre>
+                    <button onClick={() => copyToClipboard(buildAppsScript(webhooks.sheets_webhook_url))} style={copyBtn}>
+                      Copy Script
+                    </button>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
+                    <strong style={{ color: "var(--text-secondary)" }}>Setup:</strong> Open your Sheet → Extensions → Apps Script → delete
+                    any placeholder code → paste the script above → edit the <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>COLUMN_MAP</code> lines
+                    near the top to match your sheet's actual column headers → Save. Then click the clock icon (Triggers) on the left →
+                    Add Trigger → function <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code>,
+                    event source "Time-driven", type "Minutes timer", every 5 minutes → Save (approve the permission prompt the first time).
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  onClick={regenerateWebhooks}
+                  disabled={regenerating}
+                  style={{
+                    padding: "8px 18px",
+                    borderRadius: 8,
+                    background: "transparent",
+                    border: "1px solid var(--danger)",
+                    color: "var(--danger)",
+                    fontFamily: "var(--font-main)",
+                    fontWeight: 600,
+                    fontSize: 12,
+                    cursor: regenerating ? "not-allowed" : "pointer",
+                    opacity: regenerating ? 0.6 : 1,
+                  }}
+                >
+                  {regenerating ? "Regenerating..." : "⟳ Regenerate URLs"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
     </div>
   );
@@ -974,6 +1206,19 @@ const lbl = {
   letterSpacing: "0.05em",
   textTransform: "uppercase",
   fontFamily: "var(--font-main)",
+};
+const copyBtn = {
+  padding: "9px 16px",
+  borderRadius: 8,
+  background: "var(--teal-dim)",
+  border: "1px solid var(--teal)",
+  color: "var(--teal-light)",
+  fontFamily: "var(--font-main)",
+  fontWeight: 600,
+  fontSize: 12,
+  cursor: "pointer",
+  whiteSpace: "nowrap",
+  flexShrink: 0,
 };
 const inp = {
   width: "100%",

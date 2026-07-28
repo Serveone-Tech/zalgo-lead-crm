@@ -53,6 +53,12 @@ const initDB = async () => {
       `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS expiry_reminder_sent BOOLEAN DEFAULT false`,
       `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS expired_email_sent BOOLEAN DEFAULT false`,
     ];
+    const alterAutomationCredentials = [
+      `ALTER TABLE automation_credentials ADD COLUMN IF NOT EXISTS webhook_token VARCHAR(64) UNIQUE`,
+    ];
+    for (const q of alterAutomationCredentials) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
     for (const q of alterSubscriptions) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
@@ -189,6 +195,7 @@ const initDB = async () => {
         wa_account_sid TEXT DEFAULT '',
         wa_auth_token TEXT DEFAULT '',
         wa_from VARCHAR(50) DEFAULT '',
+        webhook_token VARCHAR(64) UNIQUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );

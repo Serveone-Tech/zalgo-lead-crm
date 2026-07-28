@@ -1,8 +1,40 @@
 const express = require("express");
+const crypto = require("crypto");
 const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 
 const router = express.Router();
+
+function webhookBaseUrl(req) {
+  return process.env.PUBLIC_API_URL || `${req.protocol}://${req.get("host")}`;
+}
+
+function webhookUrls(req, token) {
+  const base = webhookBaseUrl(req);
+  return {
+    token,
+    google_webhook_url: `${base}/api/webhooks/google-leads/${token}`,
+    whatsapp_webhook_url: `${base}/api/webhooks/whatsapp/${token}`,
+    sheets_webhook_url: `${base}/api/webhooks/sheets/${token}`,
+  };
+}
+
+async function ensureWebhookToken(tenantId) {
+  const existing = await pool.query(
+    "SELECT webhook_token FROM automation_credentials WHERE user_id=$1",
+    [tenantId],
+  );
+  if (existing.rows[0]?.webhook_token) return existing.rows[0].webhook_token;
+
+  const token = crypto.randomBytes(24).toString("hex");
+  await pool.query(
+    `INSERT INTO automation_credentials (user_id, webhook_token, updated_at)
+     VALUES ($1,$2,NOW())
+     ON CONFLICT (user_id) DO UPDATE SET webhook_token=$2, updated_at=NOW()`,
+    [tenantId, token],
+  );
+  return token;
+}
 
 // ── GET credentials (masked) ──────────────────────────────
 router.get("/credentials", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
@@ -94,6 +126,34 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
       [req.tenantId, ...Object.values(cols)],
     );
     res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── GET webhook URLs — for auto-capturing leads from Google Ads / WhatsApp ──
+router.get("/webhook-urls", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const token = await ensureWebhookToken(req.tenantId);
+    res.json(webhookUrls(req, token));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── POST regenerate webhook token — invalidates the old URLs ──
+router.post("/webhook-urls/regenerate", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const token = crypto.randomBytes(24).toString("hex");
+    await pool.query(
+      `INSERT INTO automation_credentials (user_id, webhook_token, updated_at)
+       VALUES ($1,$2,NOW())
+       ON CONFLICT (user_id) DO UPDATE SET webhook_token=$2, updated_at=NOW()`,
+      [req.tenantId, token],
+    );
+    res.json(webhookUrls(req, token));
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Server error" });

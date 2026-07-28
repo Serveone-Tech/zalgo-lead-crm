@@ -12,6 +12,7 @@ const superadminRoutes = require('./routes/superadmin');
 const plansRoutes      = require('./routes/plans');
 const employeesRoutes  = require('./routes/employees');
 const stagesRoutes     = require('./routes/stages');
+const webhooksRoutes   = require('./routes/webhooks');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,6 +29,7 @@ app.use('/api/superadmin', superadminRoutes);
 app.use('/api/plans',      plansRoutes);
 app.use('/api/employees',  employeesRoutes);
 app.use('/api/stages',     stagesRoutes);
+app.use('/api/webhooks',   webhooksRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
