@@ -125,7 +125,8 @@ function LeadsContent() {
           !l.name.toLowerCase().includes(q) &&
           !l.last_message?.toLowerCase().includes(q) &&
           !l.notes?.toLowerCase().includes(q) &&
-          !l.platform?.toLowerCase().includes(q)
+          !l.platform?.toLowerCase().includes(q) &&
+          !l.phone?.toLowerCase().includes(q)
         )
           return false;
         if (stageF && l.stage !== stageF) return false;
@@ -416,7 +417,7 @@ function LeadsContent() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍  Search by name, message, notes..."
+          placeholder="🔍  Search by name, phone, message, notes..."
           style={{
             flex: 1,
             minWidth: 220,
