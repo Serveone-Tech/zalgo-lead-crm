@@ -54,7 +54,11 @@ const VARS = [
 ];
 
 function buildAppsScript(webhookUrl) {
-  return `// ── EDIT THESE 4 LINES to match your Sheet's actual column headers ──
+  return `// ── EDIT THESE LINES ─────────────────────────────────────────────
+// Exact name of the tab (bottom of the sheet) your leads are on.
+var SHEET_NAME = 'Sheet1';
+
+// Must match your sheet's actual column headers exactly (case-sensitive).
 var COLUMN_MAP = {
   name:  'Full Name',    // <- change to your header text, or '' to skip
   phone: 'Phone Number',
@@ -62,39 +66,73 @@ var COLUMN_MAP = {
   notes: ''               // e.g. 'Campaign' — optional
 };
 var WEBHOOK_URL = '${webhookUrl || "PASTE_YOUR_WEBHOOK_URL_HERE"}';
-// ──────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────
 
 function syncNewLeads() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) {
+    Logger.log('ERROR: no tab named "' + SHEET_NAME + '" — check SHEET_NAME above against your tab name.');
+    return;
+  }
+
   var props = PropertiesService.getScriptProperties();
   var lastRow = parseInt(props.getProperty('lastSyncedRow') || '1', 10);
   var lastCol = sheet.getLastColumn();
   var totalRows = sheet.getLastRow();
-  if (totalRows <= lastRow) return; // nothing new since last run
+  Logger.log('Sheet "' + SHEET_NAME + '": ' + totalRows + ' total rows, last synced up to row ' + lastRow + '.');
+  if (totalRows <= lastRow) {
+    Logger.log('Nothing new since last run.');
+    return;
+  }
 
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
   var colIndex = {};
-  headers.forEach(function (h, i) { colIndex[h.trim()] = i; });
+  headers.forEach(function (h, i) { colIndex[h] = i; });
+  Logger.log('Headers found: ' + JSON.stringify(headers));
 
   var rows = sheet.getRange(lastRow + 1, 1, totalRows - lastRow, lastCol).getValues();
-  rows.forEach(function (values) {
+  var highestSynced = lastRow;
+
+  rows.forEach(function (values, i) {
+    var rowNum = lastRow + 1 + i;
     var get = function (key) {
       var header = COLUMN_MAP[key];
-      if (!header || !(header in colIndex)) return '';
+      if (!header) return '';
+      if (!(header in colIndex)) {
+        Logger.log('WARNING: COLUMN_MAP.' + key + ' = "' + header + '" not found in headers — check spelling.');
+        return '';
+      }
       return String(values[colIndex[header]] || '').trim();
     };
     var lead = { name: get('name'), phone: get('phone'), email: get('email'), notes: get('notes') };
-    if (!lead.name && !lead.phone) return; // skip blank rows
 
-    UrlFetchApp.fetch(WEBHOOK_URL, {
+    if (!lead.name && !lead.phone) {
+      Logger.log('Row ' + rowNum + ': skipped (no name or phone found).');
+      highestSynced = rowNum;
+      return;
+    }
+
+    var resp = UrlFetchApp.fetch(WEBHOOK_URL, {
       method: 'post',
       contentType: 'application/json',
       payload: JSON.stringify(lead),
       muteHttpExceptions: true
     });
+    Logger.log('Row ' + rowNum + ' (' + lead.name + ', ' + lead.phone + '): sent — HTTP ' + resp.getResponseCode() + ' ' + resp.getContentText());
+
+    // Only mark this row as synced if the CRM actually accepted it, so a
+    // failed request (bad URL, server down) gets retried on the next run.
+    if (resp.getResponseCode() < 300) highestSynced = rowNum;
   });
 
-  props.setProperty('lastSyncedRow', String(totalRows));
+  props.setProperty('lastSyncedRow', String(highestSynced));
+}
+
+// Run this once (▶ Run, choose resetSync) if you want the next syncNewLeads
+// run to re-scan every row from the top — handy while testing.
+function resetSync() {
+  PropertiesService.getScriptProperties().deleteProperty('lastSyncedRow');
+  Logger.log('Reset — next run will re-check all rows.');
 }`;
 }
 
@@ -1128,10 +1166,13 @@ export default function AutomationPage() {
 
                   <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
                     <strong style={{ color: "var(--text-secondary)" }}>Setup:</strong> Open your Sheet → Extensions → Apps Script → delete
-                    any placeholder code → paste the script above → edit the <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>COLUMN_MAP</code> lines
-                    near the top to match your sheet's actual column headers → Save. Then click the clock icon (Triggers) on the left →
-                    Add Trigger → function <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code>,
-                    event source "Time-driven", type "Minutes timer", every 5 minutes → Save (approve the permission prompt the first time).
+                    any placeholder code → paste the script above → edit <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>SHEET_NAME</code> to
+                    match your tab's name (bottom of the sheet) and <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>COLUMN_MAP</code> to
+                    match your column headers exactly → Save. Then click the clock icon (Triggers) on the left → Add Trigger → function{" "}
+                    <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code>, event source
+                    "Time-driven", type "Minutes timer", every 5 minutes → Save (approve the permission prompt the first time). To test
+                    immediately instead of waiting: pick <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code> in
+                    the function dropdown → Run → check the Execution log at the bottom for what it found and sent.
                   </div>
                 </div>
               </div>
