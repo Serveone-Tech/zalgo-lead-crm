@@ -178,14 +178,15 @@ router.post("/whatsapp/:token", express.json(), async (req, res) => {
 // ── POST /api/webhooks/sheets/:token ─────────────────────────────
 // Called by a small Google Apps Script bound to the tenant's own lead sheet
 // (see /automation/webhook-urls → apps_script snippet). The script maps its
-// own columns to {name, phone, email, notes} before sending, so no header
-// guessing needs to happen here — any spreadsheet layout works.
+// own columns to {name, phone, email, platform, created_at, notes} before
+// sending, so no header guessing needs to happen here — any spreadsheet
+// layout works.
 router.post("/sheets/:token", express.json(), async (req, res) => {
   try {
     const tenantId = await tenantForToken(req.params.token);
     if (!tenantId) return res.status(404).json({ message: "Unknown webhook" });
 
-    const { name, phone, email, notes } = req.body || {};
+    const { name, phone, email, notes, platform, created_at } = req.body || {};
     if (!name && !phone) {
       return res.status(400).json({ message: "Row has no name or phone" });
     }
@@ -199,15 +200,30 @@ router.post("/sheets/:token", express.json(), async (req, res) => {
       return res.status(403).json({ message: "Lead limit reached for this plan" });
     }
 
+    // If the sheet has its own submission timestamp, keep the lead's
+    // created_at accurate to that instead of "when we happened to sync it".
+    // Pass the raw string straight through to Postgres — routing it through
+    // a JS Date object here would silently shift the time by the server's
+    // local UTC offset (the same class of bug fixed earlier for follow_up_date).
+    let createdAt = null;
+    if (
+      typeof created_at === "string" &&
+      /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/.test(created_at.trim())
+    ) {
+      createdAt = created_at.trim();
+    }
+
     await pool.query(
-      `INSERT INTO leads (user_id, name, phone, email, platform, last_message, notes)
-       VALUES ($1,$2,$3,$4,'Google Sheets','',$5)`,
+      `INSERT INTO leads (user_id, name, phone, email, platform, last_message, notes, created_at)
+       VALUES ($1,$2,$3,$4,$5,'',$6, COALESCE($7::timestamp, NOW()))`,
       [
         tenantId,
         name || phone,
         phone || "",
         email || "",
+        platform || "Google Sheets",
         notes || "Auto-captured from Google Sheet",
+        createdAt,
       ],
     );
 

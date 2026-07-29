@@ -54,34 +54,39 @@ const VARS = [
 ];
 
 function buildAppsScript(webhookUrl) {
-  return `// ── EDIT THESE LINES ─────────────────────────────────────────────
-// Exact name(s) of the tab(s) — bottom of the sheet — that have leads.
-// One tab: ['Sheet1']   Multiple tabs: ['Google Ads', 'Facebook', 'Sheet1']
-var SHEET_NAMES = ['Sheet1'];
-
-// Must match your sheet's actual column headers exactly (case-sensitive).
-// Same mapping is used for every tab listed above.
-var COLUMN_MAP = {
-  name:  'Full Name',    // <- change to your header text, or '' to skip
-  phone: 'Phone Number',
-  email: 'Email',
-  notes: ''               // e.g. 'Campaign' — optional
+  return `// ── EDIT THIS SECTION ──────────────────────────────────────────────
+// One entry per tab that has leads. Each tab gets its OWN column mapping,
+// since different tabs (e.g. different lead forms) can use different
+// column headers even in the same spreadsheet.
+//
+// Run the script once first (▶ Run → syncNewLeads) to see each tab's real
+// headers printed in the Execution log — copy those exact header names in
+// below, replacing the placeholders.
+var SHEETS = {
+  'Sheet1': {                 // <- exact tab name, bottom of the sheet
+    name:      'Full Name',    // <- change each to that tab's real header text
+    phone:     'Phone Number',
+    email:     'Email',
+    platform:  '',              // e.g. 'Platform' or 'Ad Source' — optional, blank = leave blank
+    created_at: ''              // e.g. 'Created Time' — optional, blank = use time of sync
+  }
+  // , 'Another Tab Name': { name: 'full_name', phone: 'phone_number', email: 'email', platform: 'platform', created_at: 'created_time' }
 };
 var WEBHOOK_URL = '${webhookUrl || "PASTE_YOUR_WEBHOOK_URL_HERE"}';
-// ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────
 
 function syncNewLeads() {
-  SHEET_NAMES.forEach(function (sheetName) {
-    syncOneSheet(sheetName);
+  Object.keys(SHEETS).forEach(function (sheetName) {
+    syncOneSheet(sheetName, SHEETS[sheetName]);
   });
 }
 
 // Each tab tracks its own "how far synced" position, so tabs don't interfere
 // with each other.
-function syncOneSheet(sheetName) {
+function syncOneSheet(sheetName, columnMap) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetName);
   if (!sheet) {
-    Logger.log('ERROR: no tab named "' + sheetName + '" — check SHEET_NAMES above against your actual tab name.');
+    Logger.log('ERROR: no tab named "' + sheetName + '" — check the SHEETS keys above against your actual tab names.');
     return;
   }
 
@@ -91,31 +96,45 @@ function syncOneSheet(sheetName) {
   var lastCol = sheet.getLastColumn();
   var totalRows = sheet.getLastRow();
   Logger.log('Tab "' + sheetName + '": ' + totalRows + ' total rows, last synced up to row ' + lastRow + '.');
+
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  Logger.log('Tab "' + sheetName + '" headers: ' + JSON.stringify(headers));
+
   if (totalRows <= lastRow) {
     Logger.log('Tab "' + sheetName + '": nothing new since last run.');
     return;
   }
 
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
   var colIndex = {};
   headers.forEach(function (h, i) { colIndex[h] = i; });
-  Logger.log('Tab "' + sheetName + '" headers: ' + JSON.stringify(headers));
 
   var rows = sheet.getRange(lastRow + 1, 1, totalRows - lastRow, lastCol).getValues();
   var highestSynced = lastRow;
 
+  var tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
+
   rows.forEach(function (values, i) {
     var rowNum = lastRow + 1 + i;
     var get = function (key) {
-      var header = COLUMN_MAP[key];
+      var header = columnMap[key];
       if (!header) return '';
       if (!(header in colIndex)) {
-        Logger.log('WARNING: COLUMN_MAP.' + key + ' = "' + header + '" not found in "' + sheetName + '" headers — check spelling.');
+        Logger.log('WARNING: "' + sheetName + '" column_map.' + key + ' = "' + header + '" not found in this tab\\'s headers — check spelling.');
         return '';
       }
-      return String(values[colIndex[header]] || '').trim();
+      var raw = values[colIndex[header]];
+      if (key === 'created_at' && raw instanceof Date) {
+        return Utilities.formatDate(raw, tz, "yyyy-MM-dd'T'HH:mm:ss");
+      }
+      return String(raw || '').trim();
     };
-    var lead = { name: get('name'), phone: get('phone'), email: get('email'), notes: get('notes') };
+    var lead = {
+      name: get('name'),
+      phone: get('phone'),
+      email: get('email'),
+      platform: get('platform'),
+      created_at: get('created_at')
+    };
 
     if (!lead.name && !lead.phone) {
       Logger.log('Tab "' + sheetName + '" row ' + rowNum + ': skipped (no name or phone found).');
@@ -143,7 +162,7 @@ function syncOneSheet(sheetName) {
 // run to re-scan every row in every tab from the top — handy while testing.
 function resetSync() {
   var props = PropertiesService.getScriptProperties();
-  SHEET_NAMES.forEach(function (sheetName) {
+  Object.keys(SHEETS).forEach(function (sheetName) {
     props.deleteProperty('lastSyncedRow__' + sheetName);
   });
   Logger.log('Reset — next run will re-check all rows in all tabs.');
@@ -1180,14 +1199,13 @@ export default function AutomationPage() {
 
                   <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
                     <strong style={{ color: "var(--text-secondary)" }}>Setup:</strong> Open your Sheet → Extensions → Apps Script → delete
-                    any placeholder code → paste the script above → edit <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>SHEET_NAMES</code> to
-                    list your tab name(s) — bottom of the sheet, add more than one if leads are spread across
-                    multiple tabs — and <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>COLUMN_MAP</code> to
-                    match your column headers exactly → Save. Then click the clock icon (Triggers) on the left → Add Trigger → function{" "}
-                    <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code>, event source
-                    "Time-driven", type "Minutes timer", every 5 minutes → Save (approve the permission prompt the first time). To test
-                    immediately instead of waiting: pick <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code> in
-                    the function dropdown → Run → check the Execution log at the bottom for what it found and sent.
+                    any placeholder code → paste the script above → Save. Pick <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code> in
+                    the function dropdown → Run once — the Execution log will print each tab's real column headers. Edit the{" "}
+                    <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>SHEETS</code> block near the top:
+                    one entry per tab (add more if you have multiple tabs, e.g. from different lead forms), using those exact header
+                    names → Save. Then click the clock icon (Triggers) on the left → Add Trigger → function{" "}
+                    <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code>, event
+                    source "Time-driven", type "Minutes timer", every 5 minutes → Save (approve the permission prompt the first time).
                   </div>
                 </div>
               </div>
