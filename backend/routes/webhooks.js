@@ -34,6 +34,30 @@ async function withinLeadLimit(tenantId) {
   return parseInt(count.rows[0].count) < maxLeads;
 }
 
+// Rows with no usable phone number go here instead of the main Leads table,
+// so a webhook resync (or genuinely incomplete form submissions) don't
+// clutter Leads with uncontactable entries. A cheap name/email dedup stops
+// the same phone-less row from piling up every time a sheet gets re-scanned.
+async function savePendingLead(tenantId, { name, email, platform, notes }) {
+  const cleanName = String(name || "").trim();
+  const cleanEmail = String(email || "").trim();
+  if (!cleanName && !cleanEmail) return false;
+
+  const dup = await pool.query(
+    `SELECT id FROM pending_leads WHERE user_id=$1
+     AND (LOWER(name)=LOWER($2) OR ($3 != '' AND LOWER(email)=LOWER($3)))
+     LIMIT 1`,
+    [tenantId, cleanName, cleanEmail],
+  );
+  if (dup.rows.length > 0) return false;
+
+  await pool.query(
+    `INSERT INTO pending_leads (user_id, name, email, platform, notes) VALUES ($1,$2,$3,$4,$5)`,
+    [tenantId, cleanName || cleanEmail, cleanEmail, platform || "", notes || ""],
+  );
+  return true;
+}
+
 // Shared by any inbound-message source (WhatsApp today, maybe Instagram/SMS
 // later): create a new lead on first contact, or just log the message
 // against the existing one if this phone already has a lead.
@@ -104,6 +128,15 @@ router.post("/google-leads/:token", express.json(), async (req, res) => {
     if (phone) {
       const dup = await findDuplicateLeadByPhone(tenantId, phone);
       if (dup) return res.json({}); // already have this lead — ack, skip
+    } else {
+      // No usable phone — park it for review instead of adding to Leads.
+      await savePendingLead(tenantId, {
+        name,
+        email,
+        platform: "Google Ads",
+        notes: "Auto-captured from Google Ads Lead Form (no phone)",
+      });
+      return res.json({ pending: true });
     }
 
     if (!(await withinLeadLimit(tenantId))) {
@@ -195,13 +228,22 @@ router.post("/sheets/:token", express.json(), async (req, res) => {
     // the value like "p:+919279086530" — strip that down to just the number.
     const phone = isValidPhone(rawPhone) ? cleanPhoneValue(rawPhone) : "";
 
-    if (!name && !phone) {
-      return res.status(400).json({ message: "Row has no name or valid phone number" });
+    if (!name && !phone && !email) {
+      return res.status(400).json({ message: "Row has no name, phone, or email" });
     }
 
     if (phone) {
       const dup = await findDuplicateLeadByPhone(tenantId, phone);
       if (dup) return res.json({ skipped: "duplicate" });
+    } else {
+      // No usable phone — park it for review instead of adding to Leads.
+      await savePendingLead(tenantId, {
+        name,
+        email,
+        platform: platform || "Google Sheets",
+        notes: notes || "Auto-captured from Google Sheet (no phone)",
+      });
+      return res.json({ pending: true });
     }
 
     if (!(await withinLeadLimit(tenantId))) {

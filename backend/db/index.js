@@ -141,6 +141,16 @@ const initDB = async () => {
         updated_at TIMESTAMP DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS pending_leads (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) DEFAULT '',
+        platform VARCHAR(100) DEFAULT '',
+        notes TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS lead_messages (
         id SERIAL PRIMARY KEY,
         lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
