@@ -1,6 +1,6 @@
 const express = require("express");
 const { pool } = require("../db");
-const { findDuplicateLeadByPhone } = require("../utils/lead-dedup");
+const { findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -93,7 +93,8 @@ router.post("/google-leads/:token", express.json(), async (req, res) => {
       cols.FULL_NAME ||
       [cols.FIRST_NAME, cols.LAST_NAME].filter(Boolean).join(" ") ||
       "Google Ads Lead";
-    const phone = cols.PHONE_NUMBER || "";
+    const rawPhone = cols.PHONE_NUMBER || "";
+    const phone = isValidPhone(rawPhone) ? cleanPhoneValue(rawPhone) : "";
     const email = cols.EMAIL || "";
 
     if (!phone && !email) {
@@ -186,9 +187,16 @@ router.post("/sheets/:token", express.json(), async (req, res) => {
     const tenantId = await tenantForToken(req.params.token);
     if (!tenantId) return res.status(404).json({ message: "Unknown webhook" });
 
-    const { name, phone, email, notes, platform, created_at } = req.body || {};
+    const { name, email, notes, platform, created_at } = req.body || {};
+    const rawPhone = req.body?.phone;
+    // Junk cell values like "p:" have no real digits — treat them as if the
+    // phone column was left blank instead of storing them as a fake contact
+    // number. And some sources (e.g. Meta's sheet sync) glue a label onto
+    // the value like "p:+919279086530" — strip that down to just the number.
+    const phone = isValidPhone(rawPhone) ? cleanPhoneValue(rawPhone) : "";
+
     if (!name && !phone) {
-      return res.status(400).json({ message: "Row has no name or phone" });
+      return res.status(400).json({ message: "Row has no name or valid phone number" });
     }
 
     if (phone) {

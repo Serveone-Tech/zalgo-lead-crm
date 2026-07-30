@@ -8,6 +8,22 @@ const phoneKey = (phone) => {
   return digits ? digits.slice(-10) : "";
 };
 
+// Junk values like "p:" or "N/A" have no digits (or too few to be a real
+// number) — treat those the same as "no phone" instead of storing them
+// as if they were a genuine, dedupe-able contact number.
+const MIN_PHONE_DIGITS = 6;
+const isValidPhone = (phone) => phoneKey(phone).length >= MIN_PHONE_DIGITS;
+
+// Strip label junk some sources glue onto the value (e.g. Meta's sheet sync
+// sometimes writes a cell as "p:+919279086530" instead of just the number).
+// Keeps a leading "+" if the source had one, drops everything else non-digit.
+const cleanPhoneValue = (phone) => {
+  const str = String(phone || "");
+  const digits = str.replace(/\D/g, "");
+  if (!digits) return "";
+  return str.includes("+") ? `+${digits}` : digits;
+};
+
 // Find an existing lead in this tenant with the same phone number.
 // excludeId lets an update skip matching itself.
 async function findDuplicateLeadByPhone(tenantId, phone, excludeId = null) {
@@ -26,4 +42,4 @@ async function findDuplicateLeadByPhone(tenantId, phone, excludeId = null) {
   return rows[0] || null;
 }
 
-module.exports = { phoneKey, findDuplicateLeadByPhone };
+module.exports = { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue };
