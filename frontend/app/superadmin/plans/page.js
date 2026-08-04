@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import api from "../../../lib/api";
 
 const EMPTY = { name:"", description:"", price_monthly:"", price_yearly:"", trial_days:"0", is_free:false, max_leads:"-1", max_customers:"-1", is_active:true, sort_order:"0", features:"" };
@@ -78,9 +79,9 @@ export default function SuperAdminPlansPage() {
             { label:"All Users",  icon:"👥", href:"/superadmin" },
             { label:"Plans",      icon:"📋", href:"/superadmin/plans", active:true },
           ].map(item=>(
-            <a key={item.label} href={item.href} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:8, marginBottom:4, color: item.active?"var(--teal-light)":"var(--text-secondary)", background: item.active?"var(--teal-dim)":"transparent", fontFamily:"var(--font-main)", fontWeight: item.active?600:400, fontSize:13, textDecoration:"none", borderLeft: item.active?"2px solid var(--teal)":"2px solid transparent" }}>
+            <Link key={item.label} href={item.href} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:8, marginBottom:4, color: item.active?"var(--teal-light)":"var(--text-secondary)", background: item.active?"var(--teal-dim)":"transparent", fontFamily:"var(--font-main)", fontWeight: item.active?600:400, fontSize:13, textDecoration:"none", borderLeft: item.active?"2px solid var(--teal)":"2px solid transparent" }}>
               <span>{item.icon}</span>{item.label}
-            </a>
+            </Link>
           ))}
         </nav>
         <div style={{ padding:"14px", borderTop:"1px solid var(--border)" }}>

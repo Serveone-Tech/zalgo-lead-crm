@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import api from "../../lib/api";
 
 function fmtDate(d) {
@@ -113,9 +114,9 @@ export default function SuperAdminDashboard() {
             { label:"All Users",  icon:"👥", href:"#users" },
             { label:"Plans",      icon:"📋", href:"/superadmin/plans" },
           ].map(item=>(
-            <a key={item.label} href={item.href||"#"} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:8, marginBottom:4, color: item.active?"var(--teal-light)":"var(--text-secondary)", background: item.active?"var(--teal-dim)":"transparent", fontFamily:"var(--font-main)", fontWeight: item.active?600:400, fontSize:13, textDecoration:"none", borderLeft: item.active?"2px solid var(--teal)":"2px solid transparent" }}>
+            <Link key={item.label} href={item.href||"#"} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:8, marginBottom:4, color: item.active?"var(--teal-light)":"var(--text-secondary)", background: item.active?"var(--teal-dim)":"transparent", fontFamily:"var(--font-main)", fontWeight: item.active?600:400, fontSize:13, textDecoration:"none", borderLeft: item.active?"2px solid var(--teal)":"2px solid transparent" }}>
               <span>{item.icon}</span>{item.label}
-            </a>
+            </Link>
           ))}
         </nav>
         <div style={{ padding:"14px", borderTop:"1px solid var(--border)" }}>
@@ -153,9 +154,9 @@ export default function SuperAdminDashboard() {
             <option value="">All Status</option>
             {["active","trial","expired","cancelled"].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
           </select>
-          <a href="/superadmin/plans" style={{ padding:"8px 16px", background:"var(--teal)", color:"#fff", borderRadius:7, fontSize:12, fontWeight:600, fontFamily:"var(--font-main)", textDecoration:"none", display:"flex", alignItems:"center" }}>
+          <Link href="/superadmin/plans" style={{ padding:"8px 16px", background:"var(--teal)", color:"#fff", borderRadius:7, fontSize:12, fontWeight:600, fontFamily:"var(--font-main)", textDecoration:"none", display:"flex", alignItems:"center" }}>
             Manage Plans
-          </a>
+          </Link>
         </div>
 
         {/* Users Table */}

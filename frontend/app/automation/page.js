@@ -1210,6 +1210,69 @@ export default function AutomationPage() {
                 </div>
               </div>
 
+              {/* Custom / universal webhook card */}
+              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>🔌</span>
+                  <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                    Custom App (MacroDroid, call-tracking apps, anything else)
+                  </span>
+                </div>
+                <div style={{ padding: "18px 20px" }}>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.7 }}>
+                    Any app or service that can send a custom HTTP request — call-tracking apps like MacroDroid, cloud
+                    telephony platforms (Exotel, Knowlarity, etc.), Zapier, or your own script — can send leads here
+                    directly. Point it at the URL below with a JSON body in this exact shape.
+                  </div>
+
+                  <label style={lbl}>Webhook URL</label>
+                  <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                    <input readOnly value={webhooks.sheets_webhook_url} style={{ ...inp, fontSize: 12 }} onFocus={(e) => e.target.select()} />
+                    <button onClick={() => copyToClipboard(webhooks.sheets_webhook_url)} style={copyBtn}>Copy</button>
+                  </div>
+
+                  <label style={lbl}>Request format</label>
+                  <pre
+                    style={{
+                      margin: "6px 0 14px",
+                      padding: "12px 14px",
+                      background: "var(--bg-input)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                      color: "var(--text-secondary)",
+                      fontSize: 11,
+                      lineHeight: 1.6,
+                      overflowX: "auto",
+                      fontFamily: "monospace",
+                    }}
+                  >
+{`Method: POST
+Content-Type: application/json
+
+{
+  "name": "Caller name (or leave blank)",
+  "phone": "9876543210",
+  "email": "optional",
+  "platform": "e.g. Phone Call",
+  "created_at": "2026-07-31T14:30:00"   // optional, defaults to now
+}`}
+                  </pre>
+
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
+                    <strong style={{ color: "var(--text-secondary)" }}>MacroDroid setup:</strong> Add trigger{" "}
+                    <em>Phone → Call Ended</em> → add action <em>Connectivity → HTTP Request</em> → Method{" "}
+                    <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>POST</code>,
+                    paste the URL above, Content-Type <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>application/json</code>,
+                    and build the body using the format above — tap the <strong>"..."</strong> button next to each field
+                    to insert that trigger's phone number / caller name via magic text instead of typing it manually.
+                    <br /><br />
+                    <strong style={{ color: "var(--text-secondary)" }}>Any other tool:</strong> as long as it can send a
+                    POST request with this JSON shape (or you can reshape its output to match — e.g. via a Zapier/Make
+                    formatter step), it will work here.
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: "flex", justifyContent: "flex-end" }}>
                 <button
                   onClick={regenerateWebhooks}

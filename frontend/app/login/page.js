@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import axios from "axios";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -194,9 +195,9 @@ export default function LoginPage() {
 
               <div style={{ textAlign: "center", marginTop: 20, fontSize: 13, color: "var(--text-muted)" }}>
                 Don&apos;t have an account?{" "}
-                <a href="/register" style={{ color: "var(--teal)", fontWeight: 600, textDecoration: "none" }}>
+                <Link href="/register" style={{ color: "var(--teal)", fontWeight: 600, textDecoration: "none" }}>
                   Register free
-                </a>
+                </Link>
               </div>
             </>
           )}

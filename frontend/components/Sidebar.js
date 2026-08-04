@@ -1,6 +1,7 @@
 "use client";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import api from "../lib/api";
 import { hasPerm, isOwnerUser } from "../lib/permissions";
@@ -366,7 +367,7 @@ export default function Sidebar() {
             {items.map((item) => {
               const active = pathname.startsWith(item.href);
               return (
-                <a
+                <Link
                   key={item.href}
                   href={item.href}
                   style={{
@@ -423,7 +424,7 @@ export default function Sidebar() {
                       {item.badge}
                     </span>
                   )}
-                </a>
+                </Link>
               );
             })}
           </div>

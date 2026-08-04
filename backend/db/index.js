@@ -251,6 +251,33 @@ const initDB = async () => {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
 
+    // ── STEP 3.6: Indexes ─────────────────────────────────────
+    // Every query in this app filters by tenant (user_id) first — without an
+    // index on it, Postgres was doing a full sequential scan of these tables
+    // on every single request, which is what made the app feel slow as data
+    // grew. CREATE INDEX IF NOT EXISTS is safe to run on every boot.
+    const indexes = [
+      `CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_user_stage ON leads(user_id, stage)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_user_assigned ON leads(user_id, assigned_to)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_user_followup ON leads(user_id, follow_up_date)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_user_created ON leads(user_id, created_at DESC)`,
+      // Powers the phone-duplicate check (regexp_replace(phone,...)) used on every lead add/import.
+      `CREATE INDEX IF NOT EXISTS idx_leads_phone_digits ON leads(user_id, (regexp_replace(phone, '\\D', '', 'g')))`,
+      `CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_payments_user_id ON customer_payments(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_payments_customer_id ON customer_payments(customer_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_lead_messages_lead_id ON lead_messages(lead_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_stages_user_id ON stages(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_pending_leads_user_id ON pending_leads(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_automation_triggers_user_id ON automation_triggers(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_users_parent_id ON users(parent_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id)`,
+    ];
+    for (const q of indexes) {
+      await client.query(q).catch((e) => console.log("index skip:", e.message));
+    }
+
     // ── STEP 4: Seed default plans ───────────────────────────
     const planCount = await client.query("SELECT COUNT(*) FROM plans");
     if (parseInt(planCount.rows[0].count) === 0) {
