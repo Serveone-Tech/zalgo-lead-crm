@@ -17,6 +17,56 @@ const visibilityClause = (req, paramIndex) => {
   return { clause: ` AND assigned_to=$${paramIndex}`, params: [req.user.id] };
 };
 
+// When a lead's stage becomes "Converted", mirror it into Customers (once)
+// and fire the lead_converted automation. Shared by the single-lead update
+// and bulk stage-change routes so both behave the same way.
+async function convertLeadToCustomer(tenantId, lead) {
+  const existingCustomer = await pool.query(
+    "SELECT id FROM customers WHERE lead_id=$1",
+    [lead.id],
+  );
+  if (existingCustomer.rows.length === 0) {
+    const colCheck = await pool.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name='customers'`,
+    );
+    const cols = colCheck.rows.map((r) => r.column_name);
+
+    const fields = ["user_id", "lead_id", "name"];
+    const values = [tenantId, lead.id, lead.name];
+
+    if (cols.includes("phone")) {
+      fields.push("phone");
+      values.push(lead.phone || "");
+    }
+    if (cols.includes("email")) {
+      fields.push("email");
+      values.push(lead.email || "");
+    }
+    if (cols.includes("platform")) {
+      fields.push("platform");
+      values.push(lead.platform || "");
+    }
+    if (cols.includes("platform_link")) {
+      fields.push("platform_link");
+      values.push(lead.platform_link || "");
+    }
+    fields.push("total_fee", "amount_paid");
+    values.push(0, 0);
+
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(",");
+    await pool.query(
+      `INSERT INTO customers (${fields.join(",")}) VALUES (${placeholders})`,
+      values,
+    );
+  }
+
+  fireTrigger("lead_converted", tenantId, {
+    name: lead.name,
+    phone: lead.phone,
+    email: lead.email,
+  }).catch(() => {});
+}
+
 // GET all leads
 router.get("/", auth, async (req, res) => {
   try {
@@ -242,6 +292,44 @@ router.put("/bulk-assign", auth, async (req, res) => {
   }
 });
 
+// PUT bulk change stage for a set of leads
+router.put("/bulk-stage", auth, async (req, res) => {
+  const { lead_ids, stage } = req.body;
+  if (!Array.isArray(lead_ids) || lead_ids.length === 0)
+    return res.status(400).json({ error: "No leads selected" });
+  if (!stage) return res.status(400).json({ error: "Stage is required" });
+  if (!isOwner(req) && !hasPermission(req, "assign_leads"))
+    return res.status(403).json({ error: "Permission denied" });
+  try {
+    // Leads moving INTO "Converted" for the first time also need the
+    // Customers-mirror + automation trigger, same as a single-lead edit.
+    let toConvert = [];
+    if (stage === "Converted") {
+      const existing = await pool.query(
+        `SELECT id, name, phone, email, platform, platform_link, stage
+         FROM leads WHERE id = ANY($1::int[]) AND user_id=$2 AND stage != 'Converted'`,
+        [lead_ids, req.tenantId],
+      );
+      toConvert = existing.rows;
+    }
+
+    const result = await pool.query(
+      `UPDATE leads SET stage=$1, updated_at=NOW()
+       WHERE id = ANY($2::int[]) AND user_id=$3`,
+      [stage, lead_ids, req.tenantId],
+    );
+
+    for (const lead of toConvert) {
+      await convertLeadToCustomer(req.tenantId, lead);
+    }
+
+    res.json({ updated: result.rowCount });
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // DELETE bulk delete leads (owner or delete_leads permission)
 router.delete("/bulk", auth, async (req, res) => {
   const { lead_ids } = req.body;
@@ -366,53 +454,7 @@ router.put("/:id", auth, async (req, res) => {
 
     // Auto-create customer when converted (only once)
     if (stage === "Converted" && oldStage !== "Converted") {
-      const existingCustomer = await pool.query(
-        "SELECT id FROM customers WHERE lead_id=$1",
-        [updated.id],
-      );
-      if (existingCustomer.rows.length === 0) {
-        // Check which columns exist in customers table
-        const colCheck = await pool.query(
-          `SELECT column_name FROM information_schema.columns WHERE table_name='customers'`,
-        );
-        const cols = colCheck.rows.map((r) => r.column_name);
-
-        // Build INSERT dynamically based on existing columns
-        const fields = ["user_id", "lead_id", "name"];
-        const values = [req.tenantId, updated.id, updated.name];
-
-        if (cols.includes("phone")) {
-          fields.push("phone");
-          values.push(updated.phone || "");
-        }
-        if (cols.includes("email")) {
-          fields.push("email");
-          values.push(updated.email || "");
-        }
-        if (cols.includes("platform")) {
-          fields.push("platform");
-          values.push(updated.platform || "");
-        }
-        if (cols.includes("platform_link")) {
-          fields.push("platform_link");
-          values.push(updated.platform_link || "");
-        }
-        fields.push("total_fee", "amount_paid");
-        values.push(0, 0);
-
-        const placeholders = values.map((_, i) => `$${i + 1}`).join(",");
-        await pool.query(
-          `INSERT INTO customers (${fields.join(",")}) VALUES (${placeholders})`,
-          values,
-        );
-      }
-
-      // Fire lead_converted trigger
-      fireTrigger("lead_converted", req.tenantId, {
-        name: updated.name,
-        phone: updated.phone,
-        email: updated.email,
-      }).catch(() => {});
+      await convertLeadToCustomer(req.tenantId, updated);
     }
 
     res.json(updated);

@@ -21,6 +21,8 @@ export default function UnverifiedLeadsPage() {
   const [modalRow, setModalRow] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [toast, setToast] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -56,6 +58,11 @@ export default function UnverifiedLeadsPage() {
     try {
       await api.delete(`/pending-leads/${row.id}`);
       setRows((r) => r.filter((x) => x.id !== row.id));
+      setSelected((s) => {
+        const next = new Set(s);
+        next.delete(row.id);
+        return next;
+      });
     } catch {
       showToast("Failed to discard", "error");
     }
@@ -71,6 +78,42 @@ export default function UnverifiedLeadsPage() {
     setRows((r) => r.filter((x) => x.id !== modalRow.id));
     closeModal();
     showToast(`✓ "${form.name}" added to Leads.`);
+  };
+
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.size === rows.length) setSelected(new Set());
+    else setSelected(new Set(rows.map((r) => r.id)));
+  };
+
+  const bulkDiscard = async () => {
+    if (selected.size === 0) return;
+    if (
+      !confirm(
+        `Discard ${selected.size} selected lead${selected.size !== 1 ? "s" : ""}? This cannot be undone.`,
+      )
+    )
+      return;
+    setBulkDeleting(true);
+    try {
+      const { data } = await api.delete("/pending-leads/bulk", {
+        data: { ids: Array.from(selected) },
+      });
+      setRows((r) => r.filter((x) => !selected.has(x.id)));
+      setSelected(new Set());
+      showToast(`✓ ${data.deleted} lead${data.deleted !== 1 ? "s" : ""} discarded.`);
+    } catch {
+      showToast("Failed to discard selected leads", "error");
+    }
+    setBulkDeleting(false);
   };
 
   if (loading)
@@ -100,6 +143,65 @@ export default function UnverifiedLeadsPage() {
           }}
         >
           {toast.msg}
+        </div>
+      )}
+
+      {selected.size > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            bottom: 24,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 200,
+            background: "var(--bg-surface)",
+            border: "1px solid var(--teal)",
+            borderRadius: 12,
+            padding: "12px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+            fontFamily: "var(--font-main)",
+          }}
+        >
+          <span style={{ fontWeight: 700, fontSize: 13, color: "var(--teal-light)" }}>
+            {selected.size} selected
+          </span>
+          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+          <button
+            onClick={bulkDiscard}
+            disabled={bulkDeleting}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--danger)",
+              borderRadius: 7,
+              padding: "8px 16px",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--danger)",
+              cursor: bulkDeleting ? "not-allowed" : "pointer",
+              opacity: bulkDeleting ? 0.7 : 1,
+              fontFamily: "var(--font-main)",
+            }}
+          >
+            {bulkDeleting ? "Discarding…" : "Discard Selected"}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--border)",
+              borderRadius: 7,
+              padding: "8px 14px",
+              fontSize: 13,
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              fontFamily: "var(--font-main)",
+            }}
+          >
+            ✕ Cancel
+          </button>
         </div>
       )}
 
@@ -137,6 +239,14 @@ export default function UnverifiedLeadsPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 800 }}>
               <thead>
                 <tr style={{ background: "var(--bg-surface)" }}>
+                  <th style={thStyle}>
+                    <input
+                      type="checkbox"
+                      checked={selected.size === rows.length && rows.length > 0}
+                      onChange={toggleSelectAll}
+                      style={{ cursor: "pointer", accentColor: "var(--teal)" }}
+                    />
+                  </th>
                   {["#", "Name", "Email", "Platform", "Notes", "Received", "Actions"].map((h) => (
                     <th key={h} style={thStyle}>{h}</th>
                   ))}
@@ -144,7 +254,21 @@ export default function UnverifiedLeadsPage() {
               </thead>
               <tbody>
                 {rows.map((row, i) => (
-                  <tr key={row.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                  <tr
+                    key={row.id}
+                    style={{
+                      borderBottom: "1px solid var(--border)",
+                      background: selected.has(row.id) ? "var(--teal-dim)" : "transparent",
+                    }}
+                  >
+                    <td style={{ padding: "12px 14px" }}>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(row.id)}
+                        onChange={() => toggleSelect(row.id)}
+                        style={{ cursor: "pointer", accentColor: "var(--teal)" }}
+                      />
+                    </td>
                     <td style={{ padding: "12px 14px", color: "var(--text-muted)", fontSize: 12 }}>{i + 1}</td>
                     <td style={{ padding: "12px 14px", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>
                       {row.name}

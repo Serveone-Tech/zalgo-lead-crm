@@ -23,6 +23,24 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
+// Must be registered before /:id, otherwise Express matches "bulk" as an :id.
+router.delete("/bulk", auth, async (req, res) => {
+  if (!canView(req)) return res.status(403).json({ error: "Permission denied" });
+  const { ids } = req.body || {};
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "No rows selected" });
+  }
+  try {
+    const result = await pool.query(
+      "DELETE FROM pending_leads WHERE id = ANY($1::int[]) AND user_id=$2",
+      [ids, req.tenantId],
+    );
+    res.json({ deleted: result.rowCount });
+  } catch {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 router.delete("/:id", auth, async (req, res) => {
   if (!canView(req)) return res.status(403).json({ error: "Permission denied" });
   try {
