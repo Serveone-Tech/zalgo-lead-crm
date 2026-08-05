@@ -68,13 +68,13 @@ function LeadsContent() {
   const [bulkOpen, setBulkOpen] = useState(false);
   const [dynamicStages, setDynamicStages] = useState([]);
 
-  // Bulk assign state
+  // Bulk action state
   const [selected, setSelected] = useState(new Set());
-  const [bulkAssignTo, setBulkAssignTo] = useState("");
-  const [bulkAssigning, setBulkAssigning] = useState(false);
-  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const NO_ASSIGN_CHANGE = "__nochange__";
+  const [bulkAssignTo, setBulkAssignTo] = useState(NO_ASSIGN_CHANGE);
   const [bulkStageTo, setBulkStageTo] = useState("");
-  const [bulkChangingStage, setBulkChangingStage] = useState(false);
+  const [bulkApplying, setBulkApplying] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -215,47 +215,40 @@ function LeadsContent() {
 
   const clearSelection = () => {
     setSelected(new Set());
-    setBulkAssignTo("");
+    setBulkAssignTo(NO_ASSIGN_CHANGE);
     setBulkStageTo("");
   };
 
-  const bulkAssign = async () => {
-    if (selected.size === 0) return;
-    setBulkAssigning(true);
-    try {
-      const { data } = await api.put("/leads/bulk-assign", {
-        lead_ids: Array.from(selected),
-        assigned_to: bulkAssignTo || null,
-      });
-      showToast(
-        `✓ ${data.updated} lead${data.updated !== 1 ? "s" : ""} assigned successfully.`,
-      );
-      clearSelection();
-      load();
-    } catch {
-      showToast("Failed to assign leads. Please try again.", "error");
-    } finally {
-      setBulkAssigning(false);
-    }
-  };
+  const wantsAssignChange = bulkAssignTo !== NO_ASSIGN_CHANGE;
+  const wantsStageChange = !!bulkStageTo;
 
-  const bulkChangeStage = async () => {
-    if (selected.size === 0 || !bulkStageTo) return;
-    setBulkChangingStage(true);
+  const bulkApply = async () => {
+    if (selected.size === 0 || (!wantsAssignChange && !wantsStageChange)) return;
+    setBulkApplying(true);
     try {
-      const { data } = await api.put("/leads/bulk-stage", {
-        lead_ids: Array.from(selected),
-        stage: bulkStageTo,
-      });
-      showToast(
-        `✓ ${data.updated} lead${data.updated !== 1 ? "s" : ""} moved to "${bulkStageTo}".`,
-      );
+      const ids = Array.from(selected);
+      const results = [];
+      if (wantsAssignChange) {
+        const { data } = await api.put("/leads/bulk-assign", {
+          lead_ids: ids,
+          assigned_to: bulkAssignTo || null,
+        });
+        results.push(`${data.updated} assigned`);
+      }
+      if (wantsStageChange) {
+        const { data } = await api.put("/leads/bulk-stage", {
+          lead_ids: ids,
+          stage: bulkStageTo,
+        });
+        results.push(`${data.updated} moved to "${bulkStageTo}"`);
+      }
+      showToast(`✓ ${results.join(" · ")}`);
       clearSelection();
       load();
     } catch {
-      showToast("Failed to change stage. Please try again.", "error");
+      showToast("Failed to apply changes. Please try again.", "error");
     } finally {
-      setBulkChangingStage(false);
+      setBulkApplying(false);
     }
   };
 
@@ -617,9 +610,10 @@ function LeadsContent() {
               fontFamily: "var(--font-main)",
               outline: "none",
               cursor: "pointer",
-              minWidth: 160,
+              minWidth: 150,
             }}
           >
+            <option value={NO_ASSIGN_CHANGE}>Assignee: no change</option>
             <option value="">Unassign</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>
@@ -627,25 +621,6 @@ function LeadsContent() {
               </option>
             ))}
           </select>
-          <button
-            onClick={bulkAssign}
-            disabled={bulkAssigning}
-            style={{
-              background: "var(--gradient-accent)",
-              color: "#fff",
-              border: "none",
-              borderRadius: 7,
-              padding: "8px 18px",
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: bulkAssigning ? "not-allowed" : "pointer",
-              opacity: bulkAssigning ? 0.7 : 1,
-              fontFamily: "var(--font-main)",
-            }}
-          >
-            {bulkAssigning ? "Assigning…" : "Assign"}
-          </button>
-          <div style={{ width: 1, height: 20, background: "var(--border)" }} />
           <select
             value={bulkStageTo}
             onChange={(e) => setBulkStageTo(e.target.value)}
@@ -659,10 +634,10 @@ function LeadsContent() {
               fontFamily: "var(--font-main)",
               outline: "none",
               cursor: "pointer",
-              minWidth: 160,
+              minWidth: 150,
             }}
           >
-            <option value="">Change stage to…</option>
+            <option value="">Stage: no change</option>
             {(dynamicStages.length
               ? dynamicStages
               : FALLBACK_STAGES.map((n) => ({ name: n }))
@@ -673,8 +648,8 @@ function LeadsContent() {
             ))}
           </select>
           <button
-            onClick={bulkChangeStage}
-            disabled={bulkChangingStage || !bulkStageTo}
+            onClick={bulkApply}
+            disabled={bulkApplying || (!wantsAssignChange && !wantsStageChange)}
             style={{
               background: "var(--gradient-accent)",
               color: "#fff",
@@ -683,12 +658,15 @@ function LeadsContent() {
               padding: "8px 18px",
               fontSize: 13,
               fontWeight: 600,
-              cursor: bulkChangingStage || !bulkStageTo ? "not-allowed" : "pointer",
-              opacity: bulkChangingStage || !bulkStageTo ? 0.7 : 1,
+              cursor:
+                bulkApplying || (!wantsAssignChange && !wantsStageChange)
+                  ? "not-allowed"
+                  : "pointer",
+              opacity: bulkApplying || (!wantsAssignChange && !wantsStageChange) ? 0.7 : 1,
               fontFamily: "var(--font-main)",
             }}
           >
-            {bulkChangingStage ? "Updating…" : "Change Stage"}
+            {bulkApplying ? "Applying…" : "Submit"}
           </button>
           <div style={{ width: 1, height: 20, background: "var(--border)" }} />
           <button

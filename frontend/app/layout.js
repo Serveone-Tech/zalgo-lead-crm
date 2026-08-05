@@ -14,6 +14,7 @@ export default function RootLayout({ children }) {
       <head>
         <title>Zalgo CRM — Coach Conversation Tracker</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" href="/favicon.png" type="image/png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `try{document.documentElement.dataset.theme=localStorage.getItem('crm_theme')||'dark';}catch(e){}`,
