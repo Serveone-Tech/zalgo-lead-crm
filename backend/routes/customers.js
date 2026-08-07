@@ -9,12 +9,14 @@ const router = express.Router();
 router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT c.*,
+      `SELECT c.*, u.name AS assigned_to_name,
         COALESCE(SUM(CASE WHEN p.status='Paid' THEN p.amount ELSE 0 END),0) AS total_collected,
         COALESCE(SUM(CASE WHEN p.status='Due' THEN p.amount ELSE 0 END),0) AS total_due_amount,
         (SELECT MIN(p2.due_date) FROM customer_payments p2 WHERE p2.customer_id=c.id AND p2.status='Due') AS next_due_date
-       FROM customers c LEFT JOIN customer_payments p ON p.customer_id=c.id
-       WHERE c.user_id=$1 GROUP BY c.id ORDER BY c.created_at DESC`,
+       FROM customers c
+       LEFT JOIN customer_payments p ON p.customer_id=c.id
+       LEFT JOIN users u ON u.id=c.assigned_to
+       WHERE c.user_id=$1 GROUP BY c.id, u.name ORDER BY c.created_at DESC`,
       [req.tenantId],
     );
     res.json(result.rows);
@@ -44,18 +46,39 @@ router.get("/due/upcoming", auth, requireSubscription, requirePlanFeature("custo
 // GET single customer
 router.get("/:id", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
-    const [cust, payments] = await Promise.all([
-      pool.query("SELECT * FROM customers WHERE id=$1 AND user_id=$2", [
-        req.params.id,
-        req.tenantId,
-      ]),
+    const [cust, payments, orders] = await Promise.all([
+      pool.query(
+        `SELECT c.*, u.name AS assigned_to_name FROM customers c
+         LEFT JOIN users u ON u.id=c.assigned_to
+         WHERE c.id=$1 AND c.user_id=$2`,
+        [req.params.id, req.tenantId],
+      ),
       pool.query(
         "SELECT * FROM customer_payments WHERE customer_id=$1 ORDER BY payment_date DESC",
         [req.params.id],
       ),
+      pool.query(
+        "SELECT * FROM customer_orders WHERE customer_id=$1 ORDER BY created_at DESC",
+        [req.params.id],
+      ),
     ]);
     if (!cust.rows[0]) return res.status(404).json({ error: "Not found" });
-    res.json({ ...cust.rows[0], payments: payments.rows });
+
+    const orderIds = orders.rows.map((o) => o.id);
+    let items = [];
+    if (orderIds.length > 0) {
+      const itemsRes = await pool.query(
+        "SELECT * FROM order_items WHERE order_id = ANY($1::int[])",
+        [orderIds],
+      );
+      items = itemsRes.rows;
+    }
+    const ordersWithItems = orders.rows.map((o) => ({
+      ...o,
+      items: items.filter((i) => i.order_id === o.id),
+    }));
+
+    res.json({ ...cust.rows[0], payments: payments.rows, orders: ordersWithItems });
   } catch (e) {
     res.status(500).json({ error: "Server error" });
   }
@@ -121,12 +144,15 @@ router.put("/:id", auth, requirePermission("manage_customers"), async (req, res)
     total_fee,
     notes,
     status,
+    address,
+    pincode,
+    assigned_to,
   } = req.body;
   try {
     const result = await pool.query(
       `UPDATE customers SET name=$1,phone=$2,email=$3,platform=$4,platform_link=$5,
-       total_fee=$6,notes=$7,status=$8,updated_at=NOW()
-       WHERE id=$9 AND user_id=$10 RETURNING *`,
+       total_fee=$6,notes=$7,status=$8,address=$9,pincode=$10,assigned_to=$11,updated_at=NOW()
+       WHERE id=$12 AND user_id=$13 RETURNING *`,
       [
         name,
         phone || "",
@@ -136,6 +162,9 @@ router.put("/:id", auth, requirePermission("manage_customers"), async (req, res)
         parseFloat(total_fee) || 0,
         notes || "",
         status || "Active",
+        address || "",
+        pincode || "",
+        assigned_to || null,
         req.params.id,
         req.tenantId,
       ],
@@ -229,6 +258,43 @@ router.put("/:id/payments/:pid", auth, requirePermission("manage_customers"), as
       `UPDATE customers SET amount_paid=(SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE customer_id=$1 AND status='Paid'),updated_at=NOW() WHERE id=$1`,
       [req.params.id],
     );
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PUT order — lets tracking_id (AWB) be added/edited after the order was
+// created, since a courier's tracking number often isn't known yet at the
+// time of fulfillment and gets generated/booked afterward.
+router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), async (req, res) => {
+  const { amount, next_due_date, tracking_id, provider, notes } = req.body;
+  try {
+    const owns = await pool.query("SELECT id FROM customers WHERE id=$1 AND user_id=$2", [
+      req.params.id,
+      req.tenantId,
+    ]);
+    if (!owns.rows[0]) return res.status(404).json({ error: "Not found" });
+
+    const result = await pool.query(
+      `UPDATE customer_orders SET
+         amount=COALESCE($1, amount),
+         next_due_date=COALESCE($2, next_due_date),
+         tracking_id=COALESCE($3, tracking_id),
+         provider=COALESCE($4, provider),
+         notes=COALESCE($5, notes)
+       WHERE id=$6 AND customer_id=$7 RETURNING *`,
+      [
+        amount !== undefined && amount !== "" ? parseFloat(amount) : null,
+        next_due_date !== undefined ? (next_due_date || null) : null,
+        tracking_id !== undefined ? tracking_id : null,
+        provider !== undefined ? provider : null,
+        notes !== undefined ? notes : null,
+        req.params.orderId,
+        req.params.id,
+      ],
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "Order not found" });
     res.json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: "Server error" });

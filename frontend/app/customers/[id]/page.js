@@ -43,6 +43,13 @@ export default function CustomerDetailPage() {
   const [saving, setSaving] = useState(false);
   const [markingPaid, setMark] = useState(null);
   const [delPay, setDelPay] = useState(null);
+  const [orders, setOrders] = useState([]);
+  const [deliveryEnabled, setDeliveryEnabled] = useState(false);
+  const [trackResults, setTrackResults] = useState({});
+  const [trackingId, setTrackingId] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);
+  const [orderEditForm, setOrderEditForm] = useState({ tracking_id: "", next_due_date: "" });
+  const [savingOrder, setSavingOrder] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -50,7 +57,52 @@ export default function CustomerDetailPage() {
       return;
     }
     load();
+    api
+      .get("/delivery/credentials")
+      .then((r) => setDeliveryEnabled(!!(r.data.enabled && r.data.provider)))
+      .catch(() => {});
   }, [id]);
+
+  const viewTrack = async (order) => {
+    setTrackingId(order.id);
+    try {
+      const { data } = await api.get(`/delivery/track/${order.id}`);
+      if (data.link_only) {
+        window.open(data.url, "_blank", "noreferrer");
+      } else {
+        setTrackResults((r) => ({ ...r, [order.id]: data }));
+      }
+    } catch (err) {
+      setTrackResults((r) => ({
+        ...r,
+        [order.id]: { error: err.response?.data?.error || "Failed to fetch tracking status" },
+      }));
+    }
+    setTrackingId(null);
+  };
+
+  const startEditOrder = (order) => {
+    setEditingOrder(order.id);
+    setOrderEditForm({
+      tracking_id: order.tracking_id || "",
+      next_due_date: order.next_due_date ? order.next_due_date.split("T")[0] : "",
+    });
+  };
+
+  const saveOrderEdit = async (orderId) => {
+    setSavingOrder(true);
+    try {
+      await api.put(`/customers/${id}/orders/${orderId}`, {
+        tracking_id: orderEditForm.tracking_id,
+        next_due_date: orderEditForm.next_due_date || null,
+      });
+      setEditingOrder(null);
+      load();
+    } catch {
+      // no-op — form stays open so the user can retry
+    }
+    setSavingOrder(false);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -58,6 +110,7 @@ export default function CustomerDetailPage() {
       const { data } = await api.get(`/customers/${id}`);
       setCustomer(data);
       setPayments(data.payments || []);
+      setOrders(data.orders || []);
       setEditForm({
         name: data.name,
         phone: data.phone || "",
@@ -287,6 +340,13 @@ export default function CustomerDetailPage() {
                           ✉ {customer.email}
                         </span>
                       )}
+                      {customer.assigned_to_name && (
+                        <span
+                          style={{ fontSize: 12, color: "var(--text-muted)" }}
+                        >
+                          👤 {customer.assigned_to_name}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <button
@@ -327,6 +387,18 @@ export default function CustomerDetailPage() {
                       .replace("https://", "")
                       .substring(0, 50)}
                   </a>
+                )}
+                {customer.address && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: "var(--text-secondary)",
+                      marginBottom: 12,
+                    }}
+                  >
+                    📍 {customer.address}
+                    {customer.pincode ? ` — ${customer.pincode}` : ""}
+                  </div>
                 )}
                 {customer.notes && (
                   <div
@@ -785,6 +857,208 @@ export default function CustomerDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Order History */}
+          {orders.length > 0 && (
+            <div
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                padding: "24px",
+                marginTop: 20,
+              }}
+            >
+              <h3
+                style={{
+                  fontFamily: "var(--font-main)",
+                  fontSize: 15,
+                  fontWeight: 700,
+                  color: "var(--text-primary)",
+                  marginBottom: 16,
+                }}
+              >
+                📦 Orders
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {orders.map((o) => (
+                  <div
+                    key={o.id}
+                    style={{
+                      background: "var(--bg-surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 10,
+                      padding: "14px 16px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                      <div>
+                        <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>
+                          {formatCurrency(o.amount)} — {fmtDate(o.created_at)}
+                        </div>
+                        {(o.address || o.pincode) && (
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                            📍 {o.address} {o.pincode ? `— ${o.pincode}` : ""}
+                          </div>
+                        )}
+                        {o.next_due_date && (
+                          <div style={{ fontSize: 11, color: "var(--warn)", marginTop: 2 }}>
+                            🔁 Next due: {fmtDate(o.next_due_date)}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        {deliveryEnabled && o.tracking_id && (
+                          <button
+                            onClick={() => viewTrack(o)}
+                            disabled={trackingId === o.id}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: 7,
+                              background: "transparent",
+                              border: "1px solid var(--teal)",
+                              color: "var(--teal-light)",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: trackingId === o.id ? "not-allowed" : "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {trackingId === o.id ? "Checking…" : "🚚 View Track"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => (editingOrder === o.id ? setEditingOrder(null) : startEditOrder(o))}
+                          style={{
+                            padding: "6px 12px",
+                            borderRadius: 7,
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            color: "var(--text-secondary)",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {editingOrder === o.id ? "Cancel" : o.tracking_id ? "✏️ Edit Tracking" : "✏️ Add AWB / Tracking"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {editingOrder === o.id && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          alignItems: "flex-end",
+                          background: "var(--bg-card)",
+                          border: "1px solid var(--border)",
+                          borderRadius: 8,
+                          padding: 10,
+                          marginBottom: 8,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 3 }}>AWB / Tracking No.</div>
+                          <input
+                            value={orderEditForm.tracking_id}
+                            onChange={(e) => setOrderEditForm((f) => ({ ...f, tracking_id: e.target.value }))}
+                            placeholder="e.g. 34567890123"
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "1px solid var(--border)",
+                              background: "var(--bg-surface)",
+                              color: "var(--text-primary)",
+                              fontSize: 12,
+                              width: 180,
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 3 }}>Next Due Date</div>
+                          <input
+                            type="date"
+                            value={orderEditForm.next_due_date}
+                            onChange={(e) => setOrderEditForm((f) => ({ ...f, next_due_date: e.target.value }))}
+                            style={{
+                              padding: "6px 10px",
+                              borderRadius: 6,
+                              border: "1px solid var(--border)",
+                              background: "var(--bg-surface)",
+                              color: "var(--text-primary)",
+                              fontSize: 12,
+                            }}
+                          />
+                        </div>
+                        <button
+                          onClick={() => saveOrderEdit(o.id)}
+                          disabled={savingOrder}
+                          style={{
+                            padding: "7px 14px",
+                            borderRadius: 6,
+                            border: "none",
+                            background: "var(--teal)",
+                            color: "#fff",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: savingOrder ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          {savingOrder ? "Saving…" : "Save"}
+                        </button>
+                      </div>
+                    )}
+
+                    {o.items?.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+                        {o.items.map((it) => (
+                          <span
+                            key={it.id}
+                            style={{
+                              fontSize: 11,
+                              background: "var(--bg-card)",
+                              border: "1px solid var(--border)",
+                              borderRadius: 6,
+                              padding: "3px 9px",
+                              color: "var(--text-secondary)",
+                            }}
+                          >
+                            {it.name} × {it.quantity}
+                            {parseFloat(it.price) > 0 ? ` (${formatCurrency(it.price)})` : ""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {o.notes && (
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic" }}>{o.notes}</div>
+                    )}
+
+                    {trackResults[o.id] && (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: "8px 12px",
+                          background: trackResults[o.id].error ? "var(--danger-dim)" : "var(--teal-dim)",
+                          border: `1px solid ${trackResults[o.id].error ? "var(--danger)" : "var(--teal)"}`,
+                          borderRadius: 8,
+                          fontSize: 12,
+                          color: trackResults[o.id].error ? "var(--danger)" : "var(--teal-light)",
+                        }}
+                      >
+                        {trackResults[o.id].error
+                          ? `⚠ ${trackResults[o.id].error}`
+                          : `Status: ${trackResults[o.id].status}${trackResults[o.id].location ? ` — ${trackResults[o.id].location}` : ""}${trackResults[o.id].updated_at ? ` (${trackResults[o.id].updated_at})` : ""}`}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* RIGHT — Fee Summary */}

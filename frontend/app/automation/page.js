@@ -110,10 +110,15 @@ function syncOneSheet(sheetName, columnMap) {
 
   var rows = sheet.getRange(lastRow + 1, 1, totalRows - lastRow, lastCol).getValues();
   var highestSynced = lastRow;
+  var sawFailure = false; // once true, stop advancing the pointer — a row that
+  // failed (bad URL, server hiccup) must not get skipped just because a LATER
+  // row in the same run happened to succeed. Everything from the failure
+  // onward gets retried on the next run instead.
 
   var tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
 
   rows.forEach(function (values, i) {
+    if (sawFailure) return; // leave remaining rows untouched for next run
     var rowNum = lastRow + 1 + i;
     var get = function (key) {
       var header = columnMap[key];
@@ -152,7 +157,14 @@ function syncOneSheet(sheetName, columnMap) {
 
     // Only mark this row as synced if the CRM actually accepted it, so a
     // failed request (bad URL, server down) gets retried on the next run.
-    if (resp.getResponseCode() < 300) highestSynced = rowNum;
+    // Stop advancing past a failure entirely (see sawFailure above) — the
+    // backend dedups by phone/name/email so safely re-sending already-synced
+    // rows on the next run is harmless.
+    if (resp.getResponseCode() < 300) {
+      highestSynced = rowNum;
+    } else {
+      sawFailure = true;
+    }
   });
 
   props.setProperty(propKey, String(highestSynced));
@@ -187,6 +199,9 @@ export default function AutomationPage() {
     wa_from: "",
   });
   const [triggers, setTriggers] = useState({});
+  const [deliveryProviders, setDeliveryProviders] = useState([]);
+  const [deliveryConfig, setDeliveryConfig] = useState({ provider: "", enabled: false, credentials: {} });
+  const [savingDelivery, setSavingDelivery] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingChan, setSavingChan] = useState(null);
   const [savingTrig, setSavingTrig] = useState(null);
@@ -217,13 +232,17 @@ export default function AutomationPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [cr, tr, wh] = await Promise.all([
+      const [cr, tr, wh, dp, dc] = await Promise.all([
         api.get("/automation/credentials"),
         api.get("/automation/triggers"),
         api.get("/automation/webhook-urls").catch(() => ({ data: null })),
+        api.get("/delivery/providers").catch(() => ({ data: [] })),
+        api.get("/delivery/credentials").catch(() => ({ data: { provider: "", enabled: false, credentials: {} } })),
       ]);
       setCreds((c) => ({ ...c, ...cr.data }));
       setWebhooks(wh.data);
+      setDeliveryProviders(dp.data);
+      setDeliveryConfig(dc.data);
       const map = {};
       tr.data.forEach((t) => {
         const def = TRIGGER_DEFS.find((d) => d.id === t.trigger_id);
@@ -257,6 +276,20 @@ export default function AutomationPage() {
       showToast("Save failed", "error");
     }
     setSavingChan(null);
+  };
+
+  const saveDelivery = async () => {
+    setSavingDelivery(true);
+    try {
+      const { data } = await api.put("/delivery/credentials", deliveryConfig);
+      showToast("Delivery tracking settings saved!");
+      // Re-fetch so masked secret fields reflect what's actually stored.
+      const dc = await api.get("/delivery/credentials").catch(() => null);
+      if (dc) setDeliveryConfig(dc.data);
+    } catch {
+      showToast("Save failed", "error");
+    }
+    setSavingDelivery(false);
   };
 
   const saveTrigger = async (id) => {
@@ -607,6 +640,111 @@ export default function AutomationPage() {
               </div>
             );
           })}
+
+          {/* Delivery Tracking */}
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              overflow: "hidden",
+              borderLeft: deliveryConfig.enabled ? "3px solid var(--teal)" : "3px solid var(--border)",
+            }}
+          >
+            <div
+              style={{
+                padding: "14px 20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                borderBottom: "1px solid var(--border)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 18 }}>📦</span>
+                <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                  Delivery Tracking
+                </span>
+                {deliveryConfig.enabled && (
+                  <span style={{ fontSize: 10, fontWeight: 700, background: "rgba(82,184,138,0.12)", color: "var(--success)", borderRadius: 20, padding: "2px 8px" }}>
+                    Active
+                  </span>
+                )}
+              </div>
+              <Toggle
+                on={deliveryConfig.enabled}
+                onChange={() => setDeliveryConfig((c) => ({ ...c, enabled: !c.enabled }))}
+              />
+            </div>
+            <div style={{ padding: "18px 20px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", alignItems: "center", gap: 16, marginBottom: 14 }}>
+                <label style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "var(--font-main)", fontWeight: 500 }}>
+                  Courier / Partner
+                </label>
+                <select
+                  value={deliveryConfig.provider}
+                  onChange={(e) =>
+                    setDeliveryConfig((c) => ({ ...c, provider: e.target.value, credentials: {} }))
+                  }
+                  style={inp}
+                >
+                  <option value="">Select a delivery partner…</option>
+                  {deliveryProviders.map((p) => (
+                    <option key={p.id} value={p.id}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {deliveryProviders
+                .find((p) => p.id === deliveryConfig.provider)
+                ?.fields.map((field) => (
+                  <div key={field.key} style={{ display: "grid", gridTemplateColumns: "160px 1fr", alignItems: "center", gap: 16, marginBottom: 14 }}>
+                    <label style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "var(--font-main)", fontWeight: 500 }}>
+                      {field.label}
+                    </label>
+                    <input
+                      type={field.type || "text"}
+                      value={deliveryConfig.credentials?.[field.key] || ""}
+                      onChange={(e) =>
+                        setDeliveryConfig((c) => ({
+                          ...c,
+                          credentials: { ...c.credentials, [field.key]: e.target.value },
+                        }))
+                      }
+                      placeholder={field.label}
+                      style={inp}
+                    />
+                  </div>
+                ))}
+
+              {!deliveryConfig.provider && (
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
+                  Pick a delivery partner above to see the fields it needs. Each tenant connects their own
+                  account here — this is used by the &quot;View Track&quot; button on customer orders.
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  onClick={saveDelivery}
+                  disabled={savingDelivery}
+                  style={{
+                    padding: "8px 20px",
+                    borderRadius: 8,
+                    background: savingDelivery ? "var(--bg-hover)" : "var(--teal)",
+                    border: "none",
+                    color: "#fff",
+                    fontFamily: "var(--font-main)",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: savingDelivery ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {savingDelivery ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
 
           {/* Install notice */}
           <div

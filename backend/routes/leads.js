@@ -2,7 +2,9 @@ const express = require("express");
 const { pool } = require("../db");
 const { auth, requireSubscription } = require("../middleware/auth");
 const { hasPermission, isOwner } = require("../utils/permissions");
-const { phoneKey, findDuplicateLeadByPhone } = require("../utils/lead-dedup");
+const { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
+const { getOrCreateCustomerFromLead } = require("../utils/customer-conversion");
+const { savePendingLead } = require("../utils/pending-leads");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -16,56 +18,6 @@ const visibilityClause = (req, paramIndex) => {
   if (isOwner(req) || hasPermission(req, "view_all_leads")) return { clause: "", params: [] };
   return { clause: ` AND assigned_to=$${paramIndex}`, params: [req.user.id] };
 };
-
-// When a lead's stage becomes "Converted", mirror it into Customers (once)
-// and fire the lead_converted automation. Shared by the single-lead update
-// and bulk stage-change routes so both behave the same way.
-async function convertLeadToCustomer(tenantId, lead) {
-  const existingCustomer = await pool.query(
-    "SELECT id FROM customers WHERE lead_id=$1",
-    [lead.id],
-  );
-  if (existingCustomer.rows.length === 0) {
-    const colCheck = await pool.query(
-      `SELECT column_name FROM information_schema.columns WHERE table_name='customers'`,
-    );
-    const cols = colCheck.rows.map((r) => r.column_name);
-
-    const fields = ["user_id", "lead_id", "name"];
-    const values = [tenantId, lead.id, lead.name];
-
-    if (cols.includes("phone")) {
-      fields.push("phone");
-      values.push(lead.phone || "");
-    }
-    if (cols.includes("email")) {
-      fields.push("email");
-      values.push(lead.email || "");
-    }
-    if (cols.includes("platform")) {
-      fields.push("platform");
-      values.push(lead.platform || "");
-    }
-    if (cols.includes("platform_link")) {
-      fields.push("platform_link");
-      values.push(lead.platform_link || "");
-    }
-    fields.push("total_fee", "amount_paid");
-    values.push(0, 0);
-
-    const placeholders = values.map((_, i) => `$${i + 1}`).join(",");
-    await pool.query(
-      `INSERT INTO customers (${fields.join(",")}) VALUES (${placeholders})`,
-      values,
-    );
-  }
-
-  fireTrigger("lead_converted", tenantId, {
-    name: lead.name,
-    phone: lead.phone,
-    email: lead.email,
-  }).catch(() => {});
-}
 
 // GET all leads
 router.get("/", auth, async (req, res) => {
@@ -234,16 +186,31 @@ router.post("/bulk", auth, async (req, res) => {
     existing.rows.map((r) => r.digits.slice(-10)).filter(Boolean),
   );
 
-  let success = 0, failed = 0, duplicates = 0;
+  let success = 0, failed = 0, duplicates = 0, pending = 0;
   const duplicateEntries = [];
   for (const lead of leads) {
     if (!lead.name?.trim()) { failed++; continue; }
 
-    const key = phoneKey(lead.phone);
+    // Rows with no usable phone number (blank, or junk like "p:") don't go
+    // into Leads — they go to Unverified Leads for manual review instead.
+    const rawPhone = lead.phone;
+    if (!isValidPhone(rawPhone)) {
+      const added = await savePendingLead(req.tenantId, {
+        name: lead.name.trim(),
+        email: lead.email || "",
+        platform: lead.platform || "Other",
+        notes: lead.notes || "Auto-captured from bulk upload (no valid phone)",
+      });
+      if (added) pending++; else duplicates++;
+      continue;
+    }
+    const phone = cleanPhoneValue(rawPhone);
+
+    const key = phoneKey(phone);
     if (key && seenPhones.has(key)) {
       duplicates++;
       if (duplicateEntries.length < 20) {
-        duplicateEntries.push({ name: lead.name.trim(), phone: lead.phone });
+        duplicateEntries.push({ name: lead.name.trim(), phone });
       }
       continue;
     }
@@ -255,7 +222,7 @@ router.post("/bulk", auth, async (req, res) => {
         [
           req.tenantId,
           lead.name.trim(),
-          lead.phone || "",
+          phone,
           lead.email || "",
           lead.platform || "Other",
           lead.platform_link || "",
@@ -269,7 +236,7 @@ router.post("/bulk", auth, async (req, res) => {
       if (key) seenPhones.add(key);
     } catch { failed++; }
   }
-  res.json({ success, failed, duplicates, duplicateEntries });
+  res.json({ success, failed, duplicates, pending, duplicateEntries });
 });
 
 // PUT bulk assign leads to an employee
@@ -320,7 +287,7 @@ router.put("/bulk-stage", auth, async (req, res) => {
     );
 
     for (const lead of toConvert) {
-      await convertLeadToCustomer(req.tenantId, lead);
+      await getOrCreateCustomerFromLead(req.tenantId, lead);
     }
 
     res.json({ updated: result.rowCount });
@@ -454,7 +421,7 @@ router.put("/:id", auth, async (req, res) => {
 
     // Auto-create customer when converted (only once)
     if (stage === "Converted" && oldStage !== "Converted") {
-      await convertLeadToCustomer(req.tenantId, updated);
+      await getOrCreateCustomerFromLead(req.tenantId, updated);
     }
 
     res.json(updated);
@@ -532,6 +499,83 @@ router.post("/:id/messages", auth, async (req, res) => {
     );
 
     res.json(result.rows[0]);
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST fulfil an order for a lead — creates/reuses the matching Customer
+// record (same as a stage-based conversion) and logs the order + items
+// against it. Used by the "Fulfill Order" action shown once a lead reaches
+// the admin-configured order-fulfillment stage.
+router.post("/:id/fulfill-order", auth, async (req, res) => {
+  if (!isOwner(req) && !hasPermission(req, "manage_customers")) {
+    return res.status(403).json({ error: "Permission denied" });
+  }
+  const {
+    name,
+    email,
+    address,
+    pincode,
+    amount,
+    next_due_date,
+    tracking_id,
+    provider,
+    notes,
+    items,
+  } = req.body;
+
+  try {
+    const leadRes = await pool.query(
+      "SELECT * FROM leads WHERE id=$1 AND user_id=$2",
+      [req.params.id, req.tenantId],
+    );
+    const lead = leadRes.rows[0];
+    if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+    const customer = await getOrCreateCustomerFromLead(req.tenantId, lead);
+
+    await pool.query(
+      `UPDATE customers SET name=COALESCE($1, name), email=COALESCE($2, email),
+       address=$3, pincode=$4, updated_at=NOW() WHERE id=$5 AND user_id=$6`,
+      [
+        name || null,
+        email || null,
+        address || "",
+        pincode || "",
+        customer.id,
+        req.tenantId,
+      ],
+    );
+
+    const orderRes = await pool.query(
+      `INSERT INTO customer_orders
+        (user_id, customer_id, address, pincode, amount, next_due_date, tracking_id, provider, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [
+        req.tenantId,
+        customer.id,
+        address || "",
+        pincode || "",
+        parseFloat(amount) || 0,
+        next_due_date || null,
+        tracking_id || "",
+        provider || "",
+        notes || "",
+      ],
+    );
+    const order = orderRes.rows[0];
+
+    const itemRows = Array.isArray(items) ? items.filter((i) => i?.name?.trim()) : [];
+    for (const item of itemRows) {
+      await pool.query(
+        "INSERT INTO order_items (order_id, name, quantity, price) VALUES ($1,$2,$3,$4)",
+        [order.id, item.name.trim(), parseInt(item.quantity) || 1, parseFloat(item.price) || 0],
+      );
+    }
+
+    res.json({ customer_id: customer.id, order_id: order.id });
   } catch (e) {
     console.error(e.message);
     res.status(500).json({ error: "Server error" });

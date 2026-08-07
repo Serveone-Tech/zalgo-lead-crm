@@ -14,6 +14,7 @@ const employeesRoutes  = require('./routes/employees');
 const stagesRoutes     = require('./routes/stages');
 const webhooksRoutes   = require('./routes/webhooks');
 const pendingLeadsRoutes = require('./routes/pending-leads');
+const deliveryRoutes   = require('./routes/delivery');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,6 +33,7 @@ app.use('/api/employees',  employeesRoutes);
 app.use('/api/stages',     stagesRoutes);
 app.use('/api/webhooks',   webhooksRoutes);
 app.use('/api/pending-leads', pendingLeadsRoutes);
+app.use('/api/delivery',   deliveryRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

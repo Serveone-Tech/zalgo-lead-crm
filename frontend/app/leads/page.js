@@ -5,6 +5,7 @@ import api from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import KanbanBoard from "../../components/KanbanBoard";
 import BulkUploadModal from "../../components/BulkUploadModal";
+import OrderFulfillmentModal from "../../components/OrderFulfillmentModal";
 import { Upload, Plus, Calendar } from "lucide-react";
 import {
   STAGE_COLORS,
@@ -67,6 +68,8 @@ function LeadsContent() {
   const [user, setUser] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [dynamicStages, setDynamicStages] = useState([]);
+  const [fulfillmentStage, setFulfillmentStage] = useState("");
+  const [fulfillLead, setFulfillLead] = useState(null);
 
   // Bulk action state
   const [selected, setSelected] = useState(new Set());
@@ -91,6 +94,10 @@ function LeadsContent() {
     api
       .get("/stages")
       .then((r) => setDynamicStages(r.data))
+      .catch(() => {});
+    api
+      .get("/settings")
+      .then((r) => setFulfillmentStage(r.data.order_fulfillment_stage || ""))
       .catch(() => {});
   }, []);
 
@@ -193,6 +200,14 @@ function LeadsContent() {
       assigned_to: assigned_to || null,
     });
     load();
+  };
+
+  const openFulfill = (lead) => setFulfillLead(lead);
+  const closeFulfill = () => setFulfillLead(null);
+  const saveFulfillment = async (form) => {
+    await api.post(`/leads/${fulfillLead.id}/fulfill-order`, form);
+    closeFulfill();
+    showToast(`✓ Order saved for "${form.name}".`);
   };
 
   // Checkbox helpers
@@ -1164,6 +1179,25 @@ function LeadsContent() {
                             >
                               Edit
                             </button>
+                            {fulfillmentStage && lead.stage === fulfillmentStage && (
+                              <button
+                                onClick={() => openFulfill(lead)}
+                                style={{
+                                  background: "transparent",
+                                  border: "1px solid var(--success)",
+                                  borderRadius: 6,
+                                  padding: "5px 10px",
+                                  color: "var(--success)",
+                                  fontSize: 11,
+                                  cursor: "pointer",
+                                  fontFamily: "var(--font-main)",
+                                  fontWeight: 600,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                📦 Fulfill Order
+                              </button>
+                            )}
                             <button
                               onClick={() => deleteLead(lead.id)}
                               disabled={deleting === lead.id}
@@ -1237,6 +1271,13 @@ function LeadsContent() {
       )}
       {bulkOpen && (
         <BulkUploadModal onClose={() => setBulkOpen(false)} onSuccess={load} />
+      )}
+      {fulfillLead && (
+        <OrderFulfillmentModal
+          lead={fulfillLead}
+          onClose={closeFulfill}
+          onSave={saveFulfillment}
+        />
       )}
     </div>
   );

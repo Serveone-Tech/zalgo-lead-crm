@@ -44,19 +44,27 @@ router.put(
   auth,
   requirePermission("manage_settings"),
   async (req, res) => {
-    const { currency, currency_symbol, institute_name } = req.body;
+    const { currency, currency_symbol, institute_name, order_fulfillment_stage } = req.body;
     try {
+      // order_fulfillment_stage is saved from a different Settings tab —
+      // when this call doesn't include it, keep whatever was already saved
+      // instead of blanking it out.
+      const stageParam =
+        order_fulfillment_stage !== undefined ? order_fulfillment_stage : null;
       const result = await pool.query(
-        `INSERT INTO user_settings (user_id, currency, currency_symbol, institute_name, updated_at)
-       VALUES ($1,$2,$3,$4,NOW())
+        `INSERT INTO user_settings (user_id, currency, currency_symbol, institute_name, order_fulfillment_stage, updated_at)
+       VALUES ($1,$2,$3,$4,COALESCE($5,''),NOW())
        ON CONFLICT (user_id) DO UPDATE SET
-         currency=$2, currency_symbol=$3, institute_name=$4, updated_at=NOW()
+         currency=$2, currency_symbol=$3, institute_name=$4,
+         order_fulfillment_stage=COALESCE($5, user_settings.order_fulfillment_stage),
+         updated_at=NOW()
        RETURNING *`,
         [
           req.tenantId,
           currency || "INR",
           currency_symbol || "₹",
           institute_name || "",
+          stageParam,
         ],
       );
       res.json(result.rows[0]);

@@ -316,6 +316,7 @@ export default function CustomersPage() {
                     "Name",
                     "Phone",
                     "Email",
+                    "Assigned To",
                     "Total Fee",
                     "Collected",
                     "Balance",
@@ -413,6 +414,17 @@ export default function CustomersPage() {
                       >
                         {c.email || (
                           <span style={{ color: "var(--text-muted)" }}>—</span>
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px 14px",
+                          fontSize: 12,
+                          color: "var(--text-secondary)",
+                        }}
+                      >
+                        {c.assigned_to_name || (
+                          <span style={{ color: "var(--text-muted)" }}>Unassigned</span>
                         )}
                       </td>
                       <td

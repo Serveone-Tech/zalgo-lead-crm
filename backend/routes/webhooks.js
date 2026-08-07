@@ -1,6 +1,7 @@
 const express = require("express");
 const { pool } = require("../db");
 const { findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
+const { savePendingLead } = require("../utils/pending-leads");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -32,30 +33,6 @@ async function withinLeadLimit(tenantId) {
   if (maxLeads <= 0) return true; // unlimited or no plan row found — don't block
   const count = await pool.query("SELECT COUNT(*) FROM leads WHERE user_id=$1", [tenantId]);
   return parseInt(count.rows[0].count) < maxLeads;
-}
-
-// Rows with no usable phone number go here instead of the main Leads table,
-// so a webhook resync (or genuinely incomplete form submissions) don't
-// clutter Leads with uncontactable entries. A cheap name/email dedup stops
-// the same phone-less row from piling up every time a sheet gets re-scanned.
-async function savePendingLead(tenantId, { name, email, platform, notes }) {
-  const cleanName = String(name || "").trim();
-  const cleanEmail = String(email || "").trim();
-  if (!cleanName && !cleanEmail) return false;
-
-  const dup = await pool.query(
-    `SELECT id FROM pending_leads WHERE user_id=$1
-     AND (LOWER(name)=LOWER($2) OR ($3 != '' AND LOWER(email)=LOWER($3)))
-     LIMIT 1`,
-    [tenantId, cleanName, cleanEmail],
-  );
-  if (dup.rows.length > 0) return false;
-
-  await pool.query(
-    `INSERT INTO pending_leads (user_id, name, email, platform, notes) VALUES ($1,$2,$3,$4,$5)`,
-    [tenantId, cleanName || cleanEmail, cleanEmail, platform || "", notes || ""],
-  );
-  return true;
 }
 
 // Shared by any inbound-message source (WhatsApp today, maybe Instagram/SMS

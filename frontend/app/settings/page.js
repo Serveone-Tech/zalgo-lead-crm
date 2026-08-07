@@ -22,7 +22,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const [activeTab, setActiveTab]      = useState('general');
   const [currencies, setCurrencies]    = useState([]);
-  const [settings, setSettings]        = useState({ currency: 'INR', currency_symbol: '₹', institute_name: '' });
+  const [settings, setSettings]        = useState({ currency: 'INR', currency_symbol: '₹', institute_name: '', order_fulfillment_stage: '' });
   const [loading, setLoading]          = useState(true);
   const [saving, setSaving]            = useState(false);
   const [saved, setSaved]              = useState(false);
@@ -65,6 +65,7 @@ export default function SettingsPage() {
         currency: setRes.data.currency || 'INR',
         currency_symbol: setRes.data.currency_symbol || '₹',
         institute_name: setRes.data.institute_name || '',
+        order_fulfillment_stage: setRes.data.order_fulfillment_stage || '',
       });
       localStorage.setItem('crm_settings', JSON.stringify(setRes.data));
     } catch {}
@@ -225,6 +226,7 @@ export default function SettingsPage() {
 
       {/* ── TAB: Pipeline ────────────────────────────────────────── */}
       {activeTab === 'pipeline' && (
+        <>
         <Card title="Pipeline Stages">
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
             Customise the stages in your lead pipeline. Click pencil to edit name or colour, trash to delete.
@@ -332,6 +334,28 @@ export default function SettingsPage() {
             </div>
           )}
         </Card>
+
+        <Card title="Order Fulfillment">
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+            When a lead reaches this stage, an &quot;Fulfill Order&quot; button appears on it in the Leads table —
+            clicking it opens a form to record delivery details, items given, and (optionally) a courier tracking number.
+          </p>
+          <label style={lbl}>Trigger Stage</label>
+          <select
+            value={settings.order_fulfillment_stage || ''}
+            onChange={e => setSettings(s => ({ ...s, order_fulfillment_stage: e.target.value }))}
+            style={inp}
+          >
+            <option value="">— Disabled —</option>
+            {stages.map(s => (
+              <option key={s.id} value={s.name}>{s.name}</option>
+            ))}
+          </select>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+            <SaveBtn saving={saving} saved={saved} onClick={save} />
+          </div>
+        </Card>
+        </>
       )}
 
       {/* ── TAB: Currency ────────────────────────────────────────── */}

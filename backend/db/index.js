@@ -66,6 +66,22 @@ const initDB = async () => {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
 
+    const alterCustomers = [
+      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL`,
+      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT DEFAULT ''`,
+      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS pincode VARCHAR(10) DEFAULT ''`,
+    ];
+    for (const q of alterCustomers) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
+
+    const alterUserSettings = [
+      `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS order_fulfillment_stage VARCHAR(50) DEFAULT ''`,
+    ];
+    for (const q of alterUserSettings) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
+
     // ── STEP 3: Rest of the tables ───────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS organisations (
@@ -190,6 +206,42 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- One fulfilment/delivery event for a customer: items given, address,
+      -- amount, and (optionally) a courier tracking number.
+      CREATE TABLE IF NOT EXISTS customer_orders (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+        address TEXT DEFAULT '',
+        pincode VARCHAR(10) DEFAULT '',
+        amount DECIMAL(12,2) DEFAULT 0,
+        next_due_date DATE,
+        tracking_id VARCHAR(100) DEFAULT '',
+        provider VARCHAR(50) DEFAULT '',
+        notes TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS order_items (
+        id SERIAL PRIMARY KEY,
+        order_id INTEGER REFERENCES customer_orders(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        quantity INTEGER DEFAULT 1,
+        price DECIMAL(12,2) DEFAULT 0
+      );
+
+      -- Per-tenant delivery-tracking provider config (Delhivery, Shiprocket,
+      -- a generic link-out, etc). 'credentials' shape depends on 'provider'
+      -- so new providers can be added later without a schema change.
+      CREATE TABLE IF NOT EXISTS delivery_credentials (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        provider VARCHAR(50) DEFAULT '',
+        enabled BOOLEAN DEFAULT false,
+        credentials JSONB DEFAULT '{}',
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS automation_credentials (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
@@ -273,6 +325,10 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_automation_triggers_user_id ON automation_triggers(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_users_parent_id ON users(parent_id)`,
       `CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_orders_customer_id ON customer_orders(customer_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customer_orders_user_id ON customer_orders(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_customers_assigned_to ON customers(assigned_to)`,
     ];
     for (const q of indexes) {
       await client.query(q).catch((e) => console.log("index skip:", e.message));
