@@ -23,11 +23,14 @@ async function trackDelhivery(credentials, trackingId) {
 
   // Delhivery's verbose response includes every scan event (picked up,
   // in-transit, out for delivery, RTO, etc), so the frontend can render a
-  // full history timeline instead of just the latest hop.
+  // full history timeline instead of just the latest hop. `Instructions`
+  // carries the human-readable remark (e.g. "Out for delivery", "Consignee
+  // Unavailable", "Maximum attempts reached") — `Scan` is usually just a
+  // short internal code (e.g. "UD", "PP"), so prefer Instructions first.
   const history = sortHistoryDesc(
     (shipment.Scans || [])
       .map((s) => ({
-        status: s.ScanDetail?.Scan || s.ScanDetail?.Instructions || "",
+        status: s.ScanDetail?.Instructions || s.ScanDetail?.Scan || "",
         location: s.ScanDetail?.ScannedLocation || "",
         date: s.ScanDetail?.ScanDateTime || s.ScanDetail?.StatusDateTime || "",
       }))

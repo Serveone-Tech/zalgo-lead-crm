@@ -803,8 +803,22 @@ export default function CustomerDetailPage() {
   );
 }
 
+function fmtScanDateTime(d) {
+  if (!d) return "";
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return d; // courier sent something we can't parse — show it raw rather than hide it
+  return (
+    dt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) +
+    ", " +
+    dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+  );
+}
+
 function TrackingHistoryModal({ order, result, onClose }) {
-  const history = result?.history || [];
+  // Backend sends newest-first (for the compact inline summary); the courier's
+  // own tracking panel reads top-to-bottom oldest→newest, so flip it here —
+  // this is display-only, doesn't change what the backend returns.
+  const history = [...(result?.history || [])].reverse();
   return (
     <div
       onClick={(e) => {
@@ -875,20 +889,29 @@ function TrackingHistoryModal({ order, result, onClose }) {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column" }}>
-            {history.map((h, idx) => (
+            {history.map((h, idx) => {
+              const isLatest = idx === history.length - 1;
+              return (
               <div key={idx} style={{ display: "flex", gap: 0 }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginRight: 14 }}>
                   <div
                     style={{
-                      width: 10,
-                      height: 10,
+                      width: isLatest ? 20 : 10,
+                      height: isLatest ? 20 : 10,
+                      marginLeft: isLatest ? -5 : 0,
                       borderRadius: "50%",
-                      background: idx === 0 ? "var(--teal)" : "var(--border)",
+                      background: isLatest ? "var(--teal)" : "var(--border)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 11,
                       flexShrink: 0,
                       marginTop: 4,
-                      border: idx === 0 ? "2px solid var(--teal-light)" : "none",
+                      border: isLatest ? "2px solid var(--teal-light)" : "none",
                     }}
-                  />
+                  >
+                    {isLatest ? "🚚" : ""}
+                  </div>
                   {idx < history.length - 1 && (
                     <div style={{ width: 2, flex: 1, background: "var(--border)", minHeight: 24 }} />
                   )}
@@ -897,26 +920,21 @@ function TrackingHistoryModal({ order, result, onClose }) {
                   <div
                     style={{
                       fontFamily: "var(--font-main)",
-                      fontWeight: idx === 0 ? 700 : 600,
+                      fontWeight: isLatest ? 700 : 600,
                       fontSize: 13,
-                      color: idx === 0 ? "var(--teal-light)" : "var(--text-primary)",
+                      color: isLatest ? "var(--teal-light)" : "var(--text-primary)",
                     }}
                   >
-                    {h.status || "Update"}
+                    {fmtScanDateTime(h.date) || "—"}
                   </div>
-                  {h.location && (
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
-                      📍 {h.location}
-                    </div>
-                  )}
-                  {h.date && (
-                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      🕒 {h.date}
-                    </div>
-                  )}
+                  <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
+                    {h.status || "Update"}
+                    {h.location ? ` at ${h.location}` : ""}
+                  </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
