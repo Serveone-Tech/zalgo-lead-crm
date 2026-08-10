@@ -70,6 +70,7 @@ const initDB = async () => {
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL`,
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT DEFAULT ''`,
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS pincode VARCHAR(10) DEFAULT ''`,
+      `ALTER TABLE customers ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(20) DEFAULT ''`,
     ];
     for (const q of alterCustomers) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -79,6 +80,14 @@ const initDB = async () => {
       `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS order_fulfillment_stage VARCHAR(50) DEFAULT ''`,
     ];
     for (const q of alterUserSettings) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
+
+    const alterCustomerOrders = [
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_type VARCHAR(20) DEFAULT 'prepaid'`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS advance_paid DECIMAL(12,2) DEFAULT 0`,
+    ];
+    for (const q of alterCustomerOrders) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
 
@@ -215,6 +224,8 @@ const initDB = async () => {
         address TEXT DEFAULT '',
         pincode VARCHAR(10) DEFAULT '',
         amount DECIMAL(12,2) DEFAULT 0,
+        payment_type VARCHAR(20) DEFAULT 'prepaid',
+        advance_paid DECIMAL(12,2) DEFAULT 0,
         next_due_date DATE,
         tracking_id VARCHAR(100) DEFAULT '',
         provider VARCHAR(50) DEFAULT '',

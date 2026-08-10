@@ -2,8 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import api, { formatCurrency } from "../../../lib/api";
-
-const MODES = ["Cash", "UPI", "Bank Transfer", "Cheque", "Card", "Online"];
+import OrderFulfillmentModal from "../../../components/OrderFulfillmentModal";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -13,43 +12,21 @@ function fmtDate(d) {
     year: "numeric",
   });
 }
-function today() {
-  return new Date().toISOString().split("T")[0];
-}
-function isOverdue(d) {
-  return d && (d.split ? d.split("T")[0] : d) < today();
-}
-function isToday(d) {
-  return d && (d.split ? d.split("T")[0] : d) === today();
-}
 
 export default function CustomerDetailPage() {
   const router = useRouter();
   const { id } = useParams();
   const [customer, setCustomer] = useState(null);
-  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
-  const [showPay, setShowPay] = useState(false);
-  const [payForm, setPayForm] = useState({
-    amount: "",
-    payment_date: today(),
-    due_date: "",
-    payment_mode: "Cash",
-    status: "Paid",
-    notes: "",
-  });
   const [saving, setSaving] = useState(false);
-  const [markingPaid, setMark] = useState(null);
-  const [delPay, setDelPay] = useState(null);
   const [orders, setOrders] = useState([]);
   const [deliveryEnabled, setDeliveryEnabled] = useState(false);
   const [trackResults, setTrackResults] = useState({});
   const [trackingId, setTrackingId] = useState(null);
-  const [editingOrder, setEditingOrder] = useState(null);
-  const [orderEditForm, setOrderEditForm] = useState({ tracking_id: "", next_due_date: "" });
-  const [savingOrder, setSavingOrder] = useState(false);
+  const [editOrderModal, setEditOrderModal] = useState(null);
+  const [historyModalOrder, setHistoryModalOrder] = useState(null);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -81,27 +58,10 @@ export default function CustomerDetailPage() {
     setTrackingId(null);
   };
 
-  const startEditOrder = (order) => {
-    setEditingOrder(order.id);
-    setOrderEditForm({
-      tracking_id: order.tracking_id || "",
-      next_due_date: order.next_due_date ? order.next_due_date.split("T")[0] : "",
-    });
-  };
-
-  const saveOrderEdit = async (orderId) => {
-    setSavingOrder(true);
-    try {
-      await api.put(`/customers/${id}/orders/${orderId}`, {
-        tracking_id: orderEditForm.tracking_id,
-        next_due_date: orderEditForm.next_due_date || null,
-      });
-      setEditingOrder(null);
-      load();
-    } catch {
-      // no-op — form stays open so the user can retry
-    }
-    setSavingOrder(false);
+  const saveOrderEdit = async (form) => {
+    await api.put(`/customers/${id}/orders/${editOrderModal.id}`, form);
+    setEditOrderModal(null);
+    load();
   };
 
   const load = async () => {
@@ -109,7 +69,6 @@ export default function CustomerDetailPage() {
     try {
       const { data } = await api.get(`/customers/${id}`);
       setCustomer(data);
-      setPayments(data.payments || []);
       setOrders(data.orders || []);
       setEditForm({
         name: data.name,
@@ -137,42 +96,6 @@ export default function CustomerDetailPage() {
     load();
   };
 
-  const addPayment = async (e) => {
-    e.preventDefault();
-    setSaving(true);
-    await api.post(`/customers/${id}/payments`, payForm);
-    setSaving(false);
-    setShowPay(false);
-    setPayForm({
-      amount: "",
-      payment_date: today(),
-      due_date: "",
-      payment_mode: "Cash",
-      status: "Paid",
-      notes: "",
-    });
-    load();
-  };
-
-  const markPaid = async (p) => {
-    setMark(p.id);
-    await api.put(`/customers/${id}/payments/${p.id}`, {
-      ...p,
-      status: "Paid",
-      payment_date: today(),
-    });
-    setMark(null);
-    load();
-  };
-
-  const delPayment = async (pid) => {
-    if (!confirm("Delete this payment record?")) return;
-    setDelPay(pid);
-    await api.delete(`/customers/${id}/payments/${pid}`);
-    setDelPay(null);
-    load();
-  };
-
   if (loading)
     return (
       <div
@@ -188,20 +111,6 @@ export default function CustomerDetailPage() {
       </div>
     );
   if (!customer) return null;
-
-  const totalFee = parseFloat(customer.total_fee || 0);
-  const paid = parseFloat(customer.amount_paid || 0);
-  const balance = totalFee - paid;
-  const progress = totalFee > 0 ? Math.min(100, (paid / totalFee) * 100) : 0;
-  const totalDue = payments
-    .filter((p) => p.status === "Due")
-    .reduce((s, p) => s + parseFloat(p.amount || 0), 0);
-
-  const sorted = [...payments].sort((a, b) => {
-    if (a.status === "Due" && b.status !== "Due") return -1;
-    if (a.status !== "Due" && b.status === "Due") return 1;
-    return new Date(b.payment_date) - new Date(a.payment_date);
-  });
 
   return (
     <div style={{ padding: "28px 32px", maxWidth: 1100 }}>
@@ -598,266 +507,6 @@ export default function CustomerDetailPage() {
             )}
           </div>
 
-          {/* Payment Timeline */}
-          <div
-            style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: "24px",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 20,
-              }}
-            >
-              <h3
-                style={{
-                  fontFamily: "var(--font-main)",
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: "var(--text-primary)",
-                }}
-              >
-                💳 Payment History
-              </h3>
-              <button
-                onClick={() => setShowPay(true)}
-                style={{
-                  background: "var(--teal)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 7,
-                  padding: "7px 14px",
-                  fontSize: 12,
-                  fontFamily: "var(--font-main)",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                + Add Payment
-              </button>
-            </div>
-
-            {sorted.length === 0 ? (
-              <div
-                style={{
-                  textAlign: "center",
-                  padding: "32px 0",
-                  color: "var(--text-muted)",
-                }}
-              >
-                <div style={{ fontSize: 28, marginBottom: 8 }}>💳</div>
-                <div style={{ fontSize: 13 }}>
-                  No payment records yet. Click "+ Add Payment" to add one.
-                </div>
-              </div>
-            ) : (
-              <div>
-                {sorted.map((p, idx) => {
-                  const isPaid = p.status === "Paid";
-                  const over =
-                    !isPaid && isOverdue(p.due_date || p.payment_date);
-                  const tod =
-                    !isPaid && !over && isToday(p.due_date || p.payment_date);
-                  const accent = isPaid
-                    ? "var(--success)"
-                    : over
-                      ? "var(--danger)"
-                      : tod
-                        ? "var(--warn)"
-                        : "var(--blue)";
-                  const accentDim = isPaid
-                    ? "rgba(82,184,138,0.1)"
-                    : over
-                      ? "var(--danger-dim)"
-                      : tod
-                        ? "var(--warn-dim)"
-                        : "var(--blue-dim)";
-                  return (
-                    <div
-                      key={p.id}
-                      style={{ display: "flex", gap: 0, position: "relative" }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          marginRight: 14,
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: 11,
-                            height: 11,
-                            borderRadius: "50%",
-                            background: accent,
-                            flexShrink: 0,
-                            marginTop: 18,
-                            zIndex: 1,
-                            border: "2px solid var(--bg-card)",
-                            boxShadow: `0 0 0 3px ${accentDim}`,
-                          }}
-                        />
-                        {idx < sorted.length - 1 && (
-                          <div
-                            style={{
-                              width: 2,
-                              flex: 1,
-                              background: "var(--border)",
-                              minHeight: 18,
-                            }}
-                          />
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          flex: 1,
-                          marginBottom: 10,
-                          padding: "12px 14px",
-                          background: over
-                            ? "rgba(224,82,82,0.05)"
-                            : "var(--bg-surface)",
-                          borderRadius: 9,
-                          border: `1px solid ${over ? "rgba(224,82,82,0.2)" : "var(--border)"}`,
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            flexWrap: "wrap",
-                            gap: 8,
-                          }}
-                        >
-                          <div>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: 8,
-                                marginBottom: 3,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontFamily: "var(--font-main)",
-                                  fontWeight: 700,
-                                  fontSize: 14,
-                                  color: "var(--text-primary)",
-                                }}
-                              >
-                                {formatCurrency(p.amount)}
-                              </span>
-                              <span
-                                style={{
-                                  background: accentDim,
-                                  color: accent,
-                                  fontSize: 10,
-                                  fontWeight: 700,
-                                  borderRadius: 20,
-                                  padding: "2px 8px",
-                                  fontFamily: "var(--font-main)",
-                                }}
-                              >
-                                {isPaid
-                                  ? "✓ Paid"
-                                  : over
-                                    ? "⚠ Overdue"
-                                    : tod
-                                      ? "● Due Today"
-                                      : "⏳ Due"}
-                              </span>
-                              {p.payment_mode && (
-                                <span
-                                  style={{
-                                    fontSize: 10,
-                                    color: "var(--text-muted)",
-                                    background: "var(--bg-card)",
-                                    borderRadius: 5,
-                                    padding: "2px 7px",
-                                  }}
-                                >
-                                  {p.payment_mode}
-                                </span>
-                              )}
-                            </div>
-                            <div
-                              style={{
-                                fontSize: 11,
-                                color: "var(--text-muted)",
-                              }}
-                            >
-                              {isPaid
-                                ? `Paid on ${fmtDate(p.payment_date)}`
-                                : `Due on ${fmtDate(p.due_date || p.payment_date)}`}
-                            </div>
-                            {p.notes && (
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: "var(--text-muted)",
-                                  marginTop: 3,
-                                  fontStyle: "italic",
-                                }}
-                              >
-                                {p.notes}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ display: "flex", gap: 6 }}>
-                            {!isPaid && (
-                              <button
-                                onClick={() => markPaid(p)}
-                                disabled={markingPaid === p.id}
-                                style={{
-                                  padding: "4px 10px",
-                                  borderRadius: 6,
-                                  background: "rgba(82,184,138,0.1)",
-                                  border: "1px solid rgba(82,184,138,0.3)",
-                                  color: "var(--success)",
-                                  fontSize: 11,
-                                  fontWeight: 600,
-                                  cursor: "pointer",
-                                }}
-                              >
-                                {markingPaid === p.id ? "…" : "Mark Paid"}
-                              </button>
-                            )}
-                            <button
-                              onClick={() => delPayment(p.id)}
-                              disabled={delPay === p.id}
-                              style={{
-                                padding: "4px 10px",
-                                borderRadius: 6,
-                                background: "transparent",
-                                border: "1px solid var(--border)",
-                                color: "var(--danger)",
-                                fontSize: 11,
-                                cursor: "pointer",
-                              }}
-                            >
-                              {delPay === p.id ? "…" : "×"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
           {/* Order History */}
           {orders.length > 0 && (
             <div
@@ -893,9 +542,34 @@ export default function CustomerDetailPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
                       <div>
-                        <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>
+                        <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 13, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 8 }}>
                           {formatCurrency(o.amount)} — {fmtDate(o.created_at)}
+                          <span
+                            style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              borderRadius: 20,
+                              padding: "2px 8px",
+                              background: o.payment_type === "cod" ? "var(--warn-dim)" : "rgba(82,184,138,0.1)",
+                              color: o.payment_type === "cod" ? "var(--warn)" : "var(--success)",
+                            }}
+                          >
+                            {o.payment_type === "cod" ? "COD" : "Prepaid"}
+                          </span>
                         </div>
+                        {o.payment_type === "cod" && (
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                            Advance {formatCurrency(o.advance_paid || 0)}
+                            {" · "}
+                            {parseFloat(o.amount || 0) - parseFloat(o.advance_paid || 0) > 0 ? (
+                              <span style={{ color: "var(--warn)", fontWeight: 600 }}>
+                                Balance {formatCurrency(parseFloat(o.amount || 0) - parseFloat(o.advance_paid || 0))} due
+                              </span>
+                            ) : (
+                              <span style={{ color: "var(--success)" }}>✓ Fully collected</span>
+                            )}
+                          </div>
+                        )}
                         {(o.address || o.pincode) && (
                           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                             📍 {o.address} {o.pincode ? `— ${o.pincode}` : ""}
@@ -928,7 +602,7 @@ export default function CustomerDetailPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => (editingOrder === o.id ? setEditingOrder(null) : startEditOrder(o))}
+                          onClick={() => setEditOrderModal(o)}
                           style={{
                             padding: "6px 12px",
                             borderRadius: 7,
@@ -941,76 +615,10 @@ export default function CustomerDetailPage() {
                             whiteSpace: "nowrap",
                           }}
                         >
-                          {editingOrder === o.id ? "Cancel" : o.tracking_id ? "✏️ Edit Tracking" : "✏️ Add AWB / Tracking"}
+                          ✏️ Edit Order
                         </button>
                       </div>
                     </div>
-
-                    {editingOrder === o.id && (
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 8,
-                          alignItems: "flex-end",
-                          background: "var(--bg-card)",
-                          border: "1px solid var(--border)",
-                          borderRadius: 8,
-                          padding: 10,
-                          marginBottom: 8,
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 3 }}>AWB / Tracking No.</div>
-                          <input
-                            value={orderEditForm.tracking_id}
-                            onChange={(e) => setOrderEditForm((f) => ({ ...f, tracking_id: e.target.value }))}
-                            placeholder="e.g. 34567890123"
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 6,
-                              border: "1px solid var(--border)",
-                              background: "var(--bg-surface)",
-                              color: "var(--text-primary)",
-                              fontSize: 12,
-                              width: 180,
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 10, color: "var(--text-muted)", marginBottom: 3 }}>Next Due Date</div>
-                          <input
-                            type="date"
-                            value={orderEditForm.next_due_date}
-                            onChange={(e) => setOrderEditForm((f) => ({ ...f, next_due_date: e.target.value }))}
-                            style={{
-                              padding: "6px 10px",
-                              borderRadius: 6,
-                              border: "1px solid var(--border)",
-                              background: "var(--bg-surface)",
-                              color: "var(--text-primary)",
-                              fontSize: 12,
-                            }}
-                          />
-                        </div>
-                        <button
-                          onClick={() => saveOrderEdit(o.id)}
-                          disabled={savingOrder}
-                          style={{
-                            padding: "7px 14px",
-                            borderRadius: 6,
-                            border: "none",
-                            background: "var(--teal)",
-                            color: "#fff",
-                            fontSize: 12,
-                            fontWeight: 600,
-                            cursor: savingOrder ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          {savingOrder ? "Saving…" : "Save"}
-                        </button>
-                      </div>
-                    )}
 
                     {o.items?.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
@@ -1049,9 +657,35 @@ export default function CustomerDetailPage() {
                           color: trackResults[o.id].error ? "var(--danger)" : "var(--teal-light)",
                         }}
                       >
-                        {trackResults[o.id].error
-                          ? `⚠ ${trackResults[o.id].error}`
-                          : `Status: ${trackResults[o.id].status}${trackResults[o.id].location ? ` — ${trackResults[o.id].location}` : ""}${trackResults[o.id].updated_at ? ` (${trackResults[o.id].updated_at})` : ""}`}
+                        {trackResults[o.id].error ? (
+                          `⚠ ${trackResults[o.id].error}`
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+                            <span>
+                              Status: {trackResults[o.id].status}
+                              {trackResults[o.id].location ? ` — ${trackResults[o.id].location}` : ""}
+                              {trackResults[o.id].updated_at ? ` (${trackResults[o.id].updated_at})` : ""}
+                            </span>
+                            {trackResults[o.id].history?.length > 0 && (
+                              <button
+                                onClick={() => setHistoryModalOrder(o)}
+                                style={{
+                                  background: "transparent",
+                                  border: "1px solid var(--teal)",
+                                  color: "var(--teal-light)",
+                                  borderRadius: 6,
+                                  padding: "3px 10px",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  cursor: "pointer",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                📋 Full History
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1061,7 +695,7 @@ export default function CustomerDetailPage() {
           )}
         </div>
 
-        {/* RIGHT — Fee Summary */}
+        {/* RIGHT — Payment Summary, derived from Orders (Prepaid/COD) */}
         <div>
           <div
             style={{
@@ -1082,363 +716,210 @@ export default function CustomerDetailPage() {
                 marginBottom: 18,
               }}
             >
-              Fee Summary
+              Payment Summary
             </h3>
 
-            {/* Progress */}
-            <div style={{ marginBottom: 18 }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginBottom: 6,
-                }}
-              >
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  Payment Progress
-                </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: "var(--success)",
-                    fontFamily: "var(--font-main)",
-                  }}
-                >
-                  {progress.toFixed(0)}%
-                </span>
+            {orders.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                No orders yet — payment info shows here once an order is fulfilled.
               </div>
-              <div
-                style={{
-                  height: 7,
-                  background: "var(--bg-surface)",
-                  borderRadius: 10,
-                  overflow: "hidden",
-                }}
-              >
+            ) : (
+              [
+                {
+                  label: "Total Order Value",
+                  value: formatCurrency(orders.reduce((s, o) => s + parseFloat(o.amount || 0), 0)),
+                  color: "var(--text-primary)",
+                  big: true,
+                },
+                {
+                  label: "Collected",
+                  value: formatCurrency(orders.reduce((s, o) => s + parseFloat(o.advance_paid || 0), 0)),
+                  color: "var(--success)",
+                },
+                {
+                  label: "COD Balance Due",
+                  value: (() => {
+                    const due = orders
+                      .filter((o) => o.payment_type === "cod")
+                      .reduce((s, o) => s + Math.max(0, parseFloat(o.amount || 0) - parseFloat(o.advance_paid || 0)), 0);
+                    return due > 0 ? formatCurrency(due) : "✓ Nothing due";
+                  })(),
+                  color: (() => {
+                    const due = orders
+                      .filter((o) => o.payment_type === "cod")
+                      .reduce((s, o) => s + Math.max(0, parseFloat(o.amount || 0) - parseFloat(o.advance_paid || 0)), 0);
+                    return due > 0 ? "var(--warn)" : "var(--success)";
+                  })(),
+                  big: true,
+                },
+              ].map(({ label, value, color, big }) => (
                 <div
+                  key={label}
                   style={{
-                    height: "100%",
-                    borderRadius: 10,
-                    width: `${progress}%`,
-                    transition: "width 0.5s ease",
-                    background:
-                      progress >= 100
-                        ? "var(--success)"
-                        : progress >= 60
-                          ? "var(--teal)"
-                          : progress >= 30
-                            ? "var(--warn)"
-                            : "var(--danger)",
-                  }}
-                />
-              </div>
-            </div>
-
-            {[
-              {
-                label: "Total Fee",
-                value: formatCurrency(totalFee),
-                color: "var(--text-primary)",
-                big: true,
-              },
-              {
-                label: "Collected",
-                value: formatCurrency(paid),
-                color: "var(--success)",
-              },
-              {
-                label: "Upcoming Due",
-                value: formatCurrency(totalDue),
-                color: "var(--blue)",
-              },
-              {
-                label: "Balance",
-                value: balance > 0 ? formatCurrency(balance) : "✓ Fully Paid",
-                color: balance > 0 ? "var(--warn)" : "var(--success)",
-                big: true,
-              },
-            ].map(({ label, value, color, big }) => (
-              <div
-                key={label}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "9px 0",
-                  borderBottom: "1px solid var(--border)",
-                }}
-              >
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {label}
-                </span>
-                <span
-                  style={{
-                    fontFamily: "var(--font-main)",
-                    fontWeight: big ? 700 : 600,
-                    fontSize: big ? 14 : 13,
-                    color,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    padding: "9px 0",
+                    borderBottom: "1px solid var(--border)",
                   }}
                 >
-                  {value}
-                </span>
-              </div>
-            ))}
-
-            <button
-              onClick={() => setShowPay(true)}
-              style={{
-                width: "100%",
-                marginTop: 18,
-                padding: "10px",
-                borderRadius: 8,
-                background: "var(--teal)",
-                border: "none",
-                color: "#fff",
-                fontFamily: "var(--font-main)",
-                fontWeight: 600,
-                fontSize: 13,
-                cursor: "pointer",
-              }}
-            >
-              + Add Payment Entry
-            </button>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    {label}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-main)",
+                      fontWeight: big ? 700 : 600,
+                      fontSize: big ? 14 : 13,
+                      color,
+                    }}
+                  >
+                    {value}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
 
-      {/* Add Payment Modal */}
-      {showPay && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setShowPay(false);
-          }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.75)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 200,
-            padding: 20,
-          }}
-        >
+      {historyModalOrder && (
+        <TrackingHistoryModal
+          order={historyModalOrder}
+          result={trackResults[historyModalOrder.id]}
+          onClose={() => setHistoryModalOrder(null)}
+        />
+      )}
+
+      {editOrderModal && (
+        <OrderFulfillmentModal
+          order={editOrderModal}
+          customer={customer}
+          onClose={() => setEditOrderModal(null)}
+          onSave={saveOrderEdit}
+        />
+      )}
+    </div>
+  );
+}
+
+function TrackingHistoryModal({ order, result, onClose }) {
+  const history = result?.history || [];
+  return (
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.75)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 200,
+        padding: 20,
+      }}
+    >
+      <div
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-strong)",
+          borderRadius: 14,
+          padding: "24px",
+          width: "100%",
+          maxWidth: 480,
+          maxHeight: "85vh",
+          overflowY: "auto",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+          <div>
+            <h2 style={{ fontFamily: "var(--font-main)", fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>
+              🚚 Tracking History
+            </h2>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+              AWB / Tracking No: {order.tracking_id}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, cursor: "pointer", padding: "2px 6px", borderRadius: 6 }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {result?.status && (
           <div
             style={{
-              background: "var(--bg-card)",
-              border: "1px solid var(--border-strong)",
-              borderRadius: 14,
-              padding: "26px 24px",
-              width: "100%",
-              maxWidth: 420,
+              marginTop: 14,
+              marginBottom: 18,
+              padding: "10px 14px",
+              background: "var(--teal-dim)",
+              border: "1px solid var(--teal)",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--teal-light)",
             }}
           >
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 20,
-              }}
-            >
-              <h2
-                style={{
-                  fontFamily: "var(--font-main)",
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: "var(--text-primary)",
-                }}
-              >
-                Add Payment Entry
-              </h2>
-              <button
-                onClick={() => setShowPay(false)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--text-muted)",
-                  fontSize: 20,
-                  cursor: "pointer",
-                }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Type toggle */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-              {["Paid", "Due"].map((s) => (
-                <button
-                  key={s}
-                  onClick={() =>
-                    setPayForm((f) => ({
-                      ...f,
-                      status: s,
-                      payment_date: s === "Paid" ? today() : f.payment_date,
-                    }))
-                  }
-                  style={{
-                    flex: 1,
-                    padding: "9px",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    fontFamily: "var(--font-main)",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    border: `2px solid ${payForm.status === s ? (s === "Paid" ? "var(--success)" : "var(--warn)") : "var(--border)"}`,
-                    background:
-                      payForm.status === s
-                        ? s === "Paid"
-                          ? "rgba(82,184,138,0.1)"
-                          : "rgba(224,160,80,0.1)"
-                        : "transparent",
-                    color:
-                      payForm.status === s
-                        ? s === "Paid"
-                          ? "var(--success)"
-                          : "var(--warn)"
-                        : "var(--text-muted)",
-                  }}
-                >
-                  {s === "Paid" ? "✓ Mark as Paid" : "⏳ Add Due Date"}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={addPayment}>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 14 }}
-              >
-                <div>
-                  <Lbl>Amount *</Lbl>
-                  <input
-                    type="number"
-                    value={payForm.amount}
-                    onChange={(e) =>
-                      setPayForm((f) => ({ ...f, amount: e.target.value }))
-                    }
-                    required
-                    placeholder="0"
-                    style={inp}
-                  />
-                </div>
-                {payForm.status === "Paid" ? (
-                  <>
-                    <div>
-                      <Lbl>Payment Date *</Lbl>
-                      <input
-                        type="date"
-                        value={payForm.payment_date}
-                        onChange={(e) =>
-                          setPayForm((f) => ({
-                            ...f,
-                            payment_date: e.target.value,
-                          }))
-                        }
-                        required
-                        style={inp}
-                      />
-                    </div>
-                    <div>
-                      <Lbl>Payment Mode</Lbl>
-                      <select
-                        value={payForm.payment_mode}
-                        onChange={(e) =>
-                          setPayForm((f) => ({
-                            ...f,
-                            payment_mode: e.target.value,
-                          }))
-                        }
-                        style={inp}
-                      >
-                        {MODES.map((m) => (
-                          <option key={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                ) : (
-                  <div>
-                    <Lbl>Due Date *</Lbl>
-                    <input
-                      type="date"
-                      value={payForm.due_date}
-                      onChange={(e) =>
-                        setPayForm((f) => ({
-                          ...f,
-                          due_date: e.target.value,
-                          payment_date: e.target.value,
-                        }))
-                      }
-                      required
-                      style={inp}
-                    />
-                  </div>
-                )}
-                <div>
-                  <Lbl>Notes</Lbl>
-                  <input
-                    value={payForm.notes}
-                    onChange={(e) =>
-                      setPayForm((f) => ({ ...f, notes: e.target.value }))
-                    }
-                    placeholder="e.g. 2nd installment"
-                    style={inp}
-                  />
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: 10,
-                  justifyContent: "flex-end",
-                  marginTop: 20,
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setShowPay(false)}
-                  style={{
-                    padding: "9px 18px",
-                    borderRadius: 8,
-                    background: "transparent",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-secondary)",
-                    fontSize: 13,
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  style={{
-                    padding: "9px 20px",
-                    borderRadius: 8,
-                    background: saving
-                      ? "var(--bg-hover)"
-                      : payForm.status === "Paid"
-                        ? "var(--success)"
-                        : "var(--warn)",
-                    border: "none",
-                    color: "#fff",
-                    fontFamily: "var(--font-main)",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    cursor: saving ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {saving
-                    ? "Saving..."
-                    : `Add ${payForm.status === "Paid" ? "Payment" : "Due"}`}
-                </button>
-              </div>
-            </form>
+            Current Status: {result.status}
+            {result.location ? ` — ${result.location}` : ""}
           </div>
-        </div>
-      )}
+        )}
+
+        {history.length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "12px 0" }}>
+            No detailed scan history available from the courier for this shipment.
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {history.map((h, idx) => (
+              <div key={idx} style={{ display: "flex", gap: 0 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginRight: 14 }}>
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: idx === 0 ? "var(--teal)" : "var(--border)",
+                      flexShrink: 0,
+                      marginTop: 4,
+                      border: idx === 0 ? "2px solid var(--teal-light)" : "none",
+                    }}
+                  />
+                  {idx < history.length - 1 && (
+                    <div style={{ width: 2, flex: 1, background: "var(--border)", minHeight: 24 }} />
+                  )}
+                </div>
+                <div style={{ flex: 1, marginBottom: 16 }}>
+                  <div
+                    style={{
+                      fontFamily: "var(--font-main)",
+                      fontWeight: idx === 0 ? 700 : 600,
+                      fontSize: 13,
+                      color: idx === 0 ? "var(--teal-light)" : "var(--text-primary)",
+                    }}
+                  >
+                    {h.status || "Update"}
+                  </div>
+                  {h.location && (
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 2 }}>
+                      📍 {h.location}
+                    </div>
+                  )}
+                  {h.date && (
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                      🕒 {h.date}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

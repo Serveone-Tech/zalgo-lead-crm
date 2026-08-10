@@ -516,9 +516,12 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
   const {
     name,
     email,
+    alternate_phone,
     address,
     pincode,
     amount,
+    payment_type,
+    advance_paid,
     next_due_date,
     tracking_id,
     provider,
@@ -538,10 +541,11 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
 
     await pool.query(
       `UPDATE customers SET name=COALESCE($1, name), email=COALESCE($2, email),
-       address=$3, pincode=$4, updated_at=NOW() WHERE id=$5 AND user_id=$6`,
+       alternate_phone=$3, address=$4, pincode=$5, updated_at=NOW() WHERE id=$6 AND user_id=$7`,
       [
         name || null,
         email || null,
+        alternate_phone || "",
         address || "",
         pincode || "",
         customer.id,
@@ -549,16 +553,25 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
       ],
     );
 
+    // Prepaid orders are fully collected up front — advance_paid always
+    // equals the order amount so the balance-due math elsewhere ("amount -
+    // advance_paid") comes out to zero without needing a separate branch.
+    const orderAmount = parseFloat(amount) || 0;
+    const isCod = payment_type === "cod";
+    const orderAdvance = isCod ? parseFloat(advance_paid) || 0 : orderAmount;
+
     const orderRes = await pool.query(
       `INSERT INTO customer_orders
-        (user_id, customer_id, address, pincode, amount, next_due_date, tracking_id, provider, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        (user_id, customer_id, address, pincode, amount, payment_type, advance_paid, next_due_date, tracking_id, provider, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [
         req.tenantId,
         customer.id,
         address || "",
         pincode || "",
-        parseFloat(amount) || 0,
+        orderAmount,
+        isCod ? "cod" : "prepaid",
+        orderAdvance,
         next_due_date || null,
         tracking_id || "",
         provider || "",

@@ -8,13 +8,18 @@ const router = express.Router();
 // GET all customers
 router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
+    // Collected/due figures now come from each customer's Orders (Prepaid is
+    // collected in full at fulfillment; COD tracks advance_paid vs balance)
+    // instead of the old standalone payments ledger.
     const result = await pool.query(
       `SELECT c.*, u.name AS assigned_to_name,
-        COALESCE(SUM(CASE WHEN p.status='Paid' THEN p.amount ELSE 0 END),0) AS total_collected,
-        COALESCE(SUM(CASE WHEN p.status='Due' THEN p.amount ELSE 0 END),0) AS total_due_amount,
-        (SELECT MIN(p2.due_date) FROM customer_payments p2 WHERE p2.customer_id=c.id AND p2.status='Due') AS next_due_date
+        COALESCE(SUM(co.advance_paid),0) AS total_collected,
+        COALESCE(SUM(CASE WHEN co.payment_type='cod' THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
+        (SELECT MIN(co2.next_due_date) FROM customer_orders co2
+         WHERE co2.customer_id=c.id AND co2.payment_type='cod'
+           AND (co2.amount - COALESCE(co2.advance_paid,0)) > 0) AS next_due_date
        FROM customers c
-       LEFT JOIN customer_payments p ON p.customer_id=c.id
+       LEFT JOIN customer_orders co ON co.customer_id=c.id
        LEFT JOIN users u ON u.id=c.assigned_to
        WHERE c.user_id=$1 GROUP BY c.id, u.name ORDER BY c.created_at DESC`,
       [req.tenantId],
@@ -26,14 +31,15 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
   }
 });
 
-// GET due/upcoming — BEFORE /:id
+// GET due/upcoming — BEFORE /:id. Pulls unpaid balances from COD orders.
 router.get("/due/upcoming", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT cp.*, c.name AS customer_name, c.phone, c.email
-       FROM customer_payments cp JOIN customers c ON c.id=cp.customer_id
-       WHERE c.user_id=$1 AND cp.status='Due'
-       ORDER BY cp.due_date ASC NULLS LAST LIMIT 30`,
+      `SELECT co.id, co.customer_id, c.name AS customer_name, c.phone, c.email,
+         co.next_due_date AS due_date, (co.amount - COALESCE(co.advance_paid,0)) AS amount
+       FROM customer_orders co JOIN customers c ON c.id=co.customer_id
+       WHERE c.user_id=$1 AND co.payment_type='cod' AND (co.amount - COALESCE(co.advance_paid,0)) > 0
+       ORDER BY co.next_due_date ASC NULLS LAST LIMIT 30`,
       [req.tenantId],
     );
     res.json(result.rows);
@@ -46,16 +52,12 @@ router.get("/due/upcoming", auth, requireSubscription, requirePlanFeature("custo
 // GET single customer
 router.get("/:id", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
-    const [cust, payments, orders] = await Promise.all([
+    const [cust, orders] = await Promise.all([
       pool.query(
         `SELECT c.*, u.name AS assigned_to_name FROM customers c
          LEFT JOIN users u ON u.id=c.assigned_to
          WHERE c.id=$1 AND c.user_id=$2`,
         [req.params.id, req.tenantId],
-      ),
-      pool.query(
-        "SELECT * FROM customer_payments WHERE customer_id=$1 ORDER BY payment_date DESC",
-        [req.params.id],
       ),
       pool.query(
         "SELECT * FROM customer_orders WHERE customer_id=$1 ORDER BY created_at DESC",
@@ -78,7 +80,7 @@ router.get("/:id", auth, requireSubscription, requirePlanFeature("customers"), r
       items: items.filter((i) => i.order_id === o.id),
     }));
 
-    res.json({ ...cust.rows[0], payments: payments.rows, orders: ordersWithItems });
+    res.json({ ...cust.rows[0], orders: ordersWithItems });
   } catch (e) {
     res.status(500).json({ error: "Server error" });
   }
@@ -189,86 +191,28 @@ router.delete("/:id", auth, requirePermission("manage_customers"), async (req, r
   }
 });
 
-// POST add payment
-router.post("/:id/payments", auth, requirePermission("manage_customers"), async (req, res) => {
-  const { amount, payment_date, due_date, payment_mode, status, notes } =
-    req.body;
-  if (!amount || !payment_date)
-    return res.status(400).json({ error: "Amount and date required" });
-  try {
-    const result = await pool.query(
-      `INSERT INTO customer_payments (customer_id,user_id,amount,payment_date,due_date,payment_mode,status,notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [
-        req.params.id,
-        req.tenantId,
-        parseFloat(amount),
-        payment_date,
-        due_date || null,
-        payment_mode || "Cash",
-        status || "Paid",
-        notes || "",
-      ],
-    );
-    await pool.query(
-      `UPDATE customers SET amount_paid=(SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE customer_id=$1 AND status='Paid'),updated_at=NOW() WHERE id=$1`,
-      [req.params.id],
-    );
-
-    // ✅ Fire fee_due trigger if status=Due
-    if (status === "Due") {
-      const cust = await pool.query("SELECT * FROM customers WHERE id=$1", [
-        req.params.id,
-      ]);
-      if (cust.rows[0]) {
-        fireTrigger("fee_due", req.tenantId, {
-          name: cust.rows[0].name,
-          phone: cust.rows[0].phone,
-          email: cust.rows[0].email,
-          amount: amount,
-          due_date: due_date || payment_date,
-        }).catch(() => {});
-      }
-    }
-
-    res.json(result.rows[0]);
-  } catch (e) {
-    console.error(e.message);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// PUT update payment
-router.put("/:id/payments/:pid", auth, requirePermission("manage_customers"), async (req, res) => {
-  const { status, payment_date, amount, payment_mode, notes } = req.body;
-  try {
-    const result = await pool.query(
-      `UPDATE customer_payments SET status=$1,payment_date=$2,amount=$3,payment_mode=$4,notes=$5 WHERE id=$6 AND customer_id=$7 RETURNING *`,
-      [
-        status || "Paid",
-        payment_date,
-        parseFloat(amount),
-        payment_mode || "Cash",
-        notes || "",
-        req.params.pid,
-        req.params.id,
-      ],
-    );
-    await pool.query(
-      `UPDATE customers SET amount_paid=(SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE customer_id=$1 AND status='Paid'),updated_at=NOW() WHERE id=$1`,
-      [req.params.id],
-    );
-    res.json(result.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// PUT order — lets tracking_id (AWB) be added/edited after the order was
-// created, since a courier's tracking number often isn't known yet at the
-// time of fulfillment and gets generated/booked afterward.
+// PUT order — the full Order Fulfillment record (customer name/email/alt
+// phone/address, order amount/payment/tracking, items) stays editable after
+// submission, since none of it is reliably final at the moment of first
+// fulfillment (a courier's tracking number, a COD collection, even a typo'd
+// address). Only the customer's primary phone is intentionally excluded —
+// that's the identity key the order was created against.
 router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), async (req, res) => {
-  const { amount, next_due_date, tracking_id, provider, notes } = req.body;
+  const {
+    name,
+    email,
+    alternate_phone,
+    address,
+    pincode,
+    amount,
+    payment_type,
+    advance_paid,
+    next_due_date,
+    tracking_id,
+    provider,
+    notes,
+    items,
+  } = req.body;
   try {
     const owns = await pool.query("SELECT id FROM customers WHERE id=$1 AND user_id=$2", [
       req.params.id,
@@ -276,16 +220,44 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     ]);
     if (!owns.rows[0]) return res.status(404).json({ error: "Not found" });
 
+    await pool.query(
+      `UPDATE customers SET
+         name=COALESCE($1, name),
+         email=COALESCE($2, email),
+         alternate_phone=COALESCE($3, alternate_phone),
+         address=COALESCE($4, address),
+         pincode=COALESCE($5, pincode),
+         updated_at=NOW()
+       WHERE id=$6 AND user_id=$7`,
+      [
+        name || null,
+        email !== undefined ? email : null,
+        alternate_phone !== undefined ? alternate_phone : null,
+        address !== undefined ? address : null,
+        pincode !== undefined ? pincode : null,
+        req.params.id,
+        req.tenantId,
+      ],
+    );
+
     const result = await pool.query(
       `UPDATE customer_orders SET
-         amount=COALESCE($1, amount),
-         next_due_date=COALESCE($2, next_due_date),
-         tracking_id=COALESCE($3, tracking_id),
-         provider=COALESCE($4, provider),
-         notes=COALESCE($5, notes)
-       WHERE id=$6 AND customer_id=$7 RETURNING *`,
+         address=COALESCE($1, address),
+         pincode=COALESCE($2, pincode),
+         amount=COALESCE($3, amount),
+         payment_type=COALESCE($4, payment_type),
+         advance_paid=COALESCE($5, advance_paid),
+         next_due_date=COALESCE($6, next_due_date),
+         tracking_id=COALESCE($7, tracking_id),
+         provider=COALESCE($8, provider),
+         notes=COALESCE($9, notes)
+       WHERE id=$10 AND customer_id=$11 RETURNING *`,
       [
+        address !== undefined ? address : null,
+        pincode !== undefined ? pincode : null,
         amount !== undefined && amount !== "" ? parseFloat(amount) : null,
+        payment_type === "cod" || payment_type === "prepaid" ? payment_type : null,
+        advance_paid !== undefined && advance_paid !== "" ? parseFloat(advance_paid) : null,
         next_due_date !== undefined ? (next_due_date || null) : null,
         tracking_id !== undefined ? tracking_id : null,
         provider !== undefined ? provider : null,
@@ -295,24 +267,21 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
       ],
     );
     if (!result.rows[0]) return res.status(404).json({ error: "Order not found" });
-    res.json(result.rows[0]);
-  } catch (e) {
-    res.status(500).json({ error: "Server error" });
-  }
-});
 
-// DELETE payment
-router.delete("/:id/payments/:pid", auth, requirePermission("manage_customers"), async (req, res) => {
-  try {
-    await pool.query(
-      "DELETE FROM customer_payments WHERE id=$1 AND customer_id=$2",
-      [req.params.pid, req.params.id],
-    );
-    await pool.query(
-      `UPDATE customers SET amount_paid=(SELECT COALESCE(SUM(amount),0) FROM customer_payments WHERE customer_id=$1 AND status='Paid'),updated_at=NOW() WHERE id=$1`,
-      [req.params.id],
-    );
-    res.json({ success: true });
+    // Items are a full replace-set rather than a diff — simplest correct
+    // behavior for a form that just resubmits its whole items list.
+    if (Array.isArray(items)) {
+      await pool.query("DELETE FROM order_items WHERE order_id=$1", [req.params.orderId]);
+      const itemRows = items.filter((i) => i?.name?.trim());
+      for (const item of itemRows) {
+        await pool.query(
+          "INSERT INTO order_items (order_id, name, quantity, price) VALUES ($1,$2,$3,$4)",
+          [req.params.orderId, item.name.trim(), parseInt(item.quantity) || 1, parseFloat(item.price) || 0],
+        );
+      }
+    }
+
+    res.json(result.rows[0]);
   } catch (e) {
     res.status(500).json({ error: "Server error" });
   }

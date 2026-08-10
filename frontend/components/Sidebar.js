@@ -343,7 +343,7 @@ export default function Sidebar() {
             fontWeight: 700,
           }}
         >
-          Coach CRM
+          Lead Management System
         </div>
       </div>
 

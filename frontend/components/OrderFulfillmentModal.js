@@ -1,18 +1,31 @@
 "use client";
 import { useState } from "react";
 
-export default function OrderFulfillmentModal({ lead, onClose, onSave }) {
+// Handles both creating an order (pass `lead`) and editing an existing one
+// (pass `order` + `customer`) — same field set either way. Only the primary
+// phone number stays locked/read-only in both modes: it's the identity key
+// the order was created against, so it isn't something this form changes.
+export default function OrderFulfillmentModal({ lead, order, customer, onClose, onSave }) {
+  const isEdit = !!order;
+  const phone = customer?.phone || lead?.phone || "";
   const [form, setForm] = useState({
-    name: lead?.name || "",
-    email: lead?.email || "",
-    address: "",
-    pincode: "",
-    amount: "",
-    next_due_date: "",
-    tracking_id: "",
-    notes: "",
+    name: customer?.name || lead?.name || "",
+    email: customer?.email || lead?.email || "",
+    alternate_phone: customer?.alternate_phone || "",
+    address: order?.address || customer?.address || "",
+    pincode: order?.pincode || customer?.pincode || "",
+    amount: order?.amount || "",
+    payment_type: order?.payment_type || "prepaid",
+    advance_paid: order?.advance_paid || "",
+    next_due_date: order?.next_due_date ? order.next_due_date.split("T")[0] : "",
+    tracking_id: order?.tracking_id || "",
+    notes: order?.notes || "",
   });
-  const [items, setItems] = useState([{ name: "", quantity: 1, price: "" }]);
+  const [items, setItems] = useState(
+    order?.items?.length > 0
+      ? order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price }))
+      : [{ name: "", quantity: 1, price: "" }],
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -75,7 +88,7 @@ export default function OrderFulfillmentModal({ lead, onClose, onSave }) {
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
           <h2 style={{ fontFamily: "var(--font-main)", fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>
-            Fulfill Order — {lead?.name}
+            {isEdit ? "Edit Order" : "Fulfill Order"} — {form.name}
           </h2>
           <button
             onClick={onClose}
@@ -100,10 +113,13 @@ export default function OrderFulfillmentModal({ lead, onClose, onSave }) {
             </div>
 
             <Field label="Phone (locked)">
-              <input value={lead?.phone || ""} readOnly style={inpLocked} />
+              <input value={phone} readOnly style={inpLocked} />
             </Field>
             <Field label="Email">
               <input name="email" type="email" value={form.email} onChange={handle} style={inp} />
+            </Field>
+            <Field label="Alternate Number">
+              <input name="alternate_phone" value={form.alternate_phone} onChange={handle} placeholder="Optional — second contact number" style={inp} />
             </Field>
 
             <div style={{ gridColumn: "1/-1" }}>
@@ -117,6 +133,28 @@ export default function OrderFulfillmentModal({ lead, onClose, onSave }) {
             <Field label="Order Amount (₹)">
               <input name="amount" type="number" min="0" step="0.01" value={form.amount} onChange={handle} style={inp} />
             </Field>
+
+            <Field label="Payment Type">
+              <select name="payment_type" value={form.payment_type} onChange={handle} style={inp}>
+                <option value="prepaid">Prepaid</option>
+                <option value="cod">COD (Cash on Delivery)</option>
+              </select>
+            </Field>
+
+            {form.payment_type === "cod" && (
+              <>
+                <Field label="Advance Paid (₹)">
+                  <input name="advance_paid" type="number" min="0" step="0.01" value={form.advance_paid} onChange={handle} placeholder="0" style={inp} />
+                </Field>
+                <Field label="Balance Due (₹)">
+                  <input
+                    value={Math.max(0, (parseFloat(form.amount) || 0) - (parseFloat(form.advance_paid) || 0)).toFixed(2)}
+                    readOnly
+                    style={inpLocked}
+                  />
+                </Field>
+              </>
+            )}
 
             <Field label="Next Due Date">
               <input name="next_due_date" type="date" value={form.next_due_date} onChange={handle} style={inp} />
@@ -192,7 +230,7 @@ export default function OrderFulfillmentModal({ lead, onClose, onSave }) {
               disabled={saving}
               style={{ padding: "9px 20px", borderRadius: "var(--radius-sm)", background: saving ? "var(--bg-hover)" : "var(--gradient-accent)", border: "none", color: "#fff", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, cursor: saving ? "not-allowed" : "pointer", boxShadow: saving ? "none" : "var(--shadow-glow)" }}
             >
-              {saving ? "Saving..." : "Save Order"}
+              {saving ? "Saving..." : isEdit ? "Save Changes" : "Save Order"}
             </button>
           </div>
         </form>
