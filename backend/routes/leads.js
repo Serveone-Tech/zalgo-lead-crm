@@ -109,8 +109,12 @@ router.post("/", auth, requireSubscription, async (req, res) => {
   } = req.body;
   if (!name) return res.status(400).json({ error: "Name required" });
 
+  // Employees without assign_leads can't hand a lead off to someone else, so
+  // a lead they create has nowhere else to go — auto-assign it to themselves
+  // instead of leaving it unassigned. Owners/assign_leads holders keep full
+  // control over who a new lead lands with (including leaving it unassigned).
   const canAssign = isOwner(req) || hasPermission(req, "assign_leads");
-  const finalAssignedTo = canAssign && assigned_to ? assigned_to : null;
+  const finalAssignedTo = canAssign ? (assigned_to || null) : req.user.id;
 
   try {
     // Enforce max_leads plan limit (-1 = unlimited)
@@ -170,6 +174,9 @@ router.post("/", auth, requireSubscription, async (req, res) => {
 
 // POST bulk create leads
 router.post("/bulk", auth, async (req, res) => {
+  if (!isOwner(req) && !hasPermission(req, "bulk_upload_leads")) {
+    return res.status(403).json({ error: "Permission denied" });
+  }
   const leads = req.body.leads;
   if (!Array.isArray(leads) || leads.length === 0)
     return res.status(400).json({ error: "No leads provided" });
@@ -250,6 +257,12 @@ router.put("/bulk-assign", auth, async (req, res) => {
     const result = await pool.query(
       `UPDATE leads SET assigned_to=$1, updated_at=NOW()
        WHERE id = ANY($2::int[]) AND user_id=$3`,
+      [assigned_to || null, lead_ids, req.tenantId],
+    );
+    // Mirror onto any already-converted Customers for these leads (see the
+    // single-lead PUT above for why this has to happen here too).
+    await pool.query(
+      `UPDATE customers SET assigned_to=$1, updated_at=NOW() WHERE lead_id = ANY($2::int[]) AND user_id=$3`,
       [assigned_to || null, lead_ids, req.tenantId],
     );
     res.json({ updated: result.rowCount });
@@ -378,10 +391,11 @@ router.put("/:id", auth, async (req, res) => {
       ? (assigned_to || null)
       : lead.assigned_to;
 
-    // Sensitive fields (name, phone, email, platform, platform_link) can only be
-    // changed by owner or someone with edit_lead_details permission
+    // Name stays editable by whoever can already touch this lead (assignee
+    // or above) — only the more sensitive contact/source fields (phone,
+    // email, platform, platform_link) require owner or edit_lead_details.
     const canEditDetails = isOwner(req) || hasPermission(req, "edit_lead_details");
-    const nextName = canEditDetails ? (name || lead.name) : lead.name;
+    const nextName = name || lead.name;
     const nextPhone = canEditDetails ? (phone ?? lead.phone) : lead.phone;
     const nextEmail = canEditDetails ? (email ?? lead.email) : lead.email;
     const nextPlatform = canEditDetails ? (platform || lead.platform) : lead.platform;
@@ -423,6 +437,15 @@ router.put("/:id", auth, async (req, res) => {
     if (stage === "Converted" && oldStage !== "Converted") {
       await getOrCreateCustomerFromLead(req.tenantId, updated);
     }
+
+    // Keep the linked Customer record's assignment in sync — a customer is
+    // only ever created from a lead, but assignment can keep changing on the
+    // Leads page long after conversion, and that shouldn't silently drift
+    // out of sync with the Customers view.
+    await pool.query(
+      `UPDATE customers SET assigned_to=$1, updated_at=NOW() WHERE lead_id=$2 AND user_id=$3`,
+      [updated.assigned_to, updated.id, req.tenantId],
+    );
 
     res.json(updated);
   } catch (e) {

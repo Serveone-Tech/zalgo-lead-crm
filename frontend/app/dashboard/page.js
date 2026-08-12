@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import api, { formatCurrency } from "../../lib/api";
+import api, { formatCurrency, refreshUser } from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import { STAGE_COLORS } from "../../lib/stages";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
@@ -81,6 +81,9 @@ export default function DashboardPage() {
     }
     const u = localStorage.getItem("crm_user");
     if (u) setUser(JSON.parse(u));
+    refreshUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
     api
       .get("/settings")
       .then((r) => localStorage.setItem("crm_settings", JSON.stringify(r.data)))

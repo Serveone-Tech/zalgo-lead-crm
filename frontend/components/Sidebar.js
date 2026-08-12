@@ -3,7 +3,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import api from "../lib/api";
+import api, { refreshUser } from "../lib/api";
 import { hasPerm, isOwnerUser } from "../lib/permissions";
 
 function today() {
@@ -58,8 +58,20 @@ export default function Sidebar() {
       }).catch(() => {});
     }
 
+    // An admin can change this user's permissions from another session at
+    // any time — refresh from the server (not just the localStorage copy
+    // set at login) so nav items appear/disappear without needing a logout.
+    refreshUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
+
     loadCounts();
-    const interval = setInterval(loadCounts, 60000);
+    const interval = setInterval(() => {
+      loadCounts();
+      refreshUser().then((fresh) => {
+        if (fresh) setUser(fresh);
+      });
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 

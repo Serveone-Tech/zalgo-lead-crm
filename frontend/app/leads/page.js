@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import api from "../../lib/api";
+import api, { refreshUser } from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import KanbanBoard from "../../components/KanbanBoard";
 import BulkUploadModal from "../../components/BulkUploadModal";
@@ -86,6 +86,9 @@ function LeadsContent() {
     }
     const u = localStorage.getItem("crm_user");
     if (u) setUser(JSON.parse(u));
+    refreshUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
     load();
     api
       .get("/employees/list")
@@ -102,6 +105,7 @@ function LeadsContent() {
   }, []);
 
   const canAssign = isOwnerUser(user) || hasPerm(user, "assign_leads");
+  const canBulkUpload = isOwnerUser(user) || hasPerm(user, "bulk_upload_leads");
 
   const employeeNames = useMemo(
     () => Object.fromEntries(employees.map((e) => [e.id, e.name])),
@@ -388,25 +392,27 @@ function LeadsContent() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => setBulkOpen(true)}
-            style={{
-              background: "var(--bg-card)",
-              color: "var(--teal-light)",
-              border: "1px solid var(--teal)",
-              borderRadius: "var(--radius-sm)",
-              padding: "9px 16px",
-              fontFamily: "var(--font-main)",
-              fontWeight: 600,
-              fontSize: 13,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <Upload size={15} /> Bulk Upload
-          </button>
+          {canBulkUpload && (
+            <button
+              onClick={() => setBulkOpen(true)}
+              style={{
+                background: "var(--bg-card)",
+                color: "var(--teal-light)",
+                border: "1px solid var(--teal)",
+                borderRadius: "var(--radius-sm)",
+                padding: "9px 16px",
+                fontFamily: "var(--font-main)",
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <Upload size={15} /> Bulk Upload
+            </button>
+          )}
           <button
             onClick={openAdd}
             style={{

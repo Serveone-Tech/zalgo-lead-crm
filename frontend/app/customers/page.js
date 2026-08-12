@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import api, { formatCurrency } from "../../lib/api";
-import { Users, DollarSign, Clock, TrendingUp } from "lucide-react";
+import api, { formatCurrency, refreshUser } from "../../lib/api";
+import { isOwnerUser, hasPerm } from "../../lib/permissions";
+import { Users, DollarSign, Clock, TrendingUp, Trash2 } from "lucide-react";
 
 function today() {
   return new Date().toISOString().split("T")[0];
@@ -29,6 +30,7 @@ export default function CustomersPage() {
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -40,6 +42,7 @@ export default function CustomersPage() {
   });
   const [saving, setSaving] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     setMounted(true);
@@ -47,6 +50,11 @@ export default function CustomersPage() {
       router.push("/login");
       return;
     }
+    const cached = localStorage.getItem("crm_user");
+    if (cached) setUser(JSON.parse(cached));
+    refreshUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
     load();
   }, []);
 
@@ -97,11 +105,15 @@ export default function CustomersPage() {
   };
 
   const del = async (id) => {
-    if (!confirm("Delete this customer and all payment records?")) return;
     setDeleting(id);
-    await api.delete(`/customers/${id}`);
+    try {
+      await api.delete(`/customers/${id}`);
+      load();
+    } catch {
+      // no-op — leave the row in place so the user can retry
+    }
     setDeleting(null);
-    load();
+    setConfirmDelete(null);
   };
 
   const fmt = mounted ? formatCurrency : (n) => `₹${parseFloat(n) || 0}`;
@@ -149,25 +161,48 @@ export default function CustomersPage() {
             )}
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(true)}
-          style={{
-            background: "var(--teal)",
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            padding: "9px 18px",
-            fontFamily: "var(--font-main)",
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <span style={{ fontSize: 16 }}>+</span> Add Customer
-        </button>
+        <div style={{ display: "flex", gap: 10 }}>
+          {isOwnerUser(user) && (
+            <button
+              onClick={() => router.push("/customers/trash")}
+              style={{
+                background: "transparent",
+                color: "var(--text-secondary)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: "9px 18px",
+                fontFamily: "var(--font-main)",
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <Trash2 size={15} /> Trash
+            </button>
+          )}
+          <button
+            onClick={() => setShowAdd(true)}
+            style={{
+              background: "var(--teal)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "9px 18px",
+              fontFamily: "var(--font-main)",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span style={{ fontSize: 16 }}>+</span> Add Customer
+          </button>
+        </div>
       </div>
 
       <div
@@ -522,31 +557,33 @@ export default function CustomersPage() {
                           >
                             View
                           </button>
-                          <button
-                            onClick={() => del(c.id)}
-                            disabled={deleting === c.id}
-                            style={{
-                              background: "transparent",
-                              border: "1px solid var(--border)",
-                              borderRadius: 6,
-                              padding: "5px 10px",
-                              color: "var(--danger)",
-                              fontSize: 11,
-                              cursor: "pointer",
-                              fontWeight: 600,
-                              opacity: deleting === c.id ? 0.5 : 1,
-                            }}
-                            onMouseEnter={(e) =>
-                              (e.currentTarget.style.borderColor =
-                                "var(--danger)")
-                            }
-                            onMouseLeave={(e) =>
-                              (e.currentTarget.style.borderColor =
-                                "var(--border)")
-                            }
-                          >
-                            {deleting === c.id ? "…" : "Del"}
-                          </button>
+                          {(isOwnerUser(user) || hasPerm(user, "delete_customers")) && (
+                            <button
+                              onClick={() => setConfirmDelete(c)}
+                              disabled={deleting === c.id}
+                              style={{
+                                background: "transparent",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "5px 10px",
+                                color: "var(--danger)",
+                                fontSize: 11,
+                                cursor: "pointer",
+                                fontWeight: 600,
+                                opacity: deleting === c.id ? 0.5 : 1,
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.borderColor =
+                                  "var(--danger)")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.borderColor =
+                                  "var(--border)")
+                              }
+                            >
+                              {deleting === c.id ? "…" : "Del"}
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -760,6 +797,105 @@ export default function CustomersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmDelete(null);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 300,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: 14,
+              padding: "26px 24px",
+              width: "100%",
+              maxWidth: 400,
+              boxShadow: "var(--shadow-lg)",
+            }}
+          >
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "var(--danger-dim)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 20,
+                marginBottom: 14,
+              }}
+            >
+              ⚠️
+            </div>
+            <h2
+              style={{
+                fontFamily: "var(--font-main)",
+                fontSize: 16,
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                marginBottom: 8,
+              }}
+            >
+              Delete customer?
+            </h2>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 22 }}>
+              This will permanently delete <strong>{confirmDelete.name}</strong> and all their
+              payment records, orders, and history. This action cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(null)}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: 8,
+                  background: "transparent",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => del(confirmDelete.id)}
+                disabled={deleting === confirmDelete.id}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: 8,
+                  background: "var(--danger)",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: deleting === confirmDelete.id ? "not-allowed" : "pointer",
+                  opacity: deleting === confirmDelete.id ? 0.6 : 1,
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                {deleting === confirmDelete.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
           </div>
         </div>
       )}

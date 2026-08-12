@@ -92,7 +92,10 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
   };
 
   const canAssign = isOwnerUser(user) || hasPerm(user, "assign_leads");
-  const canEditDetails = isOwnerUser(user) || hasPerm(user, "edit_lead_details");
+  // Phone/email/platform/link only lock down once a lead already exists —
+  // anyone adding a brand-new lead can fill in every field. Name is never
+  // locked, even on an existing lead (see field below).
+  const canEditDetails = !lead?.id || isOwnerUser(user) || hasPerm(user, "edit_lead_details");
   const canEditStageOnly =
     !canAssign &&
     !isOwnerUser(user) &&
@@ -202,7 +205,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
           )}
 
           {/* Read-only notice for employees without edit_lead_details */}
-          {lead?.id && !canEditDetails && (
+          {!canEditDetails && (
             <div style={{
               marginBottom: 14,
               padding: "9px 13px",
@@ -213,24 +216,24 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
               color: "var(--warn)",
               fontFamily: "var(--font-main)",
             }}>
-              🔒 Name, phone, email and platform details are view-only. Contact your admin to update them.
+              🔒 Phone, email and platform details are view-only — you can still rename this lead. Contact your admin to update the rest.
             </div>
           )}
 
           <div
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}
           >
-            {/* Full Name — full width */}
+            {/* Full Name — full width. Always editable, even when the rest of
+                the lead's details are locked. */}
             <div style={{ gridColumn: "1/-1" }}>
               <Field label="Full Name *">
                 <input
                   name="name"
                   value={form.name}
-                  onChange={canEditDetails ? handle : undefined}
-                  readOnly={!canEditDetails}
+                  onChange={handle}
                   placeholder="Lead's full name"
                   required
-                  style={canEditDetails ? inp : inpLocked}
+                  style={inp}
                 />
               </Field>
             </div>

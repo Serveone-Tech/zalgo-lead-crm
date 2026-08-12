@@ -1,6 +1,7 @@
 const express = require("express");
 const { pool } = require("../db");
 const { auth, requirePermission } = require("../middleware/auth");
+const { isOwner } = require("../utils/permissions");
 const { PROVIDERS } = require("../utils/delivery-providers");
 
 const router = express.Router();
@@ -16,7 +17,11 @@ router.get("/providers", auth, (req, res) => {
 });
 
 // ── GET this tenant's saved provider config (secrets masked) ──────
-router.get("/credentials", auth, requirePermission("manage_settings"), async (req, res) => {
+// Any authenticated tenant member can read this (masked, no real secrets) —
+// it's how the frontend decides whether to show the "View Track" button at
+// all, so gating it behind manage_settings hid tracking from every employee
+// even when an admin had already configured a provider.
+router.get("/credentials", auth, async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT provider, enabled, credentials FROM delivery_credentials WHERE user_id=$1",
@@ -83,9 +88,14 @@ router.put("/credentials", auth, requirePermission("manage_settings"), async (re
 // ── GET live tracking status for one order ─────────────────────────
 router.get("/track/:orderId", auth, async (req, res) => {
   try {
+    // Employees can only track orders for customers assigned to them —
+    // same boundary as the customer list/detail endpoints.
+    const vis = isOwner(req) ? { clause: "", params: [] } : { clause: " AND c.assigned_to=$3", params: [req.user.id] };
     const orderRes = await pool.query(
-      "SELECT tracking_id FROM customer_orders WHERE id=$1 AND user_id=$2",
-      [req.params.orderId, req.tenantId],
+      `SELECT co.tracking_id FROM customer_orders co
+       JOIN customers c ON c.id=co.customer_id
+       WHERE co.id=$1 AND co.user_id=$2${vis.clause}`,
+      [req.params.orderId, req.tenantId, ...vis.params],
     );
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: "Order not found" });

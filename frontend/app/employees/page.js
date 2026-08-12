@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
-import { PERMISSION_KEYS } from "../../lib/permissions";
+import { PERMISSION_MODULES } from "../../lib/permissions";
 import { Users } from "lucide-react";
 
 const emptyForm = {
@@ -12,6 +12,27 @@ const emptyForm = {
   role_label: "",
   permissions: {},
 };
+
+// Compact "Leads: RW" style badges for the employee table — derived from the
+// same module definitions the R/W/D matrix uses, so it stays in sync. A cell
+// with only SOME of its underlying keys set (legacy data) shows lowercase
+// instead of being silently dropped as if nothing were granted.
+function summarizeModulePerms(permissions) {
+  const perms = permissions || {};
+  const letters = { read: "R", write: "W", delete: "D" };
+  return PERMISSION_MODULES.map((mod) => {
+    const granted = ["read", "write", "delete"]
+      .filter((action) => mod[action])
+      .map((action) => {
+        const cell = mod[action];
+        if (cell.keys.every((k) => perms[k])) return letters[action];
+        if (cell.keys.some((k) => perms[k])) return letters[action].toLowerCase();
+        return null;
+      })
+      .filter(Boolean);
+    return granted.length > 0 ? { label: mod.label, letters: granted.join(""), title: mod.label } : null;
+  }).filter(Boolean);
+}
 
 export default function EmployeesPage() {
   const router = useRouter();
@@ -65,11 +86,31 @@ export default function EmployeesPage() {
   };
   const closeModal = () => setModal(false);
 
-  const togglePerm = (key) =>
-    setForm((f) => ({
-      ...f,
-      permissions: { ...f.permissions, [key]: !f.permissions[key] },
-    }));
+  // Each Read/Write/Delete cell can back onto more than one underlying flag
+  // (e.g. Leads "Write" = edit_lead_details + assign_leads + bulk_upload_leads)
+  // — toggle them all together so the cell behaves as one checkbox. Older
+  // employees can end up with SOME but not all of a cell's keys set (e.g. a
+  // newly-added flag got backfilled on its own) — that shows as an
+  // indeterminate (—) state rather than silently looking unchecked, so
+  // partial legacy permissions aren't mistaken for "nothing granted".
+  const isCellChecked = (perms, cell) => !!cell && cell.keys.every((k) => perms[k]);
+  const isCellPartial = (perms, cell) =>
+    !!cell && !isCellChecked(perms, cell) && cell.keys.some((k) => perms[k]);
+  const toggleCell = (cell) => {
+    if (!cell) return;
+    setForm((f) => {
+      // Partial or fully-off → turn everything ON. Only a fully-on cell
+      // turns everything OFF. This means clicking an indeterminate box
+      // completes it first, rather than clearing it — matches how people
+      // expect a checkbox showing "some access" to behave when clicked.
+      const turningOn = !isCellChecked(f.permissions, cell);
+      const next = { ...f.permissions };
+      cell.keys.forEach((k) => {
+        next[k] = turningOn;
+      });
+      return { ...f, permissions: next };
+    });
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -183,9 +224,10 @@ export default function EmployeesPage() {
                     </td>
                     <td style={td}>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 4, maxWidth: 280 }}>
-                        {PERMISSION_KEYS.filter((p) => emp.permissions?.[p.key]).map((p) => (
+                        {summarizeModulePerms(emp.permissions).map((m) => (
                           <span
-                            key={p.key}
+                            key={m.label}
+                            title={m.title}
                             style={{
                               fontSize: 10,
                               background: "var(--teal-dim)",
@@ -194,10 +236,10 @@ export default function EmployeesPage() {
                               padding: "2px 8px",
                             }}
                           >
-                            {p.key}
+                            {m.label}: {m.letters}
                           </span>
                         ))}
-                        {!PERMISSION_KEYS.some((p) => emp.permissions?.[p.key]) && (
+                        {summarizeModulePerms(emp.permissions).length === 0 && (
                           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                             Assigned leads only
                           </span>
@@ -345,40 +387,96 @@ export default function EmployeesPage() {
                 </div>
                 <div
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 8,
                     background: "var(--bg-input)",
                     border: "1px solid var(--border)",
                     borderRadius: 10,
-                    padding: 12,
+                    overflow: "hidden",
                   }}
                 >
-                  {PERMISSION_KEYS.map((p) => (
-                    <label
-                      key={p.key}
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 8,
-                        fontSize: 12,
-                        color: "var(--text-secondary)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={!!form.permissions[p.key]}
-                        onChange={() => togglePerm(p.key)}
-                        style={{ marginTop: 2 }}
-                      />
-                      {p.label}
-                    </label>
-                  ))}
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                        <th
+                          style={{
+                            textAlign: "left",
+                            padding: "9px 12px",
+                            fontSize: 10,
+                            color: "var(--text-muted)",
+                            fontWeight: 600,
+                            letterSpacing: "0.05em",
+                            textTransform: "uppercase",
+                            fontFamily: "var(--font-main)",
+                          }}
+                        >
+                          Module
+                        </th>
+                        {["Read", "Write", "Delete"].map((h) => (
+                          <th
+                            key={h}
+                            style={{
+                              textAlign: "center",
+                              padding: "9px 12px",
+                              fontSize: 10,
+                              color: "var(--text-muted)",
+                              fontWeight: 600,
+                              letterSpacing: "0.05em",
+                              textTransform: "uppercase",
+                              fontFamily: "var(--font-main)",
+                              width: 64,
+                            }}
+                          >
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {PERMISSION_MODULES.map((mod) => (
+                        <tr key={mod.key} style={{ borderBottom: "1px solid var(--border)" }}>
+                          <td
+                            style={{
+                              padding: "10px 12px",
+                              fontSize: 12,
+                              fontWeight: 600,
+                              color: "var(--text-primary)",
+                              fontFamily: "var(--font-main)",
+                            }}
+                          >
+                            {mod.label}
+                          </td>
+                          {["read", "write", "delete"].map((action) => {
+                            const cell = mod[action];
+                            return (
+                              <td key={action} style={{ textAlign: "center", padding: "10px 12px" }}>
+                                {cell ? (
+                                  <input
+                                    type="checkbox"
+                                    title={
+                                      isCellPartial(form.permissions, cell)
+                                        ? `Partially granted — click to grant fully. ${cell.hint}`
+                                        : cell.hint
+                                    }
+                                    checked={isCellChecked(form.permissions, cell)}
+                                    ref={(el) => {
+                                      if (el) el.indeterminate = isCellPartial(form.permissions, cell);
+                                    }}
+                                    onChange={() => toggleCell(cell)}
+                                  />
+                                ) : (
+                                  <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
                   Every employee can always view, change stage, and log conversation notes on leads
-                  assigned to them — these checkboxes grant access beyond that.
+                  assigned to them — these checkboxes grant access beyond that. Hover a checkbox for
+                  exactly what it unlocks.
                 </div>
               </div>
 

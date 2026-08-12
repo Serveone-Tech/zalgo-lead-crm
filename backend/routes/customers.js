@@ -2,8 +2,17 @@ const express = require("express");
 const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { fireTrigger } = require("../utils/automation-trigger");
+const { isOwner } = require("../utils/permissions");
 
 const router = express.Router();
+
+// Employees only see customers assigned to them; owners/superadmins see all.
+// Unlike leads there's no "view all" override permission for this — the
+// ask was a strict admin-sees-all / employee-sees-own-assigned split.
+const visibilityClause = (req, paramIndex) => {
+  if (isOwner(req)) return { clause: "", params: [] };
+  return { clause: ` AND c.assigned_to=$${paramIndex}`, params: [req.user.id] };
+};
 
 // GET all customers
 router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
@@ -11,18 +20,19 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
     // Collected/due figures now come from each customer's Orders (Prepaid is
     // collected in full at fulfillment; COD tracks advance_paid vs balance)
     // instead of the old standalone payments ledger.
+    const vis = visibilityClause(req, 2);
     const result = await pool.query(
       `SELECT c.*, u.name AS assigned_to_name,
         COALESCE(SUM(co.advance_paid),0) AS total_collected,
         COALESCE(SUM(CASE WHEN co.payment_type='cod' THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
         (SELECT MIN(co2.next_due_date) FROM customer_orders co2
-         WHERE co2.customer_id=c.id AND co2.payment_type='cod'
+         WHERE co2.customer_id=c.id AND co2.payment_type='cod' AND co2.deleted_at IS NULL
            AND (co2.amount - COALESCE(co2.advance_paid,0)) > 0) AS next_due_date
        FROM customers c
-       LEFT JOIN customer_orders co ON co.customer_id=c.id
+       LEFT JOIN customer_orders co ON co.customer_id=c.id AND co.deleted_at IS NULL
        LEFT JOIN users u ON u.id=c.assigned_to
-       WHERE c.user_id=$1 GROUP BY c.id, u.name ORDER BY c.created_at DESC`,
-      [req.tenantId],
+       WHERE c.user_id=$1${vis.clause} GROUP BY c.id, u.name ORDER BY c.created_at DESC`,
+      [req.tenantId, ...vis.params],
     );
     res.json(result.rows);
   } catch (e) {
@@ -34,13 +44,14 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
 // GET due/upcoming — BEFORE /:id. Pulls unpaid balances from COD orders.
 router.get("/due/upcoming", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
+    const vis = visibilityClause(req, 2);
     const result = await pool.query(
       `SELECT co.id, co.customer_id, c.name AS customer_name, c.phone, c.email,
          co.next_due_date AS due_date, (co.amount - COALESCE(co.advance_paid,0)) AS amount
        FROM customer_orders co JOIN customers c ON c.id=co.customer_id
-       WHERE c.user_id=$1 AND co.payment_type='cod' AND (co.amount - COALESCE(co.advance_paid,0)) > 0
+       WHERE c.user_id=$1 AND co.deleted_at IS NULL AND co.payment_type='cod' AND (co.amount - COALESCE(co.advance_paid,0)) > 0${vis.clause}
        ORDER BY co.next_due_date ASC NULLS LAST LIMIT 30`,
-      [req.tenantId],
+      [req.tenantId, ...vis.params],
     );
     res.json(result.rows);
   } catch (e) {
@@ -49,18 +60,82 @@ router.get("/due/upcoming", auth, requireSubscription, requirePlanFeature("custo
   }
 });
 
+// ── Trash — owner-only, and BEFORE /:id so "trash" never gets swallowed as
+// an :id param. Orders deleted below land here instead of being destroyed
+// outright; only the owner can see this list or permanently remove
+// something from it.
+router.get("/trash/orders", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const orders = await pool.query(
+      `SELECT co.*, c.name AS customer_name
+       FROM customer_orders co JOIN customers c ON c.id=co.customer_id
+       WHERE c.user_id=$1 AND co.deleted_at IS NOT NULL
+       ORDER BY co.deleted_at DESC`,
+      [req.tenantId],
+    );
+    const orderIds = orders.rows.map((o) => o.id);
+    let items = [];
+    if (orderIds.length > 0) {
+      const itemsRes = await pool.query(
+        "SELECT * FROM order_items WHERE order_id = ANY($1::int[])",
+        [orderIds],
+      );
+      items = itemsRes.rows;
+    }
+    res.json(orders.rows.map((o) => ({ ...o, items: items.filter((i) => i.order_id === o.id) })));
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.delete("/trash/orders/:orderId", auth, async (req, res) => {
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const result = await pool.query(
+      `DELETE FROM customer_orders co USING customers c
+       WHERE co.id=$1 AND co.customer_id=c.id AND c.user_id=$2 AND co.deleted_at IS NOT NULL
+       RETURNING co.id`,
+      [req.params.orderId, req.tenantId],
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "Order not found in trash" });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.put("/trash/orders/:orderId/restore", auth, async (req, res) => {
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const result = await pool.query(
+      `UPDATE customer_orders co SET deleted_at=NULL
+       FROM customers c
+       WHERE co.id=$1 AND co.customer_id=c.id AND c.user_id=$2 AND co.deleted_at IS NOT NULL
+       RETURNING co.id`,
+      [req.params.orderId, req.tenantId],
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "Order not found in trash" });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // GET single customer
 router.get("/:id", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
+    const vis = visibilityClause(req, 3);
     const [cust, orders] = await Promise.all([
       pool.query(
         `SELECT c.*, u.name AS assigned_to_name FROM customers c
          LEFT JOIN users u ON u.id=c.assigned_to
-         WHERE c.id=$1 AND c.user_id=$2`,
-        [req.params.id, req.tenantId],
+         WHERE c.id=$1 AND c.user_id=$2${vis.clause}`,
+        [req.params.id, req.tenantId, ...vis.params],
       ),
       pool.query(
-        "SELECT * FROM customer_orders WHERE customer_id=$1 ORDER BY created_at DESC",
+        "SELECT * FROM customer_orders WHERE customer_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC",
         [req.params.id],
       ),
     ]);
@@ -151,10 +226,18 @@ router.put("/:id", auth, requirePermission("manage_customers"), async (req, res)
     assigned_to,
   } = req.body;
   try {
+    const vis = visibilityClause(req, 14);
+    // assigned_to only gets touched when the caller actually sent it — the
+    // main Edit Customer form doesn't include an assignment field at all, so
+    // treating a missing key as "unassign" was silently wiping out whatever
+    // assignment a lead had carried over on every unrelated detail edit.
+    const touchAssignment = assigned_to !== undefined;
     const result = await pool.query(
-      `UPDATE customers SET name=$1,phone=$2,email=$3,platform=$4,platform_link=$5,
-       total_fee=$6,notes=$7,status=$8,address=$9,pincode=$10,assigned_to=$11,updated_at=NOW()
-       WHERE id=$12 AND user_id=$13 RETURNING *`,
+      `UPDATE customers c SET name=$1,phone=$2,email=$3,platform=$4,platform_link=$5,
+       total_fee=$6,notes=$7,status=$8,address=$9,pincode=$10,
+       assigned_to=CASE WHEN $11 THEN $12::int ELSE assigned_to END,
+       updated_at=NOW()
+       WHERE id=$13 AND user_id=$14${vis.clause} RETURNING *`,
       [
         name,
         phone || "",
@@ -166,9 +249,11 @@ router.put("/:id", auth, requirePermission("manage_customers"), async (req, res)
         status || "Active",
         address || "",
         pincode || "",
-        assigned_to || null,
+        touchAssignment,
+        touchAssignment ? assigned_to || null : null,
         req.params.id,
         req.tenantId,
+        ...vis.params,
       ],
     );
     if (!result.rows[0]) return res.status(404).json({ error: "Not found" });
@@ -179,11 +264,13 @@ router.put("/:id", auth, requirePermission("manage_customers"), async (req, res)
 });
 
 // DELETE customer
-router.delete("/:id", auth, requirePermission("manage_customers"), async (req, res) => {
+router.delete("/:id", auth, requirePermission("delete_customers"), async (req, res) => {
   try {
-    await pool.query("DELETE FROM customers WHERE id=$1 AND user_id=$2", [
+    const vis = visibilityClause(req, 3);
+    await pool.query(`DELETE FROM customers c WHERE id=$1 AND user_id=$2${vis.clause}`, [
       req.params.id,
       req.tenantId,
+      ...vis.params,
     ]);
     res.json({ success: true });
   } catch (e) {
@@ -214,10 +301,11 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     items,
   } = req.body;
   try {
-    const owns = await pool.query("SELECT id FROM customers WHERE id=$1 AND user_id=$2", [
-      req.params.id,
-      req.tenantId,
-    ]);
+    const vis = visibilityClause(req, 3);
+    const owns = await pool.query(
+      `SELECT id FROM customers c WHERE id=$1 AND user_id=$2${vis.clause}`,
+      [req.params.id, req.tenantId, ...vis.params],
+    );
     if (!owns.rows[0]) return res.status(404).json({ error: "Not found" });
 
     await pool.query(
@@ -251,7 +339,7 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
          tracking_id=COALESCE($7, tracking_id),
          provider=COALESCE($8, provider),
          notes=COALESCE($9, notes)
-       WHERE id=$10 AND customer_id=$11 RETURNING *`,
+       WHERE id=$10 AND customer_id=$11 AND deleted_at IS NULL RETURNING *`,
       [
         address !== undefined ? address : null,
         pincode !== undefined ? pincode : null,
@@ -282,6 +370,30 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     }
 
     res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// DELETE order — soft delete only. An employee with manage_customers can
+// remove a mistaken/duplicate order from the customer's view, but the row
+// itself moves to Trash rather than being destroyed — only the owner can
+// permanently delete it from there (see /trash/orders below).
+router.delete("/:id/orders/:orderId", auth, requirePermission("manage_customers"), async (req, res) => {
+  try {
+    const vis = visibilityClause(req, 3);
+    const owns = await pool.query(
+      `SELECT id FROM customers c WHERE id=$1 AND user_id=$2${vis.clause}`,
+      [req.params.id, req.tenantId, ...vis.params],
+    );
+    if (!owns.rows[0]) return res.status(404).json({ error: "Not found" });
+
+    const result = await pool.query(
+      "UPDATE customer_orders SET deleted_at=NOW() WHERE id=$1 AND customer_id=$2 AND deleted_at IS NULL RETURNING id",
+      [req.params.orderId, req.params.id],
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "Order not found" });
+    res.json({ success: true });
   } catch (e) {
     res.status(500).json({ error: "Server error" });
   }

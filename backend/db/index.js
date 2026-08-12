@@ -86,6 +86,7 @@ const initDB = async () => {
     const alterCustomerOrders = [
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_type VARCHAR(20) DEFAULT 'prepaid'`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS advance_paid DECIMAL(12,2) DEFAULT 0`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
     ];
     for (const q of alterCustomerOrders) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));

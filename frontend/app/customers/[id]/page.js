@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import api, { formatCurrency } from "../../../lib/api";
+import api, { formatCurrency, refreshUser } from "../../../lib/api";
 import OrderFulfillmentModal from "../../../components/OrderFulfillmentModal";
+import { isOwnerUser, hasPerm } from "../../../lib/permissions";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -27,16 +28,28 @@ export default function CustomerDetailPage() {
   const [trackingId, setTrackingId] = useState(null);
   const [editOrderModal, setEditOrderModal] = useState(null);
   const [historyModalOrder, setHistoryModalOrder] = useState(null);
+  const [employees, setEmployees] = useState([]);
+  const [user, setUser] = useState(null);
+  const [deletingOrder, setDeletingOrder] = useState(null);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
       router.push("/login");
       return;
     }
+    const cached = localStorage.getItem("crm_user");
+    if (cached) setUser(JSON.parse(cached)); // show something immediately
+    refreshUser().then((fresh) => {
+      if (fresh) setUser(fresh); // then replace with the server's current permissions
+    });
     load();
     api
       .get("/delivery/credentials")
       .then((r) => setDeliveryEnabled(!!(r.data.enabled && r.data.provider)))
+      .catch(() => {});
+    api
+      .get("/employees/list")
+      .then((r) => setEmployees(r.data))
       .catch(() => {});
   }, [id]);
 
@@ -64,6 +77,18 @@ export default function CustomerDetailPage() {
     load();
   };
 
+  const deleteOrder = async (orderId) => {
+    if (!confirm("Delete this order? This can't be undone.")) return;
+    setDeletingOrder(orderId);
+    try {
+      await api.delete(`/customers/${id}/orders/${orderId}`);
+      load();
+    } catch {
+      // no-op — leave the order in place so the user can retry
+    }
+    setDeletingOrder(null);
+  };
+
   const load = async () => {
     setLoading(true);
     try {
@@ -79,6 +104,7 @@ export default function CustomerDetailPage() {
         total_fee: data.total_fee,
         notes: data.notes || "",
         status: data.status || "Active",
+        assigned_to: data.assigned_to || "",
       });
     } catch {
       router.push("/customers");
@@ -258,27 +284,29 @@ export default function CustomerDetailPage() {
                       )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => setEditing(true)}
-                    style={{
-                      background: "transparent",
-                      border: "1px solid var(--border)",
-                      borderRadius: 7,
-                      padding: "7px 14px",
-                      color: "var(--teal)",
-                      fontSize: 12,
-                      cursor: "pointer",
-                      fontWeight: 600,
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.borderColor = "var(--teal)")
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.borderColor = "var(--border)")
-                    }
-                  >
-                    Edit
-                  </button>
+                  {(isOwnerUser(user) || hasPerm(user, "manage_customers")) && (
+                    <button
+                      onClick={() => setEditing(true)}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid var(--border)",
+                        borderRadius: 7,
+                        padding: "7px 14px",
+                        color: "var(--teal)",
+                        fontSize: 12,
+                        cursor: "pointer",
+                        fontWeight: 600,
+                      }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.borderColor = "var(--teal)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.borderColor = "var(--border)")
+                      }
+                    >
+                      Edit
+                    </button>
+                  )}
                 </div>
                 {customer.platform_link && (
                   <a
@@ -450,6 +478,23 @@ export default function CustomerDetailPage() {
                       <option>Inactive</option>
                     </select>
                   </div>
+                  <div>
+                    <Lbl>Assigned To</Lbl>
+                    <select
+                      value={editForm.assigned_to || ""}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, assigned_to: e.target.value }))
+                      }
+                      style={inp}
+                    >
+                      <option value="">Unassigned</option>
+                      {employees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div style={{ gridColumn: "1/-1" }}>
                     <Lbl>Notes</Lbl>
                     <textarea
@@ -601,22 +646,44 @@ export default function CustomerDetailPage() {
                             {trackingId === o.id ? "Checking…" : "🚚 View Track"}
                           </button>
                         )}
-                        <button
-                          onClick={() => setEditOrderModal(o)}
-                          style={{
-                            padding: "6px 12px",
-                            borderRadius: 7,
-                            background: "transparent",
-                            border: "1px solid var(--border)",
-                            color: "var(--text-secondary)",
-                            fontSize: 11,
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          ✏️ Edit Order
-                        </button>
+                        {(isOwnerUser(user) || hasPerm(user, "manage_customers")) && (
+                          <button
+                            onClick={() => setEditOrderModal(o)}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: 7,
+                              background: "transparent",
+                              border: "1px solid var(--border)",
+                              color: "var(--text-secondary)",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            ✏️ Edit Order
+                          </button>
+                        )}
+                        {(isOwnerUser(user) || hasPerm(user, "manage_customers")) && (
+                          <button
+                            onClick={() => deleteOrder(o.id)}
+                            disabled={deletingOrder === o.id}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: 7,
+                              background: "transparent",
+                              border: "1px solid var(--border)",
+                              color: "var(--danger)",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: deletingOrder === o.id ? "not-allowed" : "pointer",
+                              whiteSpace: "nowrap",
+                              opacity: deletingOrder === o.id ? 0.5 : 1,
+                            }}
+                          >
+                            {deletingOrder === o.id ? "Deleting…" : "🗑️ Delete"}
+                          </button>
+                        )}
                       </div>
                     </div>
 

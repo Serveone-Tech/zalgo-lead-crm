@@ -30,6 +30,25 @@ api.interceptors.response.use(
   }
 );
 
+// Pages read the logged-in user's permissions from localStorage (set once at
+// login) so permission checks work without a network round-trip. But that
+// means an admin changing an employee's permissions never reaches that
+// employee's browser until they log out and back in — call this to pull the
+// latest permissions from the server and refresh the cached copy instead.
+export async function refreshUser() {
+  try {
+    const { data } = await api.get("/auth/me");
+    if (data?.user) {
+      localStorage.setItem("crm_user", JSON.stringify(data.user));
+      return data.user;
+    }
+  } catch {
+    // offline or token invalid — fall back to whatever's already cached
+  }
+  const cached = typeof window !== "undefined" ? localStorage.getItem("crm_user") : null;
+  return cached ? JSON.parse(cached) : null;
+}
+
 // ✅ SSR-safe currency formatter — exported properly
 export function formatCurrency(amount) {
   const num = parseFloat(amount) || 0;
