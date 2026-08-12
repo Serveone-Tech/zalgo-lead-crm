@@ -37,6 +37,11 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
   const [error, setError] = useState("");
   const [stages, setStages] = useState([]);
   const [inventory, setInventory] = useState([]);
+  // Whether the Discounted Price has been hand-edited — until it is, it
+  // auto-tracks the items total. An existing order's saved amount already
+  // reflects a deliberate (possibly discounted) figure, so edit mode starts
+  // "touched" to avoid silently overwriting it the moment items load.
+  const [amountTouched, setAmountTouched] = useState(isEdit);
 
   useEffect(() => {
     api
@@ -53,7 +58,29 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const itemsTotal = items.reduce(
+    (sum, it) => sum + (parseFloat(it.price) || 0) * (parseInt(it.quantity) || 0),
+    0,
+  );
+
+  // Keep the Discounted Price synced to the items total as items change —
+  // stops the moment the user types a number in that field themselves.
+  useEffect(() => {
+    if (!amountTouched) {
+      setForm((f) => ({ ...f, amount: itemsTotal.toFixed(2) }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsTotal]);
+
   const handle = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
+  const handleAmount = (e) => {
+    setAmountTouched(true);
+    setForm((f) => ({ ...f, amount: e.target.value }));
+  };
+  const resetAmountToTotal = () => {
+    setAmountTouched(false);
+    setForm((f) => ({ ...f, amount: itemsTotal.toFixed(2) }));
+  };
 
   const updateItem = (i, key, val) =>
     setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, [key]: val } : r)));
@@ -168,8 +195,36 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
             <Field label="Pincode">
               <input name="pincode" value={form.pincode} onChange={handle} placeholder="e.g. 110001" style={inp} />
             </Field>
-            <Field label="Order Amount (₹)">
-              <input name="amount" type="number" min="0" step="0.01" value={form.amount} onChange={handle} style={inp} />
+            <Field label="Items Total (₹)">
+              <input value={itemsTotal.toFixed(2)} readOnly style={inpLocked} />
+            </Field>
+            <Field
+              label={
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  Discounted Price (₹)
+                  {amountTouched && parseFloat(form.amount) !== itemsTotal && (
+                    <button
+                      type="button"
+                      onClick={resetAmountToTotal}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        color: "var(--teal)",
+                        fontSize: 10,
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        textTransform: "none",
+                        letterSpacing: 0,
+                        padding: 0,
+                      }}
+                    >
+                      reset to total
+                    </button>
+                  )}
+                </span>
+              }
+            >
+              <input name="amount" type="number" min="0" step="0.01" value={form.amount} onChange={handleAmount} style={inp} />
             </Field>
 
             <Field label="Payment Type">

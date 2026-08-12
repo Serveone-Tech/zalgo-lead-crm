@@ -8,6 +8,9 @@ export const PERMISSION_KEYS = [
   { key: "manage_customers", label: "Manage customers & payments" },
   { key: "delete_customers", label: "Delete customers" },
   { key: "view_customers", label: "View customers" },
+  { key: "view_inventory", label: "View inventory" },
+  { key: "manage_inventory", label: "Add/edit inventory items" },
+  { key: "delete_inventory", label: "Delete inventory items" },
   { key: "manage_automation", label: "Manage automation (email/SMS/WhatsApp)" },
   { key: "manage_employees", label: "Manage team / employees" },
   { key: "manage_settings", label: "Manage org settings" },
@@ -36,6 +39,13 @@ export const PERMISSION_MODULES = [
     read: { keys: ["view_customers"], hint: "View the Customers section at all" },
     write: { keys: ["manage_customers"], hint: "Add/edit customers, orders, delivery & payment info" },
     delete: { keys: ["delete_customers"], hint: "Delete customers" },
+  },
+  {
+    key: "inventory",
+    label: "Inventory",
+    read: { keys: ["view_inventory"], hint: "View the Inventory section at all" },
+    write: { keys: ["manage_inventory"], hint: "Add/edit inventory items and stock" },
+    delete: { keys: ["delete_inventory"], hint: "Delete inventory items" },
   },
   {
     key: "automation",

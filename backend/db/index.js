@@ -78,6 +78,7 @@ const initDB = async () => {
 
     const alterUserSettings = [
       `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS order_fulfillment_stage VARCHAR(50) DEFAULT ''`,
+      `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS low_stock_threshold INTEGER DEFAULT 10`,
     ];
     for (const q of alterUserSettings) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));

@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import api from "../../lib/api";
-import { AlertTriangle, Bell, CheckCircle2, ChevronRight } from "lucide-react";
+import api, { refreshUser } from "../../lib/api";
+import { isOwnerUser, hasPerm } from "../../lib/permissions";
+import { AlertTriangle, Bell, CheckCircle2, ChevronRight, Package } from "lucide-react";
 
 // Overdue = the exact scheduled moment (date + time) has already passed.
 function isOverdue(d) {
@@ -61,6 +62,8 @@ export default function NotificationsPage() {
   const [loading, setLoad] = useState(true);
   const [filter, setFilter] = useState("all");
   const [highlightId, setHighlightId] = useState(null);
+  const [lowStockItems, setLowStockItems] = useState([]);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("crm_token");
@@ -68,11 +71,30 @@ export default function NotificationsPage() {
       router.push("/login");
       return;
     }
+    const cached = localStorage.getItem("crm_user");
+    if (cached) setUser(JSON.parse(cached));
+    refreshUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
     const params = new URLSearchParams(window.location.search);
     const leadParam = params.get("lead");
     if (leadParam) setHighlightId(leadParam);
     load(leadParam);
+    loadLowStock();
   }, []);
+
+  const loadLowStock = async () => {
+    try {
+      const [invRes, settingsRes] = await Promise.all([
+        api.get("/inventory").catch(() => ({ data: [] })),
+        api.get("/settings").catch(() => ({ data: {} })),
+      ]);
+      const threshold = settingsRes.data.low_stock_threshold ?? 10;
+      setLowStockItems(invRes.data.filter((i) => i.stock_qty <= threshold));
+    } catch {
+      // no-op — the rest of the page still works without this
+    }
+  };
 
   const load = async (leadParam) => {
     setLoad(true);
@@ -154,6 +176,60 @@ export default function NotificationsPage() {
           </p>
         </div>
       </div>
+
+      {/* Low stock alerts — separate from the lead follow-up list below */}
+      {(isOwnerUser(user) || hasPerm(user, "view_inventory")) && lowStockItems.length > 0 && (
+        <div
+          style={{
+            background: "var(--warn-dim)",
+            border: "1px solid var(--warn)",
+            borderRadius: 12,
+            padding: "16px 20px",
+            marginBottom: 24,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <Package size={18} color="var(--warn)" />
+            <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--warn)" }}>
+              Low Stock — {lowStockItems.length} item{lowStockItems.length !== 1 ? "s" : ""} need restocking
+            </span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+            {lowStockItems.map((item) => (
+              <span
+                key={item.id}
+                style={{
+                  fontSize: 12,
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: "5px 12px",
+                  color: "var(--text-secondary)",
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                {item.name} — <strong style={{ color: item.stock_qty <= 0 ? "var(--danger)" : "var(--warn)" }}>{item.stock_qty} left</strong>
+              </span>
+            ))}
+          </div>
+          <button
+            onClick={() => router.push("/inventory")}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--warn)",
+              color: "var(--warn)",
+              borderRadius: 7,
+              padding: "7px 14px",
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "var(--font-main)",
+            }}
+          >
+            Go to Inventory →
+          </button>
+        </div>
+      )}
 
       {/* Filter tabs */}
       <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>

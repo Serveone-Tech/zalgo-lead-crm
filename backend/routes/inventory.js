@@ -2,9 +2,12 @@ const express = require("express");
 const router = express.Router();
 const { pool } = require("../db");
 const { auth } = require("../middleware/auth");
+const { hasPermission, isOwner } = require("../utils/permissions");
 
-// GET /api/inventory — anyone in the tenant can read (this is what powers
-// the item dropdown in the Order Fulfillment form), only the owner can write.
+// GET /api/inventory — deliberately open to any authenticated tenant member
+// (not gated by view_inventory) since this also powers the item dropdown in
+// the Order Fulfillment form, which every order-taker needs regardless of
+// whether they can see the dedicated Inventory page.
 router.get("/", auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -18,7 +21,9 @@ router.get("/", auth, async (req, res) => {
 });
 
 router.post("/", auth, async (req, res) => {
-  if (req.user.parentId) return res.status(403).json({ error: "Only account owner can manage inventory" });
+  if (!isOwner(req) && !hasPermission(req, "manage_inventory")) {
+    return res.status(403).json({ error: "Permission denied" });
+  }
   try {
     const { name, price = 0, stock_qty = 0 } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Name is required" });
@@ -33,7 +38,9 @@ router.post("/", auth, async (req, res) => {
 });
 
 router.put("/:id", auth, async (req, res) => {
-  if (req.user.parentId) return res.status(403).json({ error: "Only account owner can manage inventory" });
+  if (!isOwner(req) && !hasPermission(req, "manage_inventory")) {
+    return res.status(403).json({ error: "Permission denied" });
+  }
   try {
     const { name, price, stock_qty } = req.body;
     const { rows } = await pool.query(
@@ -62,7 +69,9 @@ router.put("/:id", auth, async (req, res) => {
 // NULL, so past orders keep their name/price snapshot even if the catalog
 // entry they were picked from is later removed.
 router.delete("/:id", auth, async (req, res) => {
-  if (req.user.parentId) return res.status(403).json({ error: "Only account owner can manage inventory" });
+  if (!isOwner(req) && !hasPermission(req, "delete_inventory")) {
+    return res.status(403).json({ error: "Permission denied" });
+  }
   try {
     await pool.query("DELETE FROM inventory_items WHERE id=$1 AND user_id=$2", [req.params.id, req.tenantId]);
     res.json({ success: true });

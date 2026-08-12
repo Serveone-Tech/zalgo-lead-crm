@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
-import { isOwnerUser } from "../../lib/permissions";
+import { isOwnerUser, hasPerm } from "../../lib/permissions";
 import { Package, Plus, Pencil, Trash2 } from "lucide-react";
 
 export default function InventoryPage() {
@@ -18,6 +18,9 @@ export default function InventoryPage() {
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(null);
   const [mounted, setMounted] = useState(false);
+  const [threshold, setThreshold] = useState(10);
+  const [thresholdInput, setThresholdInput] = useState("10");
+  const [thresholdSaving, setThresholdSaving] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -30,10 +33,18 @@ export default function InventoryPage() {
     refreshUser().then((fresh) => {
       if (fresh) {
         setUser(fresh);
-        if (!isOwnerUser(fresh)) router.push("/dashboard"); // only the owner manages the catalog
+        if (!isOwnerUser(fresh) && !hasPerm(fresh, "view_inventory")) router.push("/dashboard");
       }
     });
     load();
+    api
+      .get("/settings")
+      .then((r) => {
+        const t = r.data.low_stock_threshold ?? 10;
+        setThreshold(t);
+        setThresholdInput(String(t));
+      })
+      .catch(() => {});
   }, []);
 
   const load = async () => {
@@ -46,6 +57,17 @@ export default function InventoryPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveThreshold = async () => {
+    setThresholdSaving(true);
+    try {
+      const { data } = await api.put("/settings", { low_stock_threshold: thresholdInput });
+      setThreshold(data.low_stock_threshold);
+    } catch {
+      // no-op — input stays as typed so the user can retry
+    }
+    setThresholdSaving(false);
   };
 
   const openAdd = () => {
@@ -95,6 +117,7 @@ export default function InventoryPage() {
 
   const fmt = mounted ? formatCurrency : (n) => `₹${parseFloat(n) || 0}`;
   const filtered = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
+  const lowStockItems = items.filter((i) => i.stock_qty <= threshold);
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -118,25 +141,94 @@ export default function InventoryPage() {
             dropdown, with price filled in automatically.
           </p>
         </div>
-        <button
-          onClick={openAdd}
-          style={{
-            background: "var(--teal)",
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            padding: "9px 18px",
-            fontFamily: "var(--font-main)",
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          <Plus size={16} /> Add Item
-        </button>
+        {(isOwnerUser(user) || hasPerm(user, "manage_inventory")) && (
+          <button
+            onClick={openAdd}
+            style={{
+              background: "var(--teal)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              padding: "9px 18px",
+              fontFamily: "var(--font-main)",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Plus size={16} /> Add Item
+          </button>
+        )}
+      </div>
+
+      <div
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: 12,
+          padding: "14px 18px",
+          marginBottom: 16,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 18 }}>{lowStockItems.length > 0 ? "⚠️" : "✅"}</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: lowStockItems.length > 0 ? "var(--warn)" : "var(--text-secondary)", fontFamily: "var(--font-main)" }}>
+              {lowStockItems.length > 0
+                ? `${lowStockItems.length} item${lowStockItems.length !== 1 ? "s" : ""} at or below the low-stock alert level`
+                : "All items are above the low-stock alert level"}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+              You'll see a low-stock notification whenever stock drops to this number or below.
+            </div>
+          </div>
+        </div>
+        {(isOwnerUser(user) || hasPerm(user, "manage_settings")) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <label style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-main)" }}>Alert at</label>
+            <input
+              type="number"
+              min="0"
+              value={thresholdInput}
+              onChange={(e) => setThresholdInput(e.target.value)}
+              style={{
+                width: 70,
+                padding: "7px 10px",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: 7,
+                color: "var(--text-primary)",
+                fontSize: 13,
+                outline: "none",
+              }}
+            />
+            <button
+              onClick={saveThreshold}
+              disabled={thresholdSaving || parseInt(thresholdInput) === threshold}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 7,
+                background: thresholdSaving ? "var(--bg-hover)" : "var(--teal)",
+                border: "none",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: thresholdSaving || parseInt(thresholdInput) === threshold ? "not-allowed" : "pointer",
+                fontFamily: "var(--font-main)",
+              }}
+            >
+              {thresholdSaving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div style={{ marginBottom: 16 }}>
@@ -210,52 +302,56 @@ export default function InventoryPage() {
                       padding: "12px 14px",
                       fontSize: 13,
                       fontWeight: 600,
-                      color: item.stock_qty <= 0 ? "var(--danger)" : item.stock_qty <= 5 ? "var(--warn)" : "var(--success)",
+                      color: item.stock_qty <= 0 ? "var(--danger)" : item.stock_qty <= threshold ? "var(--warn)" : "var(--success)",
                     }}
                   >
                     {item.stock_qty}
-                    {item.stock_qty <= 0 ? " (out of stock)" : item.stock_qty <= 5 ? " (low)" : ""}
+                    {item.stock_qty <= 0 ? " (out of stock)" : item.stock_qty <= threshold ? " (low)" : ""}
                   </td>
                   <td style={{ padding: "12px 14px", textAlign: "right" }}>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                      <button
-                        onClick={() => openEdit(item)}
-                        style={{
-                          background: "transparent",
-                          border: "1px solid var(--border)",
-                          borderRadius: 6,
-                          padding: "5px 10px",
-                          color: "var(--teal)",
-                          fontSize: 11,
-                          cursor: "pointer",
-                          fontWeight: 600,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        <Pencil size={12} /> Edit
-                      </button>
-                      <button
-                        onClick={() => del(item)}
-                        disabled={deleting === item.id}
-                        style={{
-                          background: "transparent",
-                          border: "1px solid var(--border)",
-                          borderRadius: 6,
-                          padding: "5px 10px",
-                          color: "var(--danger)",
-                          fontSize: 11,
-                          cursor: "pointer",
-                          fontWeight: 600,
-                          opacity: deleting === item.id ? 0.5 : 1,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 4,
-                        }}
-                      >
-                        <Trash2 size={12} /> {deleting === item.id ? "…" : "Del"}
-                      </button>
+                      {(isOwnerUser(user) || hasPerm(user, "manage_inventory")) && (
+                        <button
+                          onClick={() => openEdit(item)}
+                          style={{
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            padding: "5px 10px",
+                            color: "var(--teal)",
+                            fontSize: 11,
+                            cursor: "pointer",
+                            fontWeight: 600,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <Pencil size={12} /> Edit
+                        </button>
+                      )}
+                      {(isOwnerUser(user) || hasPerm(user, "delete_inventory")) && (
+                        <button
+                          onClick={() => del(item)}
+                          disabled={deleting === item.id}
+                          style={{
+                            background: "transparent",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            padding: "5px 10px",
+                            color: "var(--danger)",
+                            fontSize: 11,
+                            cursor: "pointer",
+                            fontWeight: 600,
+                            opacity: deleting === item.id ? 0.5 : 1,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                        >
+                          <Trash2 size={12} /> {deleting === item.id ? "…" : "Del"}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

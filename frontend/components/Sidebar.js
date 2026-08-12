@@ -34,6 +34,7 @@ export default function Sidebar() {
   const [notifCount, setCount] = useState(0);
   const [dueCount, setDueCount] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
   const [theme, setTheme] = useState("dark");
   const [sub, setSub] = useState(null);
 
@@ -104,6 +105,17 @@ export default function Sidebar() {
       setDueCount(overdueDue.length);
       setPendingCount(pendingRes.data.length);
     } catch {}
+
+    // Low-stock alerts — only for whoever can actually see the Inventory
+    // section at all; a plain GET/settings pair, so no need to block on it.
+    try {
+      const [invRes, settingsRes] = await Promise.all([
+        api.get("/inventory").catch(() => ({ data: [] })),
+        api.get("/settings").catch(() => ({ data: {} })),
+      ]);
+      const threshold = settingsRes.data.low_stock_threshold ?? 10;
+      setLowStockCount(invRes.data.filter((i) => i.stock_qty <= threshold).length);
+    } catch {}
   };
 
   const logout = () => {
@@ -153,7 +165,7 @@ export default function Sidebar() {
         {
           href: "/notifications",
           label: "Notifications",
-          badge: notifCount,
+          badge: notifCount + lowStockCount,
           icon: (
             <svg
               width="16"
@@ -230,7 +242,7 @@ export default function Sidebar() {
               },
             ]
           : []),
-        ...(hasPlanFeature("customers") && isOwnerUser(user)
+        ...(hasPlanFeature("customers") && (isOwnerUser(user) || hasPerm(user, "view_inventory"))
           ? [
               {
                 href: "/inventory",

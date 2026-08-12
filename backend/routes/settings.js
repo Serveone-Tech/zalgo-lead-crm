@@ -44,19 +44,24 @@ router.put(
   auth,
   requirePermission("manage_settings"),
   async (req, res) => {
-    const { currency, currency_symbol, institute_name, order_fulfillment_stage } = req.body;
+    const { currency, currency_symbol, institute_name, order_fulfillment_stage, low_stock_threshold } = req.body;
     try {
-      // order_fulfillment_stage is saved from a different Settings tab —
-      // when this call doesn't include it, keep whatever was already saved
-      // instead of blanking it out.
+      // order_fulfillment_stage / low_stock_threshold are each saved from a
+      // different Settings tab — when a call doesn't include one, keep
+      // whatever was already saved instead of blanking/zeroing it out.
       const stageParam =
         order_fulfillment_stage !== undefined ? order_fulfillment_stage : null;
+      const thresholdParam =
+        low_stock_threshold !== undefined && low_stock_threshold !== ""
+          ? parseInt(low_stock_threshold)
+          : null;
       const result = await pool.query(
-        `INSERT INTO user_settings (user_id, currency, currency_symbol, institute_name, order_fulfillment_stage, updated_at)
-       VALUES ($1,$2,$3,$4,COALESCE($5,''),NOW())
+        `INSERT INTO user_settings (user_id, currency, currency_symbol, institute_name, order_fulfillment_stage, low_stock_threshold, updated_at)
+       VALUES ($1,$2,$3,$4,COALESCE($5,''),COALESCE($6,10),NOW())
        ON CONFLICT (user_id) DO UPDATE SET
          currency=$2, currency_symbol=$3, institute_name=$4,
          order_fulfillment_stage=COALESCE($5, user_settings.order_fulfillment_stage),
+         low_stock_threshold=COALESCE($6, user_settings.low_stock_threshold),
          updated_at=NOW()
        RETURNING *`,
         [
@@ -65,6 +70,7 @@ router.put(
           currency_symbol || "₹",
           institute_name || "",
           stageParam,
+          thresholdParam,
         ],
       );
       res.json(result.rows[0]);

@@ -31,6 +31,7 @@ export default function CustomerDetailPage() {
   const [employees, setEmployees] = useState([]);
   const [user, setUser] = useState(null);
   const [deletingOrder, setDeletingOrder] = useState(null);
+  const [markingPaid, setMarkingPaid] = useState(null);
   const [orderStages, setOrderStages] = useState([]);
   const [stageChanging, setStageChanging] = useState(null);
 
@@ -92,6 +93,20 @@ export default function CustomerDetailPage() {
     await api.put(`/customers/${id}/orders/${editOrderModal.id}`, form);
     setEditOrderModal(null);
     load();
+  };
+
+  const markOrderPaid = async (order) => {
+    setMarkingPaid(order.id);
+    try {
+      // Collect the full remaining balance in one go — advance_paid catching
+      // up to amount is what "fully collected" means everywhere else this
+      // order shows up (Payment Summary, the "due" list, etc).
+      await api.put(`/customers/${id}/orders/${order.id}`, { advance_paid: order.amount });
+      load();
+    } catch {
+      // no-op — button stays enabled so the user can retry
+    }
+    setMarkingPaid(null);
   };
 
   const deleteOrder = async (orderId) => {
@@ -696,6 +711,28 @@ export default function CustomerDetailPage() {
                             {trackingId === o.id ? "Checking…" : "🚚 View Track"}
                           </button>
                         )}
+                        {(isOwnerUser(user) || hasPerm(user, "manage_customers")) &&
+                          o.payment_type === "cod" &&
+                          parseFloat(o.amount || 0) - parseFloat(o.advance_paid || 0) > 0 && (
+                            <button
+                              onClick={() => markOrderPaid(o)}
+                              disabled={markingPaid === o.id}
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: 7,
+                                background: "transparent",
+                                border: "1px solid var(--success)",
+                                color: "var(--success)",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: markingPaid === o.id ? "not-allowed" : "pointer",
+                                whiteSpace: "nowrap",
+                                opacity: markingPaid === o.id ? 0.5 : 1,
+                              }}
+                            >
+                              {markingPaid === o.id ? "Updating…" : "✓ Mark as Paid"}
+                            </button>
+                          )}
                         {(isOwnerUser(user) || hasPerm(user, "manage_customers")) && (
                           <button
                             onClick={() => setEditOrderModal(o)}
