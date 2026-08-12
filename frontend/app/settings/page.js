@@ -37,6 +37,15 @@ export default function SettingsPage() {
   const [stageError, setStageError]       = useState('');
   const [stageSaving, setStageSaving]     = useState(false);
 
+  // Order stages — same shape as lead stages above, but for customer_orders
+  const [orderStages, setOrderStages]            = useState([]);
+  const [orderStagesLoading, setOrderStagesLoading] = useState(true);
+  const [editingOrderStage, setEditingOrderStage]   = useState(null);
+  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#00868a' });
+  const [addingOrderStage, setAddingOrderStage]     = useState(false);
+  const [orderStageError, setOrderStageError]       = useState('');
+  const [orderStageSaving, setOrderStageSaving]     = useState(false);
+
   // Change password
   const [pwForm, setPwForm]     = useState({ old_password: '', new_password: '', confirm_password: '' });
   const [pwSaving, setPwSaving] = useState(false);
@@ -51,6 +60,7 @@ export default function SettingsPage() {
     setUser(parsed);
     loadAll();
     loadStages();
+    loadOrderStages();
   }, []);
 
   const loadAll = async () => {
@@ -127,6 +137,52 @@ export default function SettingsPage() {
       await api.delete(`/stages/${s.id}`);
       await loadStages();
     } catch (err) { setStageError(err.response?.data?.error || 'Cannot delete this stage'); }
+  };
+
+  const loadOrderStages = async () => {
+    setOrderStagesLoading(true);
+    try {
+      const { data } = await api.get('/order-stages');
+      setOrderStages(data);
+    } catch {}
+    setOrderStagesLoading(false);
+  };
+
+  // ── Order Stage CRUD ────────────────────────────────────────────
+  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color }); setOrderStageError(''); };
+  const cancelEditOrderStage = () => { setEditingOrderStage(null); setOrderStageError(''); };
+  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#00868a' }); setOrderStageError(''); };
+
+  const saveEditOrderStage = async () => {
+    if (!editingOrderStage.name.trim()) { setOrderStageError('Name is required'); return; }
+    setOrderStageSaving(true); setOrderStageError('');
+    try {
+      await api.put(`/order-stages/${editingOrderStage.id}`, { name: editingOrderStage.name.trim(), color: editingOrderStage.color });
+      setEditingOrderStage(null);
+      await loadOrderStages();
+    } catch (err) { setOrderStageError(err.response?.data?.error || 'Failed to save'); }
+    setOrderStageSaving(false);
+  };
+
+  const saveNewOrderStage = async () => {
+    if (!newOrderStage.name.trim()) { setOrderStageError('Name is required'); return; }
+    setOrderStageSaving(true); setOrderStageError('');
+    try {
+      await api.post('/order-stages', { name: newOrderStage.name.trim(), color: newOrderStage.color, sort_order: orderStages.length });
+      setAddingOrderStage(false);
+      setNewOrderStage({ name: '', color: '#00868a' });
+      await loadOrderStages();
+    } catch (err) { setOrderStageError(err.response?.data?.error || 'Failed to save'); }
+    setOrderStageSaving(false);
+  };
+
+  const deleteOrderStage = async (s) => {
+    if (!confirm(`Delete order stage "${s.name}"? Orders using this stage must be moved first.`)) return;
+    setOrderStageError('');
+    try {
+      await api.delete(`/order-stages/${s.id}`);
+      await loadOrderStages();
+    } catch (err) { setOrderStageError(err.response?.data?.error || 'Cannot delete this stage'); }
   };
 
   // ── Change Password ─────────────────────────────────────────────
@@ -329,6 +385,115 @@ export default function SettingsPage() {
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                 >
                   <Plus size={14} /> Add Stage
+                </button>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Order Stages">
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+            Customise the stages an order moves through after fulfillment (e.g. Processing, Shipped, Delivered).
+            These show on each order and can be changed from the customer page or the order&apos;s edit form.
+          </p>
+
+          {orderStageError && <ErrorBox msg={orderStageError} />}
+
+          {orderStagesLoading ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>Loading stages…</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {orderStages.map(s => {
+                const isEditing = editingOrderStage?.id === s.id;
+                return (
+                  <div key={s.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                    borderRadius: 10, padding: '10px 14px',
+                  }}>
+                    <GripVertical size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
+                    <div style={{
+                      width: 14, height: 14, borderRadius: '50%',
+                      background: isEditing ? editingOrderStage.color : s.color,
+                      flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)',
+                    }} />
+
+                    {isEditing ? (
+                      <>
+                        <input
+                          value={editingOrderStage.name}
+                          onChange={e => setEditingOrderStage(es => ({ ...es, name: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') saveEditOrderStage(); if (e.key === 'Escape') cancelEditOrderStage(); }}
+                          autoFocus
+                          style={{ ...inp, flex: 1, padding: '5px 9px', fontSize: 13 }}
+                        />
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          {COLOR_PALETTE.map(c => (
+                            <button key={c} onClick={() => setEditingOrderStage(es => ({ ...es, color: c }))} title={c} style={{
+                              width: 18, height: 18, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer',
+                              outline: editingOrderStage.color === c ? `2px solid ${c}` : 'none', outlineOffset: 2, flexShrink: 0,
+                            }} />
+                          ))}
+                        </div>
+                        <button onClick={saveEditOrderStage} disabled={orderStageSaving} title="Save" style={iconBtn('var(--success)')}><Check size={14} /></button>
+                        <button onClick={cancelEditOrderStage} title="Cancel" style={iconBtn('var(--text-muted)')}><X size={14} /></button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-main)', color: 'var(--text-primary)' }}>
+                          {s.name}
+                        </span>
+                        <span style={{
+                          fontSize: 10, color: s.color, background: s.color + '22',
+                          borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)',
+                        }}>Stage</span>
+                        <button onClick={() => startEditOrderStage(s)} title="Edit" style={iconBtn('var(--teal)')}><Pencil size={13} /></button>
+                        <button onClick={() => deleteOrderStage(s)} title="Delete" style={iconBtn('var(--danger)')}><Trash2 size={13} /></button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+
+              {addingOrderStage ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  background: 'var(--bg-surface)', border: '1px solid var(--teal)',
+                  borderRadius: 10, padding: '10px 14px',
+                }}>
+                  <Plus size={14} style={{ color: 'var(--teal)', flexShrink: 0 }} />
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', background: newOrderStage.color, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }} />
+                  <input
+                    value={newOrderStage.name}
+                    onChange={e => setNewOrderStage(ns => ({ ...ns, name: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') saveNewOrderStage(); if (e.key === 'Escape') cancelAddOrderStage(); }}
+                    placeholder="Stage name…"
+                    autoFocus
+                    style={{ ...inp, flex: 1, padding: '5px 9px', fontSize: 13 }}
+                  />
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {COLOR_PALETTE.map(c => (
+                      <button key={c} onClick={() => setNewOrderStage(ns => ({ ...ns, color: c }))} title={c} style={{
+                        width: 18, height: 18, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer',
+                        outline: newOrderStage.color === c ? `2px solid ${c}` : 'none', outlineOffset: 2, flexShrink: 0,
+                      }} />
+                    ))}
+                  </div>
+                  <button onClick={saveNewOrderStage} disabled={orderStageSaving} title="Add" style={iconBtn('var(--success)')}><Check size={14} /></button>
+                  <button onClick={cancelAddOrderStage} title="Cancel" style={iconBtn('var(--text-muted)')}><X size={14} /></button>
+                </div>
+              ) : (
+                <button onClick={() => { setAddingOrderStage(true); setOrderStageError(''); }} style={{
+                  display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px',
+                  background: 'transparent', border: '1px dashed var(--border)',
+                  borderRadius: 10, color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer',
+                  fontFamily: 'var(--font-main)', fontWeight: 500, width: '100%',
+                  transition: 'border-color 0.15s, color 0.15s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.color = 'var(--teal)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                >
+                  <Plus size={14} /> Add Order Stage
                 </button>
               )}
             </div>

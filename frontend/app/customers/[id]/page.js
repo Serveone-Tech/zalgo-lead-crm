@@ -31,6 +31,8 @@ export default function CustomerDetailPage() {
   const [employees, setEmployees] = useState([]);
   const [user, setUser] = useState(null);
   const [deletingOrder, setDeletingOrder] = useState(null);
+  const [orderStages, setOrderStages] = useState([]);
+  const [stageChanging, setStageChanging] = useState(null);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -51,7 +53,22 @@ export default function CustomerDetailPage() {
       .get("/employees/list")
       .then((r) => setEmployees(r.data))
       .catch(() => {});
+    api
+      .get("/order-stages")
+      .then((r) => setOrderStages(r.data))
+      .catch(() => {});
   }, [id]);
+
+  const changeOrderStage = async (orderId, stage) => {
+    setStageChanging(orderId);
+    try {
+      await api.put(`/customers/${id}/orders/${orderId}`, { stage });
+      load();
+    } catch {
+      // no-op — dropdown just stays on whatever it was
+    }
+    setStageChanging(null);
+  };
 
   const viewTrack = async (order) => {
     setTrackingId(order.id);
@@ -601,6 +618,39 @@ export default function CustomerDetailPage() {
                           >
                             {o.payment_type === "cod" ? "COD" : "Prepaid"}
                           </span>
+                        </div>
+                        <div style={{ marginTop: 4 }}>
+                          {(isOwnerUser(user) || hasPerm(user, "manage_customers")) ? (
+                            <select
+                              value={o.stage || ""}
+                              onChange={(e) => changeOrderStage(o.id, e.target.value)}
+                              disabled={stageChanging === o.id}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                fontFamily: "var(--font-main)",
+                                borderRadius: 6,
+                                padding: "3px 8px",
+                                background: "var(--bg-card)",
+                                border: "1px solid var(--border)",
+                                color: "var(--text-secondary)",
+                                cursor: stageChanging === o.id ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              <option value="">— No stage —</option>
+                              {orderStages.map((s) => (
+                                <option key={s.id} value={s.name}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            o.stage && (
+                              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)" }}>
+                                {o.stage}
+                              </span>
+                            )
+                          )}
                         </div>
                         {o.payment_type === "cod" && (
                           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>

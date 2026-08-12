@@ -548,6 +548,7 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
     next_due_date,
     tracking_id,
     provider,
+    stage,
     notes,
     items,
   } = req.body;
@@ -585,8 +586,8 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
 
     const orderRes = await pool.query(
       `INSERT INTO customer_orders
-        (user_id, customer_id, address, pincode, amount, payment_type, advance_paid, next_due_date, tracking_id, provider, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+        (user_id, customer_id, address, pincode, amount, payment_type, advance_paid, next_due_date, tracking_id, provider, stage, notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
         req.tenantId,
         customer.id,
@@ -598,6 +599,7 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
         next_due_date || null,
         tracking_id || "",
         provider || "",
+        stage || "",
         notes || "",
       ],
     );

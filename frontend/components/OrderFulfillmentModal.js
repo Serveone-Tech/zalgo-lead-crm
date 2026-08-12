@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import api from "../lib/api";
 
 // Handles both creating an order (pass `lead`) and editing an existing one
 // (pass `order` + `customer`) — same field set either way. Only the primary
@@ -19,6 +20,7 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
     advance_paid: order?.advance_paid || "",
     next_due_date: order?.next_due_date ? order.next_due_date.split("T")[0] : "",
     tracking_id: order?.tracking_id || "",
+    stage: order?.stage || "",
     notes: order?.notes || "",
   });
   const [items, setItems] = useState(
@@ -28,6 +30,21 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [stages, setStages] = useState([]);
+
+  useEffect(() => {
+    api
+      .get("/order-stages")
+      .then((r) => {
+        setStages(r.data);
+        // Fresh orders default to the first configured stage instead of blank.
+        if (!isEdit && r.data.length > 0) {
+          setForm((f) => (f.stage ? f : { ...f, stage: r.data[0].name }));
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handle = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -161,6 +178,17 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
             </Field>
             <Field label="Courier Tracking ID">
               <input name="tracking_id" value={form.tracking_id} onChange={handle} placeholder="Optional — AWB / tracking number" style={inp} />
+            </Field>
+
+            <Field label="Order Stage">
+              <select name="stage" value={form.stage} onChange={handle} style={inp}>
+                <option value="">— None —</option>
+                {stages.map((s) => (
+                  <option key={s.id} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
 

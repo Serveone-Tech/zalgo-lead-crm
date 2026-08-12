@@ -87,6 +87,7 @@ const initDB = async () => {
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_type VARCHAR(20) DEFAULT 'prepaid'`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS advance_paid DECIMAL(12,2) DEFAULT 0`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS stage VARCHAR(50) DEFAULT ''`,
     ];
     for (const q of alterCustomerOrders) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -230,6 +231,7 @@ const initDB = async () => {
         next_due_date DATE,
         tracking_id VARCHAR(100) DEFAULT '',
         provider VARCHAR(50) DEFAULT '',
+        stage VARCHAR(50) DEFAULT '',
         notes TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT NOW()
       );
@@ -240,6 +242,18 @@ const initDB = async () => {
         name VARCHAR(255) NOT NULL,
         quantity INTEGER DEFAULT 1,
         price DECIMAL(12,2) DEFAULT 0
+      );
+
+      -- Admin-configurable order pipeline (mirrors the lead "stages" table)
+      -- so each tenant can name their own fulfillment stages instead of a
+      -- fixed enum.
+      CREATE TABLE IF NOT EXISTS order_stages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(50) NOT NULL,
+        color VARCHAR(7) DEFAULT '#00868a',
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW()
       );
 
       -- Per-tenant delivery-tracking provider config (Delhivery, Shiprocket,
@@ -333,6 +347,7 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_customer_payments_customer_id ON customer_payments(customer_id)`,
       `CREATE INDEX IF NOT EXISTS idx_lead_messages_lead_id ON lead_messages(lead_id)`,
       `CREATE INDEX IF NOT EXISTS idx_stages_user_id ON stages(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_order_stages_user_id ON order_stages(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_pending_leads_user_id ON pending_leads(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_automation_triggers_user_id ON automation_triggers(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_users_parent_id ON users(parent_id)`,
