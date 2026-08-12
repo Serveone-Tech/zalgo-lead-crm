@@ -360,14 +360,23 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     if (!result.rows[0]) return res.status(404).json({ error: "Order not found" });
 
     // Items are a full replace-set rather than a diff — simplest correct
-    // behavior for a form that just resubmits its whole items list.
+    // behavior for a form that just resubmits its whole items list. Note:
+    // unlike order creation, editing an order's items does NOT adjust
+    // inventory stock — reconciling a diff against whatever stock changes
+    // may have happened since is more complexity than this needs right now.
     if (Array.isArray(items)) {
       await pool.query("DELETE FROM order_items WHERE order_id=$1", [req.params.orderId]);
       const itemRows = items.filter((i) => i?.name?.trim());
       for (const item of itemRows) {
         await pool.query(
-          "INSERT INTO order_items (order_id, name, quantity, price) VALUES ($1,$2,$3,$4)",
-          [req.params.orderId, item.name.trim(), parseInt(item.quantity) || 1, parseFloat(item.price) || 0],
+          "INSERT INTO order_items (order_id, inventory_item_id, name, quantity, price) VALUES ($1,$2,$3,$4,$5)",
+          [
+            req.params.orderId,
+            item.inventory_item_id ? parseInt(item.inventory_item_id) : null,
+            item.name.trim(),
+            parseInt(item.quantity) || 1,
+            parseFloat(item.price) || 0,
+          ],
         );
       }
     }

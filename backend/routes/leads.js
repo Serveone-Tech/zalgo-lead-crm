@@ -607,10 +607,20 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
 
     const itemRows = Array.isArray(items) ? items.filter((i) => i?.name?.trim()) : [];
     for (const item of itemRows) {
+      const qty = parseInt(item.quantity) || 1;
+      const invId = item.inventory_item_id ? parseInt(item.inventory_item_id) : null;
       await pool.query(
-        "INSERT INTO order_items (order_id, name, quantity, price) VALUES ($1,$2,$3,$4)",
-        [order.id, item.name.trim(), parseInt(item.quantity) || 1, parseFloat(item.price) || 0],
+        "INSERT INTO order_items (order_id, inventory_item_id, name, quantity, price) VALUES ($1,$2,$3,$4,$5)",
+        [order.id, invId, item.name.trim(), qty, parseFloat(item.price) || 0],
       );
+      // Fulfilling an order draws down stock for whatever was picked from
+      // the catalog — manually-typed items (invId null) don't touch stock.
+      if (invId) {
+        await pool.query(
+          "UPDATE inventory_items SET stock_qty = stock_qty - $1, updated_at=NOW() WHERE id=$2 AND user_id=$3",
+          [qty, invId, req.tenantId],
+        );
+      }
     }
 
     res.json({ customer_id: customer.id, order_id: order.id });

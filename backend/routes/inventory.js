@@ -1,0 +1,74 @@
+const express = require("express");
+const router = express.Router();
+const { pool } = require("../db");
+const { auth } = require("../middleware/auth");
+
+// GET /api/inventory — anyone in the tenant can read (this is what powers
+// the item dropdown in the Order Fulfillment form), only the owner can write.
+router.get("/", auth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM inventory_items WHERE user_id=$1 ORDER BY name ASC",
+      [req.tenantId],
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/", auth, async (req, res) => {
+  if (req.user.parentId) return res.status(403).json({ error: "Only account owner can manage inventory" });
+  try {
+    const { name, price = 0, stock_qty = 0 } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: "Name is required" });
+    const { rows } = await pool.query(
+      "INSERT INTO inventory_items (user_id, name, price, stock_qty) VALUES ($1,$2,$3,$4) RETURNING *",
+      [req.tenantId, name.trim(), parseFloat(price) || 0, parseInt(stock_qty) || 0],
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put("/:id", auth, async (req, res) => {
+  if (req.user.parentId) return res.status(403).json({ error: "Only account owner can manage inventory" });
+  try {
+    const { name, price, stock_qty } = req.body;
+    const { rows } = await pool.query(
+      `UPDATE inventory_items SET
+         name=COALESCE($1, name),
+         price=COALESCE($2, price),
+         stock_qty=COALESCE($3, stock_qty),
+         updated_at=NOW()
+       WHERE id=$4 AND user_id=$5 RETURNING *`,
+      [
+        name?.trim() || null,
+        price !== undefined && price !== "" ? parseFloat(price) : null,
+        stock_qty !== undefined && stock_qty !== "" ? parseInt(stock_qty) : null,
+        req.params.id,
+        req.tenantId,
+      ],
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Item not found" });
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// No delete-guard needed — order_items.inventory_item_id is ON DELETE SET
+// NULL, so past orders keep their name/price snapshot even if the catalog
+// entry they were picked from is later removed.
+router.delete("/:id", auth, async (req, res) => {
+  if (req.user.parentId) return res.status(403).json({ error: "Only account owner can manage inventory" });
+  try {
+    await pool.query("DELETE FROM inventory_items WHERE id=$1 AND user_id=$2", [req.params.id, req.tenantId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;

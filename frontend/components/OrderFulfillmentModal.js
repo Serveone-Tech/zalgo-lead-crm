@@ -25,12 +25,18 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
   });
   const [items, setItems] = useState(
     order?.items?.length > 0
-      ? order.items.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price }))
-      : [{ name: "", quantity: 1, price: "" }],
+      ? order.items.map((i) => ({
+          inventory_item_id: i.inventory_item_id || "",
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+        }))
+      : [{ inventory_item_id: "", name: "", quantity: 1, price: "" }],
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [stages, setStages] = useState([]);
+  const [inventory, setInventory] = useState([]);
 
   useEffect(() => {
     api
@@ -43,6 +49,7 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
         }
       })
       .catch(() => {});
+    api.get("/inventory").then((r) => setInventory(r.data)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -50,8 +57,22 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
 
   const updateItem = (i, key, val) =>
     setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, [key]: val } : r)));
-  const addItem = () => setItems((rows) => [...rows, { name: "", quantity: 1, price: "" }]);
+  const addItem = () => setItems((rows) => [...rows, { inventory_item_id: "", name: "", quantity: 1, price: "" }]);
   const removeItem = (i) => setItems((rows) => rows.filter((_, idx) => idx !== i));
+
+  // Picking a catalog item fills name + price in one go; picking "Custom"
+  // clears the link and leaves both free-text for a one-off item.
+  const pickInventoryItem = (i, invId) => {
+    if (!invId) {
+      updateItemFields(i, { inventory_item_id: "", name: "", price: "" });
+      return;
+    }
+    const match = inventory.find((inv) => String(inv.id) === String(invId));
+    if (!match) return;
+    updateItemFields(i, { inventory_item_id: invId, name: match.name, price: match.price });
+  };
+  const updateItemFields = (i, patch) =>
+    setItems((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   const submit = async (e) => {
     e.preventDefault();
@@ -197,40 +218,66 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
             <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "var(--font-main)" }}>
               Items Given
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {items.map((item, i) => (
-                <div key={i} style={{ display: "flex", gap: 8 }}>
-                  <input
-                    value={item.name}
-                    onChange={(e) => updateItem(i, "name", e.target.value)}
-                    placeholder="Item name"
-                    style={{ ...inp, flex: 2 }}
-                  />
-                  <input
-                    type="number"
-                    min="1"
-                    value={item.quantity}
-                    onChange={(e) => updateItem(i, "quantity", e.target.value)}
-                    placeholder="Qty"
-                    style={{ ...inp, flex: 1 }}
-                  />
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={item.price}
-                    onChange={(e) => updateItem(i, "price", e.target.value)}
-                    placeholder="Price"
-                    style={{ ...inp, flex: 1 }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeItem(i)}
-                    disabled={items.length === 1}
-                    style={{ background: "none", border: "1px solid var(--border)", borderRadius: 6, color: "var(--danger)", cursor: items.length === 1 ? "not-allowed" : "pointer", padding: "0 10px", opacity: items.length === 1 ? 0.4 : 1 }}
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                    padding: 8,
+                    background: "var(--bg-surface)",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <select
+                    value={item.inventory_item_id || ""}
+                    onChange={(e) => pickInventoryItem(i, e.target.value)}
+                    style={inp}
                   >
-                    ✕
-                  </button>
+                    <option value="">✏️ Custom item (type below)</option>
+                    {inventory.map((inv) => (
+                      <option key={inv.id} value={inv.id} disabled={inv.stock_qty <= 0}>
+                        {inv.name} {inv.stock_qty <= 0 ? "(out of stock)" : `— stock ${inv.stock_qty}`}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input
+                      value={item.name}
+                      onChange={(e) => updateItem(i, "name", e.target.value)}
+                      readOnly={!!item.inventory_item_id}
+                      placeholder="Item name"
+                      style={{ ...(item.inventory_item_id ? inpLocked : inp), flex: 2 }}
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(i, "quantity", e.target.value)}
+                      placeholder="Qty"
+                      style={{ ...inp, flex: 1 }}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.price}
+                      onChange={(e) => updateItem(i, "price", e.target.value)}
+                      placeholder="Price"
+                      style={{ ...inp, flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeItem(i)}
+                      disabled={items.length === 1}
+                      style={{ background: "none", border: "1px solid var(--border)", borderRadius: 6, color: "var(--danger)", cursor: items.length === 1 ? "not-allowed" : "pointer", padding: "0 10px", opacity: items.length === 1 ? 0.4 : 1 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               ))}
               <button

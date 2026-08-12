@@ -236,9 +236,23 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- Admin-managed catalog so order items can be picked from a dropdown
+      -- instead of typed by hand every time, with price pulled in
+      -- automatically. stock_qty is decremented as orders are fulfilled.
+      CREATE TABLE IF NOT EXISTS inventory_items (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(255) NOT NULL,
+        price DECIMAL(12,2) DEFAULT 0,
+        stock_qty INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS order_items (
         id SERIAL PRIMARY KEY,
         order_id INTEGER REFERENCES customer_orders(id) ON DELETE CASCADE,
+        inventory_item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL,
         name VARCHAR(255) NOT NULL,
         quantity INTEGER DEFAULT 1,
         price DECIMAL(12,2) DEFAULT 0
@@ -329,6 +343,12 @@ const initDB = async () => {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
 
+    // Runs here (after inventory_items is created above), not in the early
+    // STEP 2 alters — the FK target has to already exist.
+    await client
+      .query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS inventory_item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL`)
+      .catch((e) => console.log("alter skip:", e.message));
+
     // ── STEP 3.6: Indexes ─────────────────────────────────────
     // Every query in this app filters by tenant (user_id) first — without an
     // index on it, Postgres was doing a full sequential scan of these tables
@@ -356,6 +376,7 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_customer_orders_user_id ON customer_orders(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)`,
       `CREATE INDEX IF NOT EXISTS idx_customers_assigned_to ON customers(assigned_to)`,
+      `CREATE INDEX IF NOT EXISTS idx_inventory_items_user_id ON inventory_items(user_id)`,
     ];
     for (const q of indexes) {
       await client.query(q).catch((e) => console.log("index skip:", e.message));
