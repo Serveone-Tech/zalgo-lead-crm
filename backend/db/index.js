@@ -89,8 +89,16 @@ const initDB = async () => {
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS advance_paid DECIMAL(12,2) DEFAULT 0`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS stage VARCHAR(50) DEFAULT ''`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS inventory_deducted BOOLEAN DEFAULT false`,
     ];
     for (const q of alterCustomerOrders) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
+
+    const alterOrderStages = [
+      `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS deduct_inventory BOOLEAN DEFAULT false`,
+    ];
+    for (const q of alterOrderStages) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
 
@@ -233,6 +241,10 @@ const initDB = async () => {
         tracking_id VARCHAR(100) DEFAULT '',
         provider VARCHAR(50) DEFAULT '',
         stage VARCHAR(50) DEFAULT '',
+        -- Guards against double-deducting inventory: set true the moment
+        -- this order's items are drawn down (either at creation, if no
+        -- deduct-stage is configured, or when it first reaches that stage).
+        inventory_deducted BOOLEAN DEFAULT false,
         notes TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT NOW()
       );
@@ -268,6 +280,11 @@ const initDB = async () => {
         name VARCHAR(50) NOT NULL,
         color VARCHAR(7) DEFAULT '#00868a',
         sort_order INTEGER DEFAULT 0,
+        -- At most one stage per tenant has this true — the stage an order
+        -- must reach before its items draw down inventory. If no stage has
+        -- it set, inventory is deducted immediately at order creation
+        -- instead (the original, simpler behavior).
+        deduct_inventory BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT NOW()
       );
 

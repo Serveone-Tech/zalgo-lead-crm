@@ -45,21 +45,33 @@ router.get('/', auth, async (req, res) => {
 // POST /api/order-stages
 router.post('/', auth, async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage order stages' });
+  const client = await pool.connect();
   try {
-    const { name, color = '#00868a', sort_order = 99 } = req.body;
+    const { name, color = '#00868a', sort_order = 99, deduct_inventory = false } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
-    const dup = await pool.query(
+    const dup = await client.query(
       'SELECT id FROM order_stages WHERE user_id=$1 AND LOWER(name)=LOWER($2)',
       [req.tenantId, name.trim()]
     );
     if (dup.rows.length > 0) return res.status(400).json({ error: 'A stage with this name already exists' });
-    const { rows } = await pool.query(
-      'INSERT INTO order_stages (user_id, name, color, sort_order) VALUES ($1,$2,$3,$4) RETURNING *',
-      [req.tenantId, name.trim(), color, sort_order]
+
+    await client.query('BEGIN');
+    // Only one stage can be the deduct-trigger at a time — picking a new one
+    // implicitly un-picks whichever stage had it before.
+    if (deduct_inventory) {
+      await client.query('UPDATE order_stages SET deduct_inventory=false WHERE user_id=$1', [req.tenantId]);
+    }
+    const { rows } = await client.query(
+      'INSERT INTO order_stages (user_id, name, color, sort_order, deduct_inventory) VALUES ($1,$2,$3,$4,$5) RETURNING *',
+      [req.tenantId, name.trim(), color, sort_order, !!deduct_inventory]
     );
+    await client.query('COMMIT');
     res.json(rows[0]);
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -68,7 +80,7 @@ router.put('/:id', auth, async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage order stages' });
   const client = await pool.connect();
   try {
-    const { name, color, sort_order } = req.body;
+    const { name, color, sort_order, deduct_inventory } = req.body;
     if (name !== undefined) {
       const dup = await client.query(
         'SELECT id FROM order_stages WHERE user_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3',
@@ -88,13 +100,23 @@ router.put('/:id', auth, async (req, res) => {
     const oldName = before.rows[0].name;
     const newName = name?.trim() ?? null;
 
+    // Only one stage can be the deduct-trigger at a time — turning it on
+    // here implicitly turns it off wherever else it was on.
+    if (deduct_inventory === true) {
+      await client.query(
+        'UPDATE order_stages SET deduct_inventory=false WHERE user_id=$1 AND id<>$2',
+        [req.tenantId, req.params.id],
+      );
+    }
+
     const { rows } = await client.query(
       `UPDATE order_stages SET
          name       = COALESCE($1, name),
          color      = COALESCE($2, color),
-         sort_order = COALESCE($3, sort_order)
-       WHERE id=$4 AND user_id=$5 RETURNING *`,
-      [newName, color ?? null, sort_order ?? null, req.params.id, req.tenantId]
+         sort_order = COALESCE($3, sort_order),
+         deduct_inventory = COALESCE($4, deduct_inventory)
+       WHERE id=$5 AND user_id=$6 RETURNING *`,
+      [newName, color ?? null, sort_order ?? null, deduct_inventory ?? null, req.params.id, req.tenantId]
     );
 
     // Renaming a stage must not orphan orders already sitting on the old name.

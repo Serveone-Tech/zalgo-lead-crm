@@ -32,6 +32,10 @@ export default function CustomerDetailPage() {
   const [user, setUser] = useState(null);
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [markingPaid, setMarkingPaid] = useState(null);
+  // Remembers what advance_paid was right before a "Mark as Paid" click, so
+  // an accidental click can be undone back to the real collected amount
+  // instead of just zeroing it out. Lost on page refresh — falls back to 0.
+  const [prevAdvance, setPrevAdvance] = useState({});
   const [orderStages, setOrderStages] = useState([]);
   const [stageChanging, setStageChanging] = useState(null);
 
@@ -102,6 +106,19 @@ export default function CustomerDetailPage() {
       // up to amount is what "fully collected" means everywhere else this
       // order shows up (Payment Summary, the "due" list, etc).
       await api.put(`/customers/${id}/orders/${order.id}`, { advance_paid: order.amount });
+      setPrevAdvance((m) => ({ ...m, [order.id]: order.advance_paid }));
+      load();
+    } catch {
+      // no-op — button stays enabled so the user can retry
+    }
+    setMarkingPaid(null);
+  };
+
+  const markOrderUnpaid = async (order) => {
+    setMarkingPaid(order.id);
+    try {
+      const restore = prevAdvance[order.id] ?? 0;
+      await api.put(`/customers/${id}/orders/${order.id}`, { advance_paid: restore });
       load();
     } catch {
       // no-op — button stays enabled so the user can retry
@@ -713,7 +730,7 @@ export default function CustomerDetailPage() {
                         )}
                         {(isOwnerUser(user) || hasPerm(user, "manage_customers")) &&
                           o.payment_type === "cod" &&
-                          parseFloat(o.amount || 0) - parseFloat(o.advance_paid || 0) > 0 && (
+                          (parseFloat(o.amount || 0) - parseFloat(o.advance_paid || 0) > 0 ? (
                             <button
                               onClick={() => markOrderPaid(o)}
                               disabled={markingPaid === o.id}
@@ -732,7 +749,27 @@ export default function CustomerDetailPage() {
                             >
                               {markingPaid === o.id ? "Updating…" : "✓ Mark as Paid"}
                             </button>
-                          )}
+                          ) : (
+                            <button
+                              onClick={() => markOrderUnpaid(o)}
+                              disabled={markingPaid === o.id}
+                              title="Undo — restores the balance this order had before"
+                              style={{
+                                padding: "6px 12px",
+                                borderRadius: 7,
+                                background: "transparent",
+                                border: "1px solid var(--warn)",
+                                color: "var(--warn)",
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: markingPaid === o.id ? "not-allowed" : "pointer",
+                                whiteSpace: "nowrap",
+                                opacity: markingPaid === o.id ? 0.5 : 1,
+                              }}
+                            >
+                              {markingPaid === o.id ? "Updating…" : "↩ Mark as Unpaid"}
+                            </button>
+                          ))}
                         {(isOwnerUser(user) || hasPerm(user, "manage_customers")) && (
                           <button
                             onClick={() => setEditOrderModal(o)}

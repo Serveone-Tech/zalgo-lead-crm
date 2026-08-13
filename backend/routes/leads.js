@@ -5,6 +5,7 @@ const { hasPermission, isOwner } = require("../utils/permissions");
 const { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
 const { getOrCreateCustomerFromLead } = require("../utils/customer-conversion");
 const { savePendingLead } = require("../utils/pending-leads");
+const { getDeductStageName, deductStockForOrder } = require("../utils/inventory");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -613,14 +614,16 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
         "INSERT INTO order_items (order_id, inventory_item_id, name, quantity, price) VALUES ($1,$2,$3,$4,$5)",
         [order.id, invId, item.name.trim(), qty, parseFloat(item.price) || 0],
       );
-      // Fulfilling an order draws down stock for whatever was picked from
-      // the catalog — manually-typed items (invId null) don't touch stock.
-      if (invId) {
-        await pool.query(
-          "UPDATE inventory_items SET stock_qty = stock_qty - $1, updated_at=NOW() WHERE id=$2 AND user_id=$3",
-          [qty, invId, req.tenantId],
-        );
-      }
+    }
+
+    // If the admin picked a specific order stage to trigger stock deduction,
+    // only draw down inventory now when this order is already starting on
+    // that stage — otherwise it waits for the stage change (see the order
+    // PUT route in customers.js). No deduct-stage configured at all means
+    // "not using this feature" — keep the original immediate-deduct behavior.
+    const deductStage = await getDeductStageName(req.tenantId);
+    if (!deductStage || deductStage === (stage || "")) {
+      await deductStockForOrder(order.id, req.tenantId);
     }
 
     res.json({ customer_id: customer.id, order_id: order.id });

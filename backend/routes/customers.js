@@ -3,6 +3,7 @@ const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { fireTrigger } = require("../utils/automation-trigger");
 const { isOwner } = require("../utils/permissions");
+const { getDeductStageName, deductStockForOrder } = require("../utils/inventory");
 
 const router = express.Router();
 
@@ -378,6 +379,19 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
             parseFloat(item.price) || 0,
           ],
         );
+      }
+    }
+
+    // If the order hasn't had its stock drawn down yet and just moved into
+    // the tenant's configured deduct-stage, this is the moment it happens —
+    // the guard (inventory_deducted) stops it from running again on a later
+    // edit that doesn't change the stage, or if the stage flips back and
+    // forth through the deduct-stage more than once.
+    if (stage !== undefined && !result.rows[0].inventory_deducted) {
+      const deductStage = await getDeductStageName(req.tenantId);
+      if (deductStage && stage === deductStage) {
+        await deductStockForOrder(req.params.orderId, req.tenantId);
+        result.rows[0].inventory_deducted = true;
       }
     }
 
