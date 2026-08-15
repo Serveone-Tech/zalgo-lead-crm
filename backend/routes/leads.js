@@ -5,7 +5,7 @@ const { hasPermission, isOwner } = require("../utils/permissions");
 const { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
 const { getOrCreateCustomerFromLead } = require("../utils/customer-conversion");
 const { savePendingLead } = require("../utils/pending-leads");
-const { getDeductStageName, deductStockForOrder } = require("../utils/inventory");
+const { getStageStockActions, isDeductStage, anyDeductStageConfigured, deductStockForOrder } = require("../utils/inventory");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -532,11 +532,10 @@ router.post("/:id/messages", auth, async (req, res) => {
 // POST fulfil an order for a lead — creates/reuses the matching Customer
 // record (same as a stage-based conversion) and logs the order + items
 // against it. Used by the "Fulfill Order" action shown once a lead reaches
-// the admin-configured order-fulfillment stage.
+// the admin-configured order-fulfillment stage. Open to every employee, no
+// permission required — anyone working a lead should be able to log its
+// order without needing to be granted manage_customers separately.
 router.post("/:id/fulfill-order", auth, async (req, res) => {
-  if (!isOwner(req) && !hasPermission(req, "manage_customers")) {
-    return res.status(403).json({ error: "Permission denied" });
-  }
   const {
     name,
     email,
@@ -616,13 +615,13 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
       );
     }
 
-    // If the admin picked a specific order stage to trigger stock deduction,
-    // only draw down inventory now when this order is already starting on
-    // that stage — otherwise it waits for the stage change (see the order
-    // PUT route in customers.js). No deduct-stage configured at all means
+    // If the admin has marked any stage(s) as a stock-deduct trigger, only
+    // draw down inventory now when this order is already starting on one of
+    // them — otherwise it waits for a later stage change (see the order PUT
+    // route in customers.js). No deduct stage configured anywhere means
     // "not using this feature" — keep the original immediate-deduct behavior.
-    const deductStage = await getDeductStageName(req.tenantId);
-    if (!deductStage || deductStage === (stage || "")) {
+    const stageRows = await getStageStockActions(req.tenantId);
+    if (!anyDeductStageConfigured(stageRows) || isDeductStage(stageRows, stage || "")) {
       await deductStockForOrder(order.id, req.tenantId);
     }
 

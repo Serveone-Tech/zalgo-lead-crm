@@ -3,7 +3,7 @@ const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { fireTrigger } = require("../utils/automation-trigger");
 const { isOwner } = require("../utils/permissions");
-const { getDeductStageName, deductStockForOrder } = require("../utils/inventory");
+const { getStageStockActions, isDeductStage, isRestoreStage, deductStockForOrder, restoreStockForOrder } = require("../utils/inventory");
 
 const router = express.Router();
 
@@ -382,16 +382,23 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
       }
     }
 
-    // If the order hasn't had its stock drawn down yet and just moved into
-    // the tenant's configured deduct-stage, this is the moment it happens —
-    // the guard (inventory_deducted) stops it from running again on a later
-    // edit that doesn't change the stage, or if the stage flips back and
-    // forth through the deduct-stage more than once.
-    if (stage !== undefined && !result.rows[0].inventory_deducted) {
-      const deductStage = await getDeductStageName(req.tenantId);
-      if (deductStage && stage === deductStage) {
+    // A stage change can trigger stock moving either direction:
+    //  - into a 'deduct' stage (e.g. Confirmed) draws down stock, but only
+    //    if it hasn't already been drawn down for this order.
+    //  - into a 'restore' stage (e.g. Hold, Cancelled) gives it back, but
+    //    only if it was actually deducted in the first place — moving an
+    //    order that was never confirmed straight to Cancelled has nothing
+    //    to restore.
+    // The inventory_deducted flag is what makes both directions safe to run
+    // repeatedly as the stage flips back and forth.
+    if (stage !== undefined) {
+      const stageRows = await getStageStockActions(req.tenantId);
+      if (!result.rows[0].inventory_deducted && isDeductStage(stageRows, stage)) {
         await deductStockForOrder(req.params.orderId, req.tenantId);
         result.rows[0].inventory_deducted = true;
+      } else if (result.rows[0].inventory_deducted && isRestoreStage(stageRows, stage)) {
+        await restoreStockForOrder(req.params.orderId, req.tenantId);
+        result.rows[0].inventory_deducted = false;
       }
     }
 

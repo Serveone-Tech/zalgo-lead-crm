@@ -48,9 +48,11 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
       .get("/order-stages")
       .then((r) => {
         setStages(r.data);
-        // Fresh orders default to the first configured stage instead of blank.
+        // Fresh orders start on whichever stage the admin marked as default,
+        // falling back to the first configured stage if none is marked.
         if (!isEdit && r.data.length > 0) {
-          setForm((f) => (f.stage ? f : { ...f, stage: r.data[0].name }));
+          const defaultStage = r.data.find((s) => s.is_default) || r.data[0];
+          setForm((f) => (f.stage ? f : { ...f, stage: defaultStage.name }));
         }
       })
       .catch(() => {});
@@ -295,7 +297,7 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
                     <option value="">✏️ Custom item (type below)</option>
                     {inventory.map((inv) => (
                       <option key={inv.id} value={inv.id} disabled={inv.stock_qty <= 0}>
-                        {inv.name} {inv.stock_qty <= 0 ? "(out of stock)" : `— stock ${inv.stock_qty}`}
+                        {inv.name}{inv.stock_qty <= 0 ? " (out of stock)" : ""}
                       </option>
                     ))}
                   </select>

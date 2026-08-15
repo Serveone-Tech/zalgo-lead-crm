@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
-import { Users, DollarSign, Clock, TrendingUp, Trash2 } from "lucide-react";
+import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar } from "lucide-react";
 
 function today() {
   return new Date().toISOString().split("T")[0];
@@ -43,6 +43,8 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -74,14 +76,19 @@ export default function CustomersPage() {
     () =>
       customers.filter((c) => {
         const q = search.toLowerCase();
-        return (
-          !q ||
-          c.name.toLowerCase().includes(q) ||
-          (c.phone || "").includes(q) ||
-          (c.email || "").toLowerCase().includes(q)
-        );
+        if (
+          q &&
+          !c.name.toLowerCase().includes(q) &&
+          !(c.phone || "").includes(q) &&
+          !(c.email || "").toLowerCase().includes(q)
+        )
+          return false;
+        const enrolledDate = c.created_at ? c.created_at.split("T")[0] : null;
+        if (dateFrom && (!enrolledDate || enrolledDate < dateFrom)) return false;
+        if (dateTo && (!enrolledDate || enrolledDate > dateTo)) return false;
+        return true;
       }),
-    [customers, search],
+    [customers, search, dateFrom, dateTo],
   );
 
   const addCustomer = async (e) => {
@@ -117,15 +124,18 @@ export default function CustomersPage() {
   };
 
   const fmt = mounted ? formatCurrency : (n) => `₹${parseFloat(n) || 0}`;
-  const totalFee = customers.reduce(
+  // Cards reflect whatever's currently filtered (search + date range), not
+  // the whole unfiltered customer list — so picking a date range actually
+  // changes the numbers shown, not just the table rows.
+  const totalFee = filtered.reduce(
     (s, c) => s + parseFloat(c.total_fee || 0),
     0,
   );
-  const totalCollected = customers.reduce(
+  const totalCollected = filtered.reduce(
     (s, c) => s + parseFloat(c.total_collected || 0),
     0,
   );
-  const totalDue = customers.reduce(
+  const totalDue = filtered.reduce(
     (s, c) => s + parseFloat(c.total_due_amount || 0),
     0,
   );
@@ -216,7 +226,7 @@ export default function CustomersPage() {
         {[
           {
             label: "Total Customers",
-            value: customers.length,
+            value: filtered.length,
             color: "var(--teal)",
             icon: <Users size={18} />,
           },
@@ -276,13 +286,14 @@ export default function CustomersPage() {
         ))}
       </div>
 
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="🔍  Search by name, phone, email..."
           style={{
-            width: "100%",
+            flex: 1,
+            minWidth: 240,
             maxWidth: 420,
             padding: "10px 14px",
             background: "var(--bg-card)",
@@ -294,6 +305,55 @@ export default function CustomersPage() {
             fontFamily: "var(--font-main)",
           }}
         />
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "0 12px",
+          }}
+        >
+          <Calendar size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            max={dateTo || undefined}
+            title="Enrolled from"
+            style={dateInputStyle}
+          />
+          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            min={dateFrom || undefined}
+            title="Enrolled until"
+            style={dateInputStyle}
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+              }}
+              title="Clear date range"
+              style={{
+                background: "none",
+                border: "none",
+                color: "var(--text-muted)",
+                cursor: "pointer",
+                fontSize: 13,
+                padding: "4px 2px",
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       <div
@@ -933,4 +993,15 @@ const inp = {
   color: "var(--text-primary)",
   fontSize: 13,
   outline: "none",
+};
+const dateInputStyle = {
+  padding: "10px 2px",
+  background: "transparent",
+  border: "none",
+  color: "var(--text-primary)",
+  fontSize: 13,
+  outline: "none",
+  cursor: "pointer",
+  fontFamily: "var(--font-main)",
+  width: 118,
 };

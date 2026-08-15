@@ -42,13 +42,16 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+const STOCK_ACTIONS = ['none', 'deduct', 'restore'];
+
 // POST /api/order-stages
 router.post('/', auth, async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage order stages' });
   const client = await pool.connect();
   try {
-    const { name, color = '#00868a', sort_order = 99, deduct_inventory = false } = req.body;
+    const { name, color = '#00868a', sort_order = 99, stock_action = 'none', is_default = false } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+    if (!STOCK_ACTIONS.includes(stock_action)) return res.status(400).json({ error: 'Invalid stock action' });
     const dup = await client.query(
       'SELECT id FROM order_stages WHERE user_id=$1 AND LOWER(name)=LOWER($2)',
       [req.tenantId, name.trim()]
@@ -56,14 +59,14 @@ router.post('/', auth, async (req, res) => {
     if (dup.rows.length > 0) return res.status(400).json({ error: 'A stage with this name already exists' });
 
     await client.query('BEGIN');
-    // Only one stage can be the deduct-trigger at a time — picking a new one
-    // implicitly un-picks whichever stage had it before.
-    if (deduct_inventory) {
-      await client.query('UPDATE order_stages SET deduct_inventory=false WHERE user_id=$1', [req.tenantId]);
+    // Any number of stages can deduct or restore, but only one can be the
+    // default starting stage — picking a new one un-picks whichever had it.
+    if (is_default) {
+      await client.query('UPDATE order_stages SET is_default=false WHERE user_id=$1', [req.tenantId]);
     }
     const { rows } = await client.query(
-      'INSERT INTO order_stages (user_id, name, color, sort_order, deduct_inventory) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [req.tenantId, name.trim(), color, sort_order, !!deduct_inventory]
+      'INSERT INTO order_stages (user_id, name, color, sort_order, stock_action, is_default) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+      [req.tenantId, name.trim(), color, sort_order, stock_action, !!is_default]
     );
     await client.query('COMMIT');
     res.json(rows[0]);
@@ -80,7 +83,10 @@ router.put('/:id', auth, async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage order stages' });
   const client = await pool.connect();
   try {
-    const { name, color, sort_order, deduct_inventory } = req.body;
+    const { name, color, sort_order, stock_action, is_default } = req.body;
+    if (stock_action !== undefined && !STOCK_ACTIONS.includes(stock_action)) {
+      return res.status(400).json({ error: 'Invalid stock action' });
+    }
     if (name !== undefined) {
       const dup = await client.query(
         'SELECT id FROM order_stages WHERE user_id=$1 AND LOWER(name)=LOWER($2) AND id<>$3',
@@ -100,11 +106,13 @@ router.put('/:id', auth, async (req, res) => {
     const oldName = before.rows[0].name;
     const newName = name?.trim() ?? null;
 
-    // Only one stage can be the deduct-trigger at a time — turning it on
-    // here implicitly turns it off wherever else it was on.
-    if (deduct_inventory === true) {
+    // Only one stage can be the default starting stage at a time — turning
+    // it on here implicitly turns it off wherever else it was on. Unlike
+    // is_default, stock_action has no such exclusivity — any number of
+    // stages can independently deduct or restore.
+    if (is_default === true) {
       await client.query(
-        'UPDATE order_stages SET deduct_inventory=false WHERE user_id=$1 AND id<>$2',
+        'UPDATE order_stages SET is_default=false WHERE user_id=$1 AND id<>$2',
         [req.tenantId, req.params.id],
       );
     }
@@ -114,9 +122,10 @@ router.put('/:id', auth, async (req, res) => {
          name       = COALESCE($1, name),
          color      = COALESCE($2, color),
          sort_order = COALESCE($3, sort_order),
-         deduct_inventory = COALESCE($4, deduct_inventory)
-       WHERE id=$5 AND user_id=$6 RETURNING *`,
-      [newName, color ?? null, sort_order ?? null, deduct_inventory ?? null, req.params.id, req.tenantId]
+         stock_action = COALESCE($4, stock_action),
+         is_default = COALESCE($5, is_default)
+       WHERE id=$6 AND user_id=$7 RETURNING *`,
+      [newName, color ?? null, sort_order ?? null, stock_action ?? null, is_default ?? null, req.params.id, req.tenantId]
     );
 
     // Renaming a stage must not orphan orders already sitting on the old name.

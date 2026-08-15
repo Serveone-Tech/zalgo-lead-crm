@@ -41,7 +41,7 @@ export default function SettingsPage() {
   const [orderStages, setOrderStages]            = useState([]);
   const [orderStagesLoading, setOrderStagesLoading] = useState(true);
   const [editingOrderStage, setEditingOrderStage]   = useState(null);
-  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#00868a', deduct_inventory: false });
+  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#00868a', stock_action: 'none', is_default: false });
   const [addingOrderStage, setAddingOrderStage]     = useState(false);
   const [orderStageError, setOrderStageError]       = useState('');
   const [orderStageSaving, setOrderStageSaving]     = useState(false);
@@ -149,9 +149,9 @@ export default function SettingsPage() {
   };
 
   // ── Order Stage CRUD ────────────────────────────────────────────
-  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, deduct_inventory: s.deduct_inventory }); setOrderStageError(''); };
+  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, stock_action: s.stock_action || 'none', is_default: s.is_default }); setOrderStageError(''); };
   const cancelEditOrderStage = () => { setEditingOrderStage(null); setOrderStageError(''); };
-  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#00868a', deduct_inventory: false }); setOrderStageError(''); };
+  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false }); setOrderStageError(''); };
 
   const saveEditOrderStage = async () => {
     if (!editingOrderStage.name.trim()) { setOrderStageError('Name is required'); return; }
@@ -160,7 +160,8 @@ export default function SettingsPage() {
       await api.put(`/order-stages/${editingOrderStage.id}`, {
         name: editingOrderStage.name.trim(),
         color: editingOrderStage.color,
-        deduct_inventory: editingOrderStage.deduct_inventory,
+        stock_action: editingOrderStage.stock_action,
+        is_default: editingOrderStage.is_default,
       });
       setEditingOrderStage(null);
       await loadOrderStages();
@@ -176,10 +177,11 @@ export default function SettingsPage() {
         name: newOrderStage.name.trim(),
         color: newOrderStage.color,
         sort_order: orderStages.length,
-        deduct_inventory: newOrderStage.deduct_inventory,
+        stock_action: newOrderStage.stock_action,
+        is_default: newOrderStage.is_default,
       });
       setAddingOrderStage(false);
-      setNewOrderStage({ name: '', color: '#00868a', deduct_inventory: false });
+      setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false });
       await loadOrderStages();
     } catch (err) { setOrderStageError(err.response?.data?.error || 'Failed to save'); }
     setOrderStageSaving(false);
@@ -404,9 +406,11 @@ export default function SettingsPage() {
           <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
             Customise the stages an order moves through after fulfillment (e.g. Processing, Shipped, Delivered).
             These show on each order and can be changed from the customer page or the order&apos;s edit form.
-            Mark one stage with 📦 to have inventory stock only draw down once an order reaches it — handy if
-            orders sometimes get placed on hold before they&apos;re confirmed. Leave every stage unmarked to keep
-            deducting stock immediately when an order is created (the default).
+            Click a stage to mark it 📦 <strong>Deduct stock</strong> (stock only draws down once an order reaches
+            it — handy if orders sometimes get placed on hold before they&apos;re confirmed) or ↩ <strong>Restore
+            stock</strong> (gives it back if an order later moves to Hold/Cancelled after being confirmed). Leave
+            every stage unmarked to keep deducting stock immediately when an order is created (the default). You can
+            also mark one stage ⭐ as where new orders start out.
           </p>
 
           {orderStageError && <ErrorBox msg={orderStageError} />}
@@ -419,10 +423,11 @@ export default function SettingsPage() {
                 const isEditing = editingOrderStage?.id === s.id;
                 return (
                   <div key={s.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
+                    display: 'flex', flexDirection: 'column', gap: 8,
                     background: 'var(--bg-surface)', border: '1px solid var(--border)',
                     borderRadius: 10, padding: '10px 14px',
                   }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <GripVertical size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                     <div style={{
                       width: 14, height: 14, borderRadius: '50%',
@@ -447,21 +452,6 @@ export default function SettingsPage() {
                             }} />
                           ))}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setEditingOrderStage(es => ({ ...es, deduct_inventory: !es.deduct_inventory }))}
-                          title={editingOrderStage.deduct_inventory ? 'Inventory deducts here — click to turn off' : 'Deduct inventory when an order reaches this stage'}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-                            padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
-                            border: `1px solid ${editingOrderStage.deduct_inventory ? 'var(--teal)' : 'var(--border)'}`,
-                            background: editingOrderStage.deduct_inventory ? 'var(--teal-dim)' : 'transparent',
-                            color: editingOrderStage.deduct_inventory ? 'var(--teal-light)' : 'var(--text-muted)',
-                            fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
-                          }}
-                        >
-                          📦 {editingOrderStage.deduct_inventory ? 'Deducts stock' : 'Deduct stock here'}
-                        </button>
                         <button onClick={saveEditOrderStage} disabled={orderStageSaving} title="Save" style={iconBtn('var(--success)')}><Check size={14} /></button>
                         <button onClick={cancelEditOrderStage} title="Cancel" style={iconBtn('var(--text-muted)')}><X size={14} /></button>
                       </>
@@ -470,11 +460,23 @@ export default function SettingsPage() {
                         <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-main)', color: 'var(--text-primary)' }}>
                           {s.name}
                         </span>
-                        {s.deduct_inventory && (
+                        {s.is_default && (
+                          <span style={{
+                            fontSize: 10, color: 'var(--warn)', background: 'var(--warn-dim)',
+                            borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                          }}>⭐ Default</span>
+                        )}
+                        {s.stock_action === 'deduct' && (
                           <span style={{
                             fontSize: 10, color: 'var(--teal-light)', background: 'var(--teal-dim)',
                             borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
                           }}>📦 Deducts stock</span>
+                        )}
+                        {s.stock_action === 'restore' && (
+                          <span style={{
+                            fontSize: 10, color: 'var(--success)', background: 'rgba(82,184,138,0.12)',
+                            borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                          }}>↩ Restores stock</span>
                         )}
                         <span style={{
                           fontSize: 10, color: s.color, background: s.color + '22',
@@ -485,50 +487,117 @@ export default function SettingsPage() {
                       </>
                     )}
                   </div>
+
+                  {isEditing && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 24, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)', marginRight: 4 }}>On this stage:</span>
+                      {[
+                        { key: 'none', label: 'No stock change' },
+                        { key: 'deduct', label: '📦 Deduct stock' },
+                        { key: 'restore', label: '↩ Restore stock' },
+                      ].map(opt => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => setEditingOrderStage(es => ({ ...es, stock_action: opt.key }))}
+                          style={{
+                            padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                            border: `1px solid ${editingOrderStage.stock_action === opt.key ? 'var(--teal)' : 'var(--border)'}`,
+                            background: editingOrderStage.stock_action === opt.key ? 'var(--teal-dim)' : 'transparent',
+                            color: editingOrderStage.stock_action === opt.key ? 'var(--teal-light)' : 'var(--text-muted)',
+                            fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                      <span style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
+                      <button
+                        type="button"
+                        onClick={() => setEditingOrderStage(es => ({ ...es, is_default: !es.is_default }))}
+                        title="Where a freshly fulfilled order starts out"
+                        style={{
+                          padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                          border: `1px solid ${editingOrderStage.is_default ? 'var(--warn)' : 'var(--border)'}`,
+                          background: editingOrderStage.is_default ? 'var(--warn-dim)' : 'transparent',
+                          color: editingOrderStage.is_default ? 'var(--warn)' : 'var(--text-muted)',
+                          fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        ⭐ {editingOrderStage.is_default ? 'Default for new orders' : 'Set as default'}
+                      </button>
+                    </div>
+                  )}
+                  </div>
                 );
               })}
 
               {addingOrderStage ? (
                 <div style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
+                  display: 'flex', flexDirection: 'column', gap: 8,
                   background: 'var(--bg-surface)', border: '1px solid var(--teal)',
                   borderRadius: 10, padding: '10px 14px',
                 }}>
-                  <Plus size={14} style={{ color: 'var(--teal)', flexShrink: 0 }} />
-                  <div style={{ width: 14, height: 14, borderRadius: '50%', background: newOrderStage.color, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }} />
-                  <input
-                    value={newOrderStage.name}
-                    onChange={e => setNewOrderStage(ns => ({ ...ns, name: e.target.value }))}
-                    onKeyDown={e => { if (e.key === 'Enter') saveNewOrderStage(); if (e.key === 'Escape') cancelAddOrderStage(); }}
-                    placeholder="Stage name…"
-                    autoFocus
-                    style={{ ...inp, flex: 1, padding: '5px 9px', fontSize: 13 }}
-                  />
-                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                    {COLOR_PALETTE.map(c => (
-                      <button key={c} onClick={() => setNewOrderStage(ns => ({ ...ns, color: c }))} title={c} style={{
-                        width: 18, height: 18, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer',
-                        outline: newOrderStage.color === c ? `2px solid ${c}` : 'none', outlineOffset: 2, flexShrink: 0,
-                      }} />
-                    ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Plus size={14} style={{ color: 'var(--teal)', flexShrink: 0 }} />
+                    <div style={{ width: 14, height: 14, borderRadius: '50%', background: newOrderStage.color, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }} />
+                    <input
+                      value={newOrderStage.name}
+                      onChange={e => setNewOrderStage(ns => ({ ...ns, name: e.target.value }))}
+                      onKeyDown={e => { if (e.key === 'Enter') saveNewOrderStage(); if (e.key === 'Escape') cancelAddOrderStage(); }}
+                      placeholder="Stage name…"
+                      autoFocus
+                      style={{ ...inp, flex: 1, padding: '5px 9px', fontSize: 13 }}
+                    />
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {COLOR_PALETTE.map(c => (
+                        <button key={c} onClick={() => setNewOrderStage(ns => ({ ...ns, color: c }))} title={c} style={{
+                          width: 18, height: 18, borderRadius: '50%', background: c, border: 'none', cursor: 'pointer',
+                          outline: newOrderStage.color === c ? `2px solid ${c}` : 'none', outlineOffset: 2, flexShrink: 0,
+                        }} />
+                      ))}
+                    </div>
+                    <button onClick={saveNewOrderStage} disabled={orderStageSaving} title="Add" style={iconBtn('var(--success)')}><Check size={14} /></button>
+                    <button onClick={cancelAddOrderStage} title="Cancel" style={iconBtn('var(--text-muted)')}><X size={14} /></button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setNewOrderStage(ns => ({ ...ns, deduct_inventory: !ns.deduct_inventory }))}
-                    title={newOrderStage.deduct_inventory ? 'Inventory deducts here — click to turn off' : 'Deduct inventory when an order reaches this stage'}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0,
-                      padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
-                      border: `1px solid ${newOrderStage.deduct_inventory ? 'var(--teal)' : 'var(--border)'}`,
-                      background: newOrderStage.deduct_inventory ? 'var(--teal-dim)' : 'transparent',
-                      color: newOrderStage.deduct_inventory ? 'var(--teal-light)' : 'var(--text-muted)',
-                      fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    📦 {newOrderStage.deduct_inventory ? 'Deducts stock' : 'Deduct stock here'}
-                  </button>
-                  <button onClick={saveNewOrderStage} disabled={orderStageSaving} title="Add" style={iconBtn('var(--success)')}><Check size={14} /></button>
-                  <button onClick={cancelAddOrderStage} title="Cancel" style={iconBtn('var(--text-muted)')}><X size={14} /></button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 24, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', marginRight: 4 }}>On this stage:</span>
+                    {[
+                      { key: 'none', label: 'No stock change' },
+                      { key: 'deduct', label: '📦 Deduct stock' },
+                      { key: 'restore', label: '↩ Restore stock' },
+                    ].map(opt => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setNewOrderStage(ns => ({ ...ns, stock_action: opt.key }))}
+                        style={{
+                          padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                          border: `1px solid ${newOrderStage.stock_action === opt.key ? 'var(--teal)' : 'var(--border)'}`,
+                          background: newOrderStage.stock_action === opt.key ? 'var(--teal-dim)' : 'transparent',
+                          color: newOrderStage.stock_action === opt.key ? 'var(--teal-light)' : 'var(--text-muted)',
+                          fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                    <span style={{ width: 1, height: 16, background: 'var(--border)', margin: '0 4px' }} />
+                    <button
+                      type="button"
+                      onClick={() => setNewOrderStage(ns => ({ ...ns, is_default: !ns.is_default }))}
+                      title="Where a freshly fulfilled order starts out"
+                      style={{
+                        padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                        border: `1px solid ${newOrderStage.is_default ? 'var(--warn)' : 'var(--border)'}`,
+                        background: newOrderStage.is_default ? 'var(--warn-dim)' : 'transparent',
+                        color: newOrderStage.is_default ? 'var(--warn)' : 'var(--text-muted)',
+                        fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      ⭐ {newOrderStage.is_default ? 'Default for new orders' : 'Set as default'}
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <button onClick={() => { setAddingOrderStage(true); setOrderStageError(''); }} style={{

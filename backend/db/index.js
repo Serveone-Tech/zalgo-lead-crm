@@ -97,10 +97,18 @@ const initDB = async () => {
 
     const alterOrderStages = [
       `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS deduct_inventory BOOLEAN DEFAULT false`,
+      `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS stock_action VARCHAR(10) DEFAULT 'none'`,
+      `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`,
     ];
     for (const q of alterOrderStages) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
+    // One-time backfill: carry the old single deduct_inventory flag over to
+    // the new stock_action column so an already-configured tenant doesn't
+    // lose their setting.
+    await client
+      .query(`UPDATE order_stages SET stock_action='deduct' WHERE deduct_inventory=true AND stock_action='none'`)
+      .catch((e) => console.log("alter skip:", e.message));
 
     // ── STEP 3: Rest of the tables ───────────────────────────
     await client.query(`
@@ -280,11 +288,19 @@ const initDB = async () => {
         name VARCHAR(50) NOT NULL,
         color VARCHAR(7) DEFAULT '#00868a',
         sort_order INTEGER DEFAULT 0,
-        -- At most one stage per tenant has this true — the stage an order
-        -- must reach before its items draw down inventory. If no stage has
-        -- it set, inventory is deducted immediately at order creation
-        -- instead (the original, simpler behavior).
+        -- Superseded by stock_action below (kept, unused, to avoid a risky
+        -- column drop on an already-live table).
         deduct_inventory BOOLEAN DEFAULT false,
+        -- Any number of stages can be 'deduct' or 'restore' — an order's
+        -- items draw down stock the first time it reaches a 'deduct' stage,
+        -- and give it back if it later reaches a 'restore' stage (e.g. put
+        -- on hold or cancelled after being confirmed). If no stage anywhere
+        -- is 'deduct', stock is drawn down immediately at order creation
+        -- instead (the original, simpler behavior).
+        stock_action VARCHAR(10) DEFAULT 'none',
+        -- At most one stage per tenant has this true — where a freshly
+        -- fulfilled order starts out.
+        is_default BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT NOW()
       );
 
