@@ -25,9 +25,13 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
     const result = await pool.query(
       `SELECT c.*, u.name AS assigned_to_name,
         COALESCE(SUM(co.advance_paid),0) AS total_collected,
-        COALESCE(SUM(CASE WHEN co.payment_type='cod' THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
+        -- Cancelled/returned orders (stage flagged excludes_dues) no longer
+        -- count toward what's still owed — the sale isn't happening.
+        COALESCE(SUM(CASE WHEN co.payment_type='cod' AND NOT COALESCE(os_due.excludes_dues,false) THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
         (SELECT MIN(co2.next_due_date) FROM customer_orders co2
+         LEFT JOIN order_stages os2 ON os2.user_id=co2.user_id AND os2.name=co2.stage
          WHERE co2.customer_id=c.id AND co2.payment_type='cod' AND co2.deleted_at IS NULL
+           AND NOT COALESCE(os2.excludes_dues,false)
            AND (co2.amount - COALESCE(co2.advance_paid,0)) > 0) AS next_due_date,
         -- Whichever is more recent — the customer being added, or their most
         -- recent order — is what "just happened" for this customer, and
@@ -52,6 +56,7 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
          WHERE co4.customer_id=c.id AND co4.deleted_at IS NULL) AS order_count
        FROM customers c
        LEFT JOIN customer_orders co ON co.customer_id=c.id AND co.deleted_at IS NULL
+       LEFT JOIN order_stages os_due ON os_due.user_id=co.user_id AND os_due.name=co.stage
        LEFT JOIN users u ON u.id=c.assigned_to
        WHERE c.user_id=$1${vis.clause} GROUP BY c.id, u.name ORDER BY last_activity_at DESC`,
       [req.tenantId, ...vis.params],
@@ -71,7 +76,8 @@ router.get("/due/upcoming", auth, requireSubscription, requirePlanFeature("custo
       `SELECT co.id, co.customer_id, c.name AS customer_name, c.phone, c.email,
          co.next_due_date AS due_date, (co.amount - COALESCE(co.advance_paid,0)) AS amount
        FROM customer_orders co JOIN customers c ON c.id=co.customer_id
-       WHERE c.user_id=$1 AND co.deleted_at IS NULL AND co.payment_type='cod' AND (co.amount - COALESCE(co.advance_paid,0)) > 0${vis.clause}
+       LEFT JOIN order_stages os ON os.user_id=co.user_id AND os.name=co.stage
+       WHERE c.user_id=$1 AND co.deleted_at IS NULL AND co.payment_type='cod' AND NOT COALESCE(os.excludes_dues,false) AND (co.amount - COALESCE(co.advance_paid,0)) > 0${vis.clause}
        ORDER BY co.next_due_date ASC NULLS LAST LIMIT 30`,
       [req.tenantId, ...vis.params],
     );

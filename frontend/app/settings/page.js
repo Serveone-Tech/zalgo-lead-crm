@@ -41,7 +41,7 @@ export default function SettingsPage() {
   const [orderStages, setOrderStages]            = useState([]);
   const [orderStagesLoading, setOrderStagesLoading] = useState(true);
   const [editingOrderStage, setEditingOrderStage]   = useState(null);
-  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#00868a', stock_action: 'none', is_default: false });
+  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false });
   const [addingOrderStage, setAddingOrderStage]     = useState(false);
   const [orderStageError, setOrderStageError]       = useState('');
   const [orderStageSaving, setOrderStageSaving]     = useState(false);
@@ -149,9 +149,9 @@ export default function SettingsPage() {
   };
 
   // ── Order Stage CRUD ────────────────────────────────────────────
-  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, stock_action: s.stock_action || 'none', is_default: s.is_default }); setOrderStageError(''); };
+  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, stock_action: s.stock_action || 'none', is_default: s.is_default, excludes_dues: s.excludes_dues }); setOrderStageError(''); };
   const cancelEditOrderStage = () => { setEditingOrderStage(null); setOrderStageError(''); };
-  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false }); setOrderStageError(''); };
+  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false }); setOrderStageError(''); };
 
   const saveEditOrderStage = async () => {
     if (!editingOrderStage.name.trim()) { setOrderStageError('Name is required'); return; }
@@ -162,6 +162,7 @@ export default function SettingsPage() {
         color: editingOrderStage.color,
         stock_action: editingOrderStage.stock_action,
         is_default: editingOrderStage.is_default,
+        excludes_dues: editingOrderStage.excludes_dues,
       });
       setEditingOrderStage(null);
       await loadOrderStages();
@@ -179,9 +180,10 @@ export default function SettingsPage() {
         sort_order: orderStages.length,
         stock_action: newOrderStage.stock_action,
         is_default: newOrderStage.is_default,
+        excludes_dues: newOrderStage.excludes_dues,
       });
       setAddingOrderStage(false);
-      setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false });
+      setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false });
       await loadOrderStages();
     } catch (err) { setOrderStageError(err.response?.data?.error || 'Failed to save'); }
     setOrderStageSaving(false);
@@ -410,7 +412,8 @@ export default function SettingsPage() {
             it — handy if orders sometimes get placed on hold before they&apos;re confirmed) or ↩ <strong>Restore
             stock</strong> (gives it back if an order later moves to Hold/Cancelled after being confirmed). Leave
             every stage unmarked to keep deducting stock immediately when an order is created (the default). You can
-            also mark one stage ⭐ as where new orders start out.
+            also mark one stage ⭐ as where new orders start out, and mark any stage ✕ <strong>Exclude from dues</strong>
+            (e.g. Cancelled, Returned) so orders sitting there stop counting toward pending dues totals.
           </p>
 
           {orderStageError && <ErrorBox msg={orderStageError} />}
@@ -478,6 +481,12 @@ export default function SettingsPage() {
                             borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
                           }}>↩ Restores stock</span>
                         )}
+                        {s.excludes_dues && (
+                          <span style={{
+                            fontSize: 10, color: 'var(--danger)', background: 'rgba(220,90,90,0.12)',
+                            borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                          }}>✕ Excluded from dues</span>
+                        )}
                         <span style={{
                           fontSize: 10, color: s.color, background: s.color + '22',
                           borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)',
@@ -525,6 +534,20 @@ export default function SettingsPage() {
                         }}
                       >
                         ⭐ {editingOrderStage.is_default ? 'Default for new orders' : 'Set as default'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingOrderStage(es => ({ ...es, excludes_dues: !es.excludes_dues }))}
+                        title="Orders sitting on this stage (e.g. Cancelled, Returned) stop counting toward pending dues"
+                        style={{
+                          padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                          border: `1px solid ${editingOrderStage.excludes_dues ? 'var(--danger)' : 'var(--border)'}`,
+                          background: editingOrderStage.excludes_dues ? 'rgba(220,90,90,0.12)' : 'transparent',
+                          color: editingOrderStage.excludes_dues ? 'var(--danger)' : 'var(--text-muted)',
+                          fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        ✕ {editingOrderStage.excludes_dues ? 'Excluded from dues' : 'Exclude from dues'}
                       </button>
                     </div>
                   )}
@@ -596,6 +619,20 @@ export default function SettingsPage() {
                       }}
                     >
                       ⭐ {newOrderStage.is_default ? 'Default for new orders' : 'Set as default'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewOrderStage(ns => ({ ...ns, excludes_dues: !ns.excludes_dues }))}
+                      title="Orders sitting on this stage (e.g. Cancelled, Returned) stop counting toward pending dues"
+                      style={{
+                        padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                        border: `1px solid ${newOrderStage.excludes_dues ? 'var(--danger)' : 'var(--border)'}`,
+                        background: newOrderStage.excludes_dues ? 'rgba(220,90,90,0.12)' : 'transparent',
+                        color: newOrderStage.excludes_dues ? 'var(--danger)' : 'var(--text-muted)',
+                        fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      ✕ {newOrderStage.excludes_dues ? 'Excluded from dues' : 'Exclude from dues'}
                     </button>
                   </div>
                 </div>

@@ -99,6 +99,9 @@ const initDB = async () => {
       `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS deduct_inventory BOOLEAN DEFAULT false`,
       `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS stock_action VARCHAR(10) DEFAULT 'none'`,
       `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`,
+      // Any number of stages (Cancelled, Returned, ...) can be flagged so
+      // orders sitting there stop counting toward pending-dues totals.
+      `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS excludes_dues BOOLEAN DEFAULT false`,
     ];
     for (const q of alterOrderStages) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -108,6 +111,12 @@ const initDB = async () => {
     // lose their setting.
     await client
       .query(`UPDATE order_stages SET stock_action='deduct' WHERE deduct_inventory=true AND stock_action='none'`)
+      .catch((e) => console.log("alter skip:", e.message));
+    // One-time backfill: an already-existing "Cancelled"/"Returned" stage
+    // almost certainly should stop counting toward pending dues, even
+    // though it predates the excludes_dues column.
+    await client
+      .query(`UPDATE order_stages SET excludes_dues=true WHERE excludes_dues=false AND LOWER(name) IN ('cancelled', 'canceled', 'returned', 'return')`)
       .catch((e) => console.log("alter skip:", e.message));
 
     // ── STEP 3: Rest of the tables ───────────────────────────
