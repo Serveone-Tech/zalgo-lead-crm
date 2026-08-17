@@ -28,11 +28,32 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
         COALESCE(SUM(CASE WHEN co.payment_type='cod' THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
         (SELECT MIN(co2.next_due_date) FROM customer_orders co2
          WHERE co2.customer_id=c.id AND co2.payment_type='cod' AND co2.deleted_at IS NULL
-           AND (co2.amount - COALESCE(co2.advance_paid,0)) > 0) AS next_due_date
+           AND (co2.amount - COALESCE(co2.advance_paid,0)) > 0) AS next_due_date,
+        -- Whichever is more recent — the customer being added, or their most
+        -- recent order — is what "just happened" for this customer, and
+        -- what the list is sorted by so new activity always floats to top.
+        GREATEST(c.created_at, COALESCE(MAX(co.created_at), c.created_at)) AS last_activity_at,
+        (SELECT co3.id FROM customer_orders co3
+         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_id,
+        (SELECT co3.stage FROM customer_orders co3
+         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_stage,
+        (SELECT co3.amount FROM customer_orders co3
+         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_amount,
+        (SELECT co3.payment_type FROM customer_orders co3
+         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_payment_type,
+        (SELECT co3.tracking_id FROM customer_orders co3
+         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_tracking_id,
+        (SELECT COUNT(*) FROM customer_orders co4
+         WHERE co4.customer_id=c.id AND co4.deleted_at IS NULL) AS order_count
        FROM customers c
        LEFT JOIN customer_orders co ON co.customer_id=c.id AND co.deleted_at IS NULL
        LEFT JOIN users u ON u.id=c.assigned_to
-       WHERE c.user_id=$1${vis.clause} GROUP BY c.id, u.name ORDER BY c.created_at DESC`,
+       WHERE c.user_id=$1${vis.clause} GROUP BY c.id, u.name ORDER BY last_activity_at DESC`,
       [req.tenantId, ...vis.params],
     );
     res.json(result.rows);

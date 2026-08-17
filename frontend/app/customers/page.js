@@ -45,6 +45,8 @@ export default function CustomersPage() {
   const [user, setUser] = useState(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [orderStages, setOrderStages] = useState([]);
+  const [stageChanging, setStageChanging] = useState(null);
 
   useEffect(() => {
     setMounted(true);
@@ -58,7 +60,23 @@ export default function CustomersPage() {
       if (fresh) setUser(fresh);
     });
     load();
+    api
+      .get("/order-stages")
+      .then((r) => setOrderStages(r.data))
+      .catch(() => {});
   }, []);
+
+  const changeOrderStage = async (c, stage) => {
+    if (!c.latest_order_id) return;
+    setStageChanging(c.id);
+    try {
+      await api.put(`/customers/${c.id}/orders/${c.latest_order_id}`, { stage });
+      load();
+    } catch {
+      // no-op — dropdown just stays on whatever it was
+    }
+    setStageChanging(null);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -401,7 +419,7 @@ export default function CustomersPage() {
               style={{
                 width: "100%",
                 borderCollapse: "collapse",
-                minWidth: 900,
+                minWidth: 1300,
               }}
             >
               <thead>
@@ -412,6 +430,9 @@ export default function CustomersPage() {
                     "Phone",
                     "Email",
                     "Assigned To",
+                    "Latest Order",
+                    "Order Stage",
+                    "Orders",
                     "Total Fee",
                     "Collected",
                     "Balance",
@@ -440,9 +461,7 @@ export default function CustomersPage() {
               </thead>
               <tbody>
                 {filtered.map((c, i) => {
-                  const balance =
-                    parseFloat(c.total_fee || 0) -
-                    parseFloat(c.total_collected || 0);
+                  const balance = parseFloat(c.total_due_amount || 0);
                   const over = isOverdue(c.next_due_date),
                     tod = isToday(c.next_due_date);
                   return (
@@ -521,6 +540,100 @@ export default function CustomersPage() {
                         {c.assigned_to_name || (
                           <span style={{ color: "var(--text-muted)" }}>Unassigned</span>
                         )}
+                      </td>
+                      <td style={{ padding: "12px 14px", whiteSpace: "nowrap" }}>
+                        {c.latest_order_id ? (
+                          <div>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 6,
+                                fontFamily: "var(--font-main)",
+                                fontWeight: 600,
+                                fontSize: 12,
+                                color: "var(--text-primary)",
+                              }}
+                            >
+                              {fmt(c.latest_order_amount)}
+                              <span
+                                style={{
+                                  fontSize: 9,
+                                  fontWeight: 700,
+                                  borderRadius: 20,
+                                  padding: "1px 7px",
+                                  background:
+                                    c.latest_order_payment_type === "cod"
+                                      ? "var(--warn-dim)"
+                                      : "rgba(82,184,138,0.1)",
+                                  color:
+                                    c.latest_order_payment_type === "cod"
+                                      ? "var(--warn)"
+                                      : "var(--success)",
+                                }}
+                              >
+                                {c.latest_order_payment_type === "cod" ? "COD" : "Prepaid"}
+                              </span>
+                            </div>
+                            {c.latest_order_tracking_id && (
+                              <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+                                {c.latest_order_tracking_id}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
+                        )}
+                      </td>
+                      <td
+                        style={{ padding: "12px 14px" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {c.latest_order_id ? (
+                          (isOwnerUser(user) || hasPerm(user, "manage_customers")) ? (
+                            <select
+                              value={c.latest_order_stage || ""}
+                              onChange={(e) => changeOrderStage(c, e.target.value)}
+                              disabled={stageChanging === c.id}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                fontFamily: "var(--font-main)",
+                                borderRadius: 6,
+                                padding: "3px 8px",
+                                background: "var(--bg-surface)",
+                                border: "1px solid var(--border)",
+                                color: "var(--text-secondary)",
+                                cursor: stageChanging === c.id ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              <option value="">— No stage —</option>
+                              {orderStages.map((s) => (
+                                <option key={s.id} value={s.name}>
+                                  {s.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : c.latest_order_stage ? (
+                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)" }}>
+                              {c.latest_order_stage}
+                            </span>
+                          ) : (
+                            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
+                          )
+                        ) : (
+                          <span style={{ color: "var(--text-muted)", fontSize: 12 }}>—</span>
+                        )}
+                      </td>
+                      <td
+                        style={{
+                          padding: "12px 14px",
+                          fontSize: 12,
+                          color: "var(--text-secondary)",
+                          textAlign: "center",
+                        }}
+                      >
+                        {c.order_count || 0}
                       </td>
                       <td
                         style={{
