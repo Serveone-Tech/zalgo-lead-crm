@@ -25,11 +25,11 @@ router.post("/", auth, async (req, res) => {
     return res.status(403).json({ error: "Permission denied" });
   }
   try {
-    const { name, price = 0, stock_qty = 0 } = req.body;
+    const { name, price = 0, stock_qty = 0, weight_kg = 0 } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "Name is required" });
     const { rows } = await pool.query(
-      "INSERT INTO inventory_items (user_id, name, price, stock_qty) VALUES ($1,$2,$3,$4) RETURNING *",
-      [req.tenantId, name.trim(), parseFloat(price) || 0, parseInt(stock_qty) || 0],
+      "INSERT INTO inventory_items (user_id, name, price, stock_qty, weight_kg) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+      [req.tenantId, name.trim(), parseFloat(price) || 0, parseInt(stock_qty) || 0, parseFloat(weight_kg) || 0],
     );
     res.json(rows[0]);
   } catch (err) {
@@ -42,18 +42,20 @@ router.put("/:id", auth, async (req, res) => {
     return res.status(403).json({ error: "Permission denied" });
   }
   try {
-    const { name, price, stock_qty } = req.body;
+    const { name, price, stock_qty, weight_kg } = req.body;
     const { rows } = await pool.query(
       `UPDATE inventory_items SET
          name=COALESCE($1, name),
          price=COALESCE($2, price),
          stock_qty=COALESCE($3, stock_qty),
+         weight_kg=COALESCE($4, weight_kg),
          updated_at=NOW()
-       WHERE id=$4 AND user_id=$5 RETURNING *`,
+       WHERE id=$5 AND user_id=$6 RETURNING *`,
       [
         name?.trim() || null,
         price !== undefined && price !== "" ? parseFloat(price) : null,
         stock_qty !== undefined && stock_qty !== "" ? parseInt(stock_qty) : null,
+        weight_kg !== undefined && weight_kg !== "" ? parseFloat(weight_kg) : null,
         req.params.id,
         req.tenantId,
       ],

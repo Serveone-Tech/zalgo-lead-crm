@@ -14,12 +14,19 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
     email: customer?.email || lead?.email || "",
     alternate_phone: customer?.alternate_phone || "",
     address: order?.address || customer?.address || "",
+    city: order?.city || "",
+    state: order?.state || "",
     pincode: order?.pincode || customer?.pincode || "",
     amount: order?.amount || "",
     payment_type: order?.payment_type || "prepaid",
     advance_paid: order?.advance_paid || "",
     next_due_date: order?.next_due_date ? order.next_due_date.split("T")[0] : "",
     tracking_id: order?.tracking_id || "",
+    provider: order?.provider || "",
+    package_weight_kg: order?.package_weight_kg || "",
+    package_length_cm: order?.package_length_cm || "",
+    package_width_cm: order?.package_width_cm || "",
+    package_height_cm: order?.package_height_cm || "",
     stage: order?.stage || "",
     notes: order?.notes || "",
   });
@@ -37,6 +44,9 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
   const [error, setError] = useState("");
   const [stages, setStages] = useState([]);
   const [inventory, setInventory] = useState([]);
+  const [deliveryProviders, setDeliveryProviders] = useState([]);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [defaultItemWeightKg, setDefaultItemWeightKg] = useState(0.5);
   // Whether the Discounted Price has been hand-edited — until it is, it
   // auto-tracks the items total. An existing order's saved amount already
   // reflects a deliberate (possibly discounted) figure, so edit mode starts
@@ -57,6 +67,29 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
       })
       .catch(() => {});
     api.get("/inventory").then((r) => setInventory(r.data)).catch(() => {});
+    api
+      .get("/settings")
+      .then((r) => setDefaultItemWeightKg(parseFloat(r.data.default_item_weight_kg) || 0.5))
+      .catch(() => {});
+    // Only providers the tenant has actually connected+enabled and that
+    // support auto-shipping are offered here — a "generic" link-out
+    // provider has no createOrder, so it's excluded (AWB stays manual).
+    Promise.all([
+      api.get("/delivery/providers").catch(() => ({ data: [] })),
+      api.get("/delivery/credentials").catch(() => ({ data: [] })),
+    ]).then(([registry, configured]) => {
+      const enabled = Array.isArray(configured.data) ? configured.data.filter((d) => d.enabled) : [];
+      const merged = enabled
+        .map((cfg) => registry.data.find((p) => p.id === cfg.provider))
+        .filter((p) => p && p.supportsCreateOrder);
+      setDeliveryProviders(merged);
+    });
+    // An older order edited before City/State existed has a pincode but
+    // no city/state saved yet — look them up once on open instead of
+    // waiting for the admin to retype a pincode that's already there.
+    if (isEdit && /^\d{6}$/.test(form.pincode) && (!form.city || !form.state)) {
+      lookupPincode(form.pincode);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -64,6 +97,15 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
     (sum, it) => sum + (parseFloat(it.price) || 0) * (parseInt(it.quantity) || 0),
     0,
   );
+
+  // Mirrors the backend's own weight computation (utils/courier-shipment.js)
+  // so the "auto: X kg" hint next to the override field is accurate.
+  const autoWeightKg =
+    items.reduce((sum, it) => {
+      const inv = inventory.find((i) => String(i.id) === String(it.inventory_item_id));
+      const perUnit = inv?.weight_kg ? parseFloat(inv.weight_kg) : defaultItemWeightKg;
+      return sum + perUnit * (parseInt(it.quantity) || 1);
+    }, 0) || defaultItemWeightKg;
 
   // Keep the Discounted Price synced to the items total as items change —
   // stops the moment the user types a number in that field themselves.
@@ -82,6 +124,24 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
   const resetAmountToTotal = () => {
     setAmountTouched(false);
     setForm((f) => ({ ...f, amount: itemsTotal.toFixed(2) }));
+  };
+
+  // Auto-fills City/State the moment a valid 6-digit pincode is entered (or,
+  // in edit mode, on open if they're missing for an already-saved pincode),
+  // so couriers' create-order APIs (which require both) reliably get them
+  // without the admin typing them by hand every time.
+  const lookupPincode = (pincode) => {
+    setPincodeLoading(true);
+    api
+      .get(`/delivery/pincode/${pincode}`)
+      .then((r) => setForm((f) => (f.pincode === pincode ? { ...f, city: r.data.city, state: r.data.state } : f)))
+      .catch(() => {})
+      .finally(() => setPincodeLoading(false));
+  };
+  const handlePincode = (e) => {
+    const pincode = e.target.value;
+    setForm((f) => ({ ...f, pincode }));
+    if (/^\d{6}$/.test(pincode)) lookupPincode(pincode);
   };
 
   const updateItem = (i, key, val) =>
@@ -194,8 +254,14 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
                 <textarea name="address" value={form.address} onChange={handle} rows={2} style={{ ...inp, resize: "vertical" }} />
               </Field>
             </div>
-            <Field label="Pincode">
-              <input name="pincode" value={form.pincode} onChange={handle} placeholder="e.g. 110001" style={inp} />
+            <Field label={pincodeLoading ? "Pincode (looking up city/state…)" : "Pincode"}>
+              <input name="pincode" value={form.pincode} onChange={handlePincode} placeholder="e.g. 110001" style={inp} />
+            </Field>
+            <Field label="City">
+              <input name="city" value={form.city} onChange={handle} placeholder="Auto-filled from pincode" style={inp} />
+            </Field>
+            <Field label="State">
+              <input name="state" value={form.state} onChange={handle} placeholder="Auto-filled from pincode" style={inp} />
             </Field>
             <Field label="Items Total (₹)">
               <input value={itemsTotal.toFixed(2)} readOnly style={inpLocked} />
@@ -254,9 +320,38 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
             <Field label="Next Due Date">
               <input name="next_due_date" type="date" value={form.next_due_date} onChange={handle} style={inp} />
             </Field>
-            <Field label="Courier Tracking ID">
-              <input name="tracking_id" value={form.tracking_id} onChange={handle} placeholder="Optional — AWB / tracking number" style={inp} />
+            <Field label="Delivery Provider">
+              <select name="provider" value={form.provider} onChange={handle} style={inp}>
+                <option value="">— Manual / no auto-ship —</option>
+                {deliveryProviders.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
             </Field>
+            <Field label="Courier Tracking ID">
+              <input name="tracking_id" value={form.tracking_id} onChange={handle} placeholder={form.provider ? "Auto-filled once the order ships" : "Optional — AWB / tracking number"} style={inp} />
+            </Field>
+
+            {form.provider && (
+              <>
+                <Field label={`Package Weight (kg) — auto: ${autoWeightKg.toFixed(2)}`}>
+                  <input name="package_weight_kg" type="number" min="0" step="0.01" value={form.package_weight_kg} onChange={handle} placeholder={`Leave blank to use ${autoWeightKg.toFixed(2)} kg`} style={inp} />
+                </Field>
+                <div style={{ gridColumn: "1/-1", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                  <Field label="Length (cm)">
+                    <input name="package_length_cm" type="number" min="0" step="0.1" value={form.package_length_cm} onChange={handle} placeholder="10" style={inp} />
+                  </Field>
+                  <Field label="Width (cm)">
+                    <input name="package_width_cm" type="number" min="0" step="0.1" value={form.package_width_cm} onChange={handle} placeholder="10" style={inp} />
+                  </Field>
+                  <Field label="Height (cm)">
+                    <input name="package_height_cm" type="number" min="0" step="0.1" value={form.package_height_cm} onChange={handle} placeholder="10" style={inp} />
+                  </Field>
+                </div>
+              </>
+            )}
 
             <Field label="Order Stage">
               <select name="stage" value={form.stage} onChange={handle} style={inp}>

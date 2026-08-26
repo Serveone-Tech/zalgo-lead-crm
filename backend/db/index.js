@@ -79,6 +79,9 @@ const initDB = async () => {
     const alterUserSettings = [
       `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS order_fulfillment_stage VARCHAR(50) DEFAULT ''`,
       `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS low_stock_threshold INTEGER DEFAULT 10`,
+      // Fallback weight used for order items with no catalog link (custom
+      // items typed by hand), so a courier shipment can still be created.
+      `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS default_item_weight_kg DECIMAL(10,3) DEFAULT 0.5`,
     ];
     for (const q of alterUserSettings) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -90,6 +93,25 @@ const initDB = async () => {
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS stage VARCHAR(50) DEFAULT ''`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS inventory_deducted BOOLEAN DEFAULT false`,
+      // city/state — couriers' create-order APIs require these separately
+      // from the free-text address; the existing `provider`/`tracking_id`
+      // columns are reused as "which courier this ships with" / "AWB".
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS city VARCHAR(100) DEFAULT ''`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS state VARCHAR(100) DEFAULT ''`,
+      // Guards against double-shipping the same order, same pattern as
+      // inventory_deducted. courier_error surfaces the courier's own
+      // failure message so a bad pickup-location name etc is fixable
+      // instead of silently never shipping.
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS courier_order_created BOOLEAN DEFAULT false`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS courier_error TEXT DEFAULT ''`,
+      // Optional manual overrides for the courier shipment's weight/box
+      // dimensions — NULL means "use the auto-computed default" (item
+      // weights summed, and a conservative fixed box size), since the
+      // auto default is often wrong for the actual physical parcel.
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS package_weight_kg DECIMAL(10,3)`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS package_length_cm DECIMAL(10,2)`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS package_width_cm DECIMAL(10,2)`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS package_height_cm DECIMAL(10,2)`,
     ];
     for (const q of alterCustomerOrders) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -117,6 +139,22 @@ const initDB = async () => {
     // though it predates the excludes_dues column.
     await client
       .query(`UPDATE order_stages SET excludes_dues=true WHERE excludes_dues=false AND LOWER(name) IN ('cancelled', 'canceled', 'returned', 'return')`)
+      .catch((e) => console.log("alter skip:", e.message));
+
+    // inventory_items predates weight_kg — add it for already-existing tenants.
+    await client
+      .query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS weight_kg DECIMAL(10,3) DEFAULT 0`)
+      .catch((e) => console.log("alter skip:", e.message));
+
+    // delivery_credentials predates multi-provider support and was created
+    // with a single UNIQUE(user_id) — CREATE TABLE IF NOT EXISTS above
+    // won't retroactively fix that on an already-existing table, so swap
+    // the constraint explicitly for tenants who already have a row.
+    await client
+      .query(`ALTER TABLE delivery_credentials DROP CONSTRAINT IF EXISTS delivery_credentials_user_id_key`)
+      .catch((e) => console.log("alter skip:", e.message));
+    await client
+      .query(`ALTER TABLE delivery_credentials ADD CONSTRAINT delivery_credentials_user_provider_key UNIQUE(user_id, provider)`)
       .catch((e) => console.log("alter skip:", e.message));
 
     // ── STEP 3: Rest of the tables ───────────────────────────
@@ -275,6 +313,8 @@ const initDB = async () => {
         name VARCHAR(255) NOT NULL,
         price DECIMAL(12,2) DEFAULT 0,
         stock_qty INTEGER DEFAULT 0,
+        -- Used to compute a courier shipment's total package weight.
+        weight_kg DECIMAL(10,3) DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
@@ -313,16 +353,20 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
-      -- Per-tenant delivery-tracking provider config (Delhivery, Shiprocket,
-      -- a generic link-out, etc). 'credentials' shape depends on 'provider'
-      -- so new providers can be added later without a schema change.
+      -- Per-tenant delivery-provider config — a tenant can connect any
+      -- number of these (Delhivery, Shiprocket, a generic link-out, ...),
+      -- one row per provider type. 'credentials' shape depends on
+      -- 'provider' so new providers can be added later without a schema
+      -- change. Order-creation providers also stash a 'pickup_location'
+      -- inside 'credentials' (just another dynamic field from the registry).
       CREATE TABLE IF NOT EXISTS delivery_credentials (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         provider VARCHAR(50) DEFAULT '',
         enabled BOOLEAN DEFAULT false,
         credentials JSONB DEFAULT '{}',
-        updated_at TIMESTAMP DEFAULT NOW()
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, provider)
       );
 
       CREATE TABLE IF NOT EXISTS automation_credentials (

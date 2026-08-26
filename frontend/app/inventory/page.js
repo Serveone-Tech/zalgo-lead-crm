@@ -13,7 +13,7 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", price: "", stock_qty: "" });
+  const [form, setForm] = useState({ name: "", price: "", stock_qty: "", weight_kg: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(null);
@@ -21,6 +21,9 @@ export default function InventoryPage() {
   const [threshold, setThreshold] = useState(10);
   const [thresholdInput, setThresholdInput] = useState("10");
   const [thresholdSaving, setThresholdSaving] = useState(false);
+  const [defaultWeight, setDefaultWeight] = useState(0.5);
+  const [defaultWeightInput, setDefaultWeightInput] = useState("0.5");
+  const [defaultWeightSaving, setDefaultWeightSaving] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -43,6 +46,9 @@ export default function InventoryPage() {
         const t = r.data.low_stock_threshold ?? 10;
         setThreshold(t);
         setThresholdInput(String(t));
+        const w = r.data.default_item_weight_kg ?? 0.5;
+        setDefaultWeight(w);
+        setDefaultWeightInput(String(w));
       })
       .catch(() => {});
   }, []);
@@ -70,15 +76,26 @@ export default function InventoryPage() {
     setThresholdSaving(false);
   };
 
+  const saveDefaultWeight = async () => {
+    setDefaultWeightSaving(true);
+    try {
+      const { data } = await api.put("/settings", { default_item_weight_kg: defaultWeightInput });
+      setDefaultWeight(data.default_item_weight_kg);
+    } catch {
+      // no-op — input stays as typed so the user can retry
+    }
+    setDefaultWeightSaving(false);
+  };
+
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: "", price: "", stock_qty: "" });
+    setForm({ name: "", price: "", stock_qty: "", weight_kg: "" });
     setError("");
     setShowForm(true);
   };
   const openEdit = (item) => {
     setEditing(item);
-    setForm({ name: item.name, price: item.price, stock_qty: item.stock_qty });
+    setForm({ name: item.name, price: item.price, stock_qty: item.stock_qty, weight_kg: item.weight_kg });
     setError("");
     setShowForm(true);
   };
@@ -231,6 +248,72 @@ export default function InventoryPage() {
         )}
       </div>
 
+      <div
+        style={{
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
+          borderRadius: 12,
+          padding: "14px 18px",
+          marginBottom: 16,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ fontSize: 18 }}>⚖️</span>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)", fontFamily: "var(--font-main)" }}>
+              Default weight for custom order items
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+              Used for courier shipment weight when an order item isn't linked to a catalog item with its own weight.
+            </div>
+          </div>
+        </div>
+        {(isOwnerUser(user) || hasPerm(user, "manage_settings")) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={defaultWeightInput}
+              onChange={(e) => setDefaultWeightInput(e.target.value)}
+              style={{
+                width: 70,
+                padding: "7px 10px",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: 7,
+                color: "var(--text-primary)",
+                fontSize: 13,
+                outline: "none",
+              }}
+            />
+            <label style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-main)" }}>kg</label>
+            <button
+              onClick={saveDefaultWeight}
+              disabled={defaultWeightSaving || parseFloat(defaultWeightInput) === defaultWeight}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 7,
+                background: defaultWeightSaving ? "var(--bg-hover)" : "var(--teal)",
+                border: "none",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: defaultWeightSaving || parseFloat(defaultWeightInput) === defaultWeight ? "not-allowed" : "pointer",
+                fontFamily: "var(--font-main)",
+              }}
+            >
+              {defaultWeightSaving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div style={{ marginBottom: 16 }}>
         <input
           value={search}
@@ -270,7 +353,7 @@ export default function InventoryPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "var(--bg-surface)" }}>
-                {["Name", "Price", "Stock", "Actions"].map((h) => (
+                {["Name", "Price", "Stock", "Weight", "Actions"].map((h) => (
                   <th
                     key={h}
                     style={{
@@ -307,6 +390,9 @@ export default function InventoryPage() {
                   >
                     {item.stock_qty}
                     {item.stock_qty <= 0 ? " (out of stock)" : item.stock_qty <= threshold ? " (low)" : ""}
+                  </td>
+                  <td style={{ padding: "12px 14px", fontSize: 13, color: "var(--text-secondary)" }}>
+                    {item.weight_kg ? `${item.weight_kg} kg` : <span style={{ color: "var(--text-muted)" }}>—</span>}
                   </td>
                   <td style={{ padding: "12px 14px", textAlign: "right" }}>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -440,6 +526,18 @@ export default function InventoryPage() {
                       min="0"
                       value={form.stock_qty}
                       onChange={(e) => setForm((f) => ({ ...f, stock_qty: e.target.value }))}
+                      placeholder="0"
+                      style={inp}
+                    />
+                  </div>
+                  <div>
+                    <label style={lbl}>Weight (kg)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.weight_kg}
+                      onChange={(e) => setForm((f) => ({ ...f, weight_kg: e.target.value }))}
                       placeholder="0"
                       style={inp}
                     />

@@ -38,6 +38,9 @@ export default function CustomerDetailPage() {
   const [prevAdvance, setPrevAdvance] = useState({});
   const [orderStages, setOrderStages] = useState([]);
   const [stageChanging, setStageChanging] = useState(null);
+  const [shippingOrder, setShippingOrder] = useState(null);
+  const [deliveryProviders, setDeliveryProviders] = useState([]);
+  const [providerChanging, setProviderChanging] = useState(null);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -50,10 +53,20 @@ export default function CustomerDetailPage() {
       if (fresh) setUser(fresh); // then replace with the server's current permissions
     });
     load();
-    api
-      .get("/delivery/credentials")
-      .then((r) => setDeliveryEnabled(!!(r.data.enabled && r.data.provider)))
-      .catch(() => {});
+    Promise.all([
+      api.get("/delivery/providers").catch(() => ({ data: [] })),
+      api.get("/delivery/credentials").catch(() => ({ data: [] })),
+    ]).then(([registry, configured]) => {
+      const enabled = Array.isArray(configured.data) ? configured.data.filter((d) => d.enabled) : [];
+      setDeliveryEnabled(enabled.length > 0);
+      // Same "connected + enabled + can actually auto-ship" filter as the
+      // Order Fulfillment form's Delivery Provider dropdown.
+      setDeliveryProviders(
+        enabled
+          .map((cfg) => registry.data.find((p) => p.id === cfg.provider))
+          .filter((p) => p && p.supportsCreateOrder),
+      );
+    });
     api
       .get("/employees/list")
       .then((r) => setEmployees(r.data))
@@ -73,6 +86,32 @@ export default function CustomerDetailPage() {
       // no-op — dropdown just stays on whatever it was
     }
     setStageChanging(null);
+  };
+
+  const retryShipment = async (orderId) => {
+    setShippingOrder(orderId);
+    try {
+      await api.post(`/delivery/ship/${orderId}`);
+      load();
+    } catch {
+      // no-op — courier_error stays as-is, user can retry again
+    }
+    setShippingOrder(null);
+  };
+
+  // Picking a provider here (without opening the full Edit Order form)
+  // saves it the same way the form would — the backend already (re)attempts
+  // the shipment automatically whenever `provider` changes on an order that
+  // hasn't shipped yet, so this alone is enough to trigger it.
+  const changeProvider = async (orderId, provider) => {
+    setProviderChanging(orderId);
+    try {
+      await api.put(`/customers/${id}/orders/${orderId}`, { provider });
+      load();
+    } catch {
+      // no-op — dropdown just stays on whatever it was
+    }
+    setProviderChanging(null);
   };
 
   const viewTrack = async (order) => {
@@ -684,6 +723,57 @@ export default function CustomerDetailPage() {
                             )
                           )}
                         </div>
+                        {(isOwnerUser(user) || hasPerm(user, "manage_customers")) &&
+                          (deliveryProviders.length > 0 || o.provider) && (
+                            <div style={{ marginTop: 4 }}>
+                              <select
+                                value={o.provider || ""}
+                                onChange={(e) => changeProvider(o.id, e.target.value)}
+                                disabled={providerChanging === o.id || o.courier_order_created}
+                                title={
+                                  o.courier_order_created
+                                    ? "Already shipped — provider can't be changed"
+                                    : "Auto-ships the order the moment it's on a stock-deducting stage"
+                                }
+                                style={{
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  fontFamily: "var(--font-main)",
+                                  borderRadius: 6,
+                                  padding: "3px 8px",
+                                  background: "var(--bg-card)",
+                                  border: "1px solid var(--border)",
+                                  color: "var(--text-secondary)",
+                                  cursor: providerChanging === o.id || o.courier_order_created ? "not-allowed" : "pointer",
+                                }}
+                              >
+                                <option value="">— Manual / no auto-ship —</option>
+                                {deliveryProviders.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        {o.courier_error && (
+                          <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 4, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <span>⚠ Courier: {o.courier_error}</span>
+                            {(isOwnerUser(user) || hasPerm(user, "manage_customers")) && (
+                              <button
+                                onClick={() => retryShipment(o.id)}
+                                disabled={shippingOrder === o.id}
+                                style={{
+                                  background: "transparent", border: "1px solid var(--danger)", borderRadius: 6,
+                                  padding: "2px 8px", color: "var(--danger)", fontSize: 10, fontWeight: 700,
+                                  cursor: shippingOrder === o.id ? "not-allowed" : "pointer",
+                                }}
+                              >
+                                {shippingOrder === o.id ? "Retrying…" : "Retry Shipment"}
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {o.payment_type === "cod" && (
                           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                             Advance {formatCurrency(o.advance_paid || 0)}

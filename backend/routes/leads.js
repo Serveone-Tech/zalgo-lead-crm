@@ -6,6 +6,7 @@ const { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = re
 const { getOrCreateCustomerFromLead } = require("../utils/customer-conversion");
 const { savePendingLead } = require("../utils/pending-leads");
 const { getStageStockActions, isDeductStage, anyDeductStageConfigured, deductStockForOrder } = require("../utils/inventory");
+const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -541,6 +542,8 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
     email,
     alternate_phone,
     address,
+    city,
+    state,
     pincode,
     amount,
     payment_type,
@@ -551,6 +554,10 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
     stage,
     notes,
     items,
+    package_weight_kg,
+    package_length_cm,
+    package_width_cm,
+    package_height_cm,
   } = req.body;
 
   try {
@@ -586,12 +593,14 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
 
     const orderRes = await pool.query(
       `INSERT INTO customer_orders
-        (user_id, customer_id, address, pincode, amount, payment_type, advance_paid, next_due_date, tracking_id, provider, stage, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        (user_id, customer_id, address, city, state, pincode, amount, payment_type, advance_paid, next_due_date, tracking_id, provider, stage, notes, package_weight_kg, package_length_cm, package_width_cm, package_height_cm)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [
         req.tenantId,
         customer.id,
         address || "",
+        city || "",
+        state || "",
         pincode || "",
         orderAmount,
         isCod ? "cod" : "prepaid",
@@ -601,6 +610,10 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
         provider || "",
         stage || "",
         notes || "",
+        package_weight_kg !== undefined && package_weight_kg !== "" ? parseFloat(package_weight_kg) : null,
+        package_length_cm !== undefined && package_length_cm !== "" ? parseFloat(package_length_cm) : null,
+        package_width_cm !== undefined && package_width_cm !== "" ? parseFloat(package_width_cm) : null,
+        package_height_cm !== undefined && package_height_cm !== "" ? parseFloat(package_height_cm) : null,
       ],
     );
     const order = orderRes.rows[0];
@@ -623,6 +636,9 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
     const stageRows = await getStageStockActions(req.tenantId);
     if (!anyDeductStageConfigured(stageRows) || isDeductStage(stageRows, stage || "")) {
       await deductStockForOrder(order.id, req.tenantId);
+      // Same moment stock draws down is when the order should ship — create
+      // it at whichever courier was picked (no-op if none was selected).
+      await createCourierShipmentForOrder(order.id, req.tenantId);
     }
 
     res.json({ customer_id: customer.id, order_id: order.id });

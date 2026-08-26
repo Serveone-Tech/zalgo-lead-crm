@@ -200,7 +200,8 @@ export default function AutomationPage() {
   });
   const [triggers, setTriggers] = useState({});
   const [deliveryProviders, setDeliveryProviders] = useState([]);
-  const [deliveryConfig, setDeliveryConfig] = useState({ provider: "", enabled: false, credentials: {} });
+  const [deliveryConfigs, setDeliveryConfigs] = useState([]);
+  const [deliveryForm, setDeliveryForm] = useState(null); // { provider, enabled, credentials } while adding/editing one panel
   const [savingDelivery, setSavingDelivery] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingChan, setSavingChan] = useState(null);
@@ -237,12 +238,12 @@ export default function AutomationPage() {
         api.get("/automation/triggers"),
         api.get("/automation/webhook-urls").catch(() => ({ data: null })),
         api.get("/delivery/providers").catch(() => ({ data: [] })),
-        api.get("/delivery/credentials").catch(() => ({ data: { provider: "", enabled: false, credentials: {} } })),
+        api.get("/delivery/credentials").catch(() => ({ data: [] })),
       ]);
       setCreds((c) => ({ ...c, ...cr.data }));
       setWebhooks(wh.data);
       setDeliveryProviders(dp.data);
-      setDeliveryConfig(dc.data);
+      setDeliveryConfigs(dc.data);
       const map = {};
       tr.data.forEach((t) => {
         const def = TRIGGER_DEFS.find((d) => d.id === t.trigger_id);
@@ -281,15 +282,41 @@ export default function AutomationPage() {
   const saveDelivery = async () => {
     setSavingDelivery(true);
     try {
-      const { data } = await api.put("/delivery/credentials", deliveryConfig);
-      showToast("Delivery tracking settings saved!");
+      await api.put("/delivery/credentials", deliveryForm);
+      showToast("Delivery panel saved!");
       // Re-fetch so masked secret fields reflect what's actually stored.
       const dc = await api.get("/delivery/credentials").catch(() => null);
-      if (dc) setDeliveryConfig(dc.data);
+      if (dc) setDeliveryConfigs(dc.data);
+      setDeliveryForm(null);
     } catch {
       showToast("Save failed", "error");
     }
     setSavingDelivery(false);
+  };
+
+  // Quick enable/disable from the list row, without opening the full edit
+  // form — the backend already treats masked "****" secret values as "keep
+  // what's stored", so re-sending the (masked) row back is safe.
+  const toggleDeliveryPanel = async (cfg) => {
+    try {
+      await api.put("/delivery/credentials", { ...cfg, enabled: !cfg.enabled });
+      const dc = await api.get("/delivery/credentials").catch(() => null);
+      if (dc) setDeliveryConfigs(dc.data);
+    } catch {
+      showToast("Save failed", "error");
+    }
+  };
+
+  const deleteDeliveryPanel = async (provider) => {
+    const label = deliveryProviders.find((p) => p.id === provider)?.label || provider;
+    if (!confirm(`Disconnect ${label}? Orders will stop auto-shipping/tracking through it.`)) return;
+    try {
+      await api.delete(`/delivery/credentials/${provider}`);
+      const dc = await api.get("/delivery/credentials").catch(() => null);
+      if (dc) setDeliveryConfigs(dc.data);
+    } catch {
+      showToast("Delete failed", "error");
+    }
   };
 
   const saveTrigger = async (id) => {
@@ -641,14 +668,13 @@ export default function AutomationPage() {
             );
           })}
 
-          {/* Delivery Tracking */}
+          {/* Delivery Panels */}
           <div
             style={{
               background: "var(--bg-card)",
               border: "1px solid var(--border)",
               borderRadius: 12,
               overflow: "hidden",
-              borderLeft: deliveryConfig.enabled ? "3px solid var(--teal)" : "3px solid var(--border)",
             }}
           >
             <div
@@ -656,93 +682,145 @@ export default function AutomationPage() {
                 padding: "14px 20px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
+                gap: 10,
                 borderBottom: "1px solid var(--border)",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 18 }}>📦</span>
-                <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
-                  Delivery Tracking
+              <span style={{ fontSize: 18 }}>📦</span>
+              <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                Delivery Panels
+              </span>
+              {deliveryConfigs.some((c) => c.enabled) && (
+                <span style={{ fontSize: 10, fontWeight: 700, background: "rgba(82,184,138,0.12)", color: "var(--success)", borderRadius: 20, padding: "2px 8px" }}>
+                  Active
                 </span>
-                {deliveryConfig.enabled && (
-                  <span style={{ fontSize: 10, fontWeight: 700, background: "rgba(82,184,138,0.12)", color: "var(--success)", borderRadius: 20, padding: "2px 8px" }}>
-                    Active
-                  </span>
-                )}
-              </div>
-              <Toggle
-                on={deliveryConfig.enabled}
-                onChange={() => setDeliveryConfig((c) => ({ ...c, enabled: !c.enabled }))}
-              />
+              )}
             </div>
             <div style={{ padding: "18px 20px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", alignItems: "center", gap: 16, marginBottom: 14 }}>
-                <label style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "var(--font-main)", fontWeight: 500 }}>
-                  Courier / Partner
-                </label>
-                <select
-                  value={deliveryConfig.provider}
-                  onChange={(e) =>
-                    setDeliveryConfig((c) => ({ ...c, provider: e.target.value, credentials: {} }))
-                  }
-                  style={inp}
-                >
-                  <option value="">Select a delivery partner…</option>
-                  {deliveryProviders.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
+                Connect as many courier panels as you use (Delhivery, Shiprocket, ...). Whichever one is picked in
+                the Order Fulfillment form gets the order auto-created (with AWB pulled back) the moment it reaches
+                a stock-deducting stage, and powers the &quot;View Track&quot; button on customer orders.
+              </p>
 
-              {deliveryProviders
-                .find((p) => p.id === deliveryConfig.provider)
-                ?.fields.map((field) => (
-                  <div key={field.key} style={{ display: "grid", gridTemplateColumns: "160px 1fr", alignItems: "center", gap: 16, marginBottom: 14 }}>
-                    <label style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "var(--font-main)", fontWeight: 500 }}>
-                      {field.label}
-                    </label>
-                    <input
-                      type={field.type || "text"}
-                      value={deliveryConfig.credentials?.[field.key] || ""}
-                      onChange={(e) =>
-                        setDeliveryConfig((c) => ({
-                          ...c,
-                          credentials: { ...c.credentials, [field.key]: e.target.value },
-                        }))
-                      }
-                      placeholder={field.label}
-                      style={inp}
-                    />
-                  </div>
-                ))}
-
-              {!deliveryConfig.provider && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>
-                  Pick a delivery partner above to see the fields it needs. Each tenant connects their own
-                  account here — this is used by the &quot;View Track&quot; button on customer orders.
+              {deliveryConfigs.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+                  {deliveryConfigs.map((cfg) => {
+                    const def = deliveryProviders.find((p) => p.id === cfg.provider);
+                    return (
+                      <div
+                        key={cfg.provider}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 10,
+                          background: "var(--bg-surface)", border: "1px solid var(--border)",
+                          borderRadius: 10, padding: "10px 14px",
+                        }}
+                      >
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: "var(--font-main)", color: "var(--text-primary)" }}>
+                          {def?.label || cfg.provider}
+                        </span>
+                        {def?.supportsCreateOrder && (
+                          <span style={{ fontSize: 10, color: "var(--teal-light)", background: "var(--teal-dim)", borderRadius: 10, padding: "2px 8px", fontWeight: 700, fontFamily: "var(--font-main)", whiteSpace: "nowrap" }}>
+                            Auto-ship
+                          </span>
+                        )}
+                        <Toggle on={cfg.enabled} onChange={() => toggleDeliveryPanel(cfg)} />
+                        <button
+                          onClick={() => setDeliveryForm({ ...cfg })}
+                          title="Edit"
+                          style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 10px", color: "var(--teal)", fontSize: 11, cursor: "pointer", fontWeight: 600 }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => deleteDeliveryPanel(cfg.provider)}
+                          title="Disconnect"
+                          style={{ background: "transparent", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 10px", color: "var(--danger)", fontSize: 11, cursor: "pointer", fontWeight: 600 }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
 
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  onClick={saveDelivery}
-                  disabled={savingDelivery}
-                  style={{
-                    padding: "8px 20px",
-                    borderRadius: 8,
-                    background: savingDelivery ? "var(--bg-hover)" : "var(--teal)",
-                    border: "none",
-                    color: "#fff",
-                    fontFamily: "var(--font-main)",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    cursor: savingDelivery ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {savingDelivery ? "Saving..." : "Save"}
-                </button>
-              </div>
+              {deliveryForm ? (
+                <div style={{ background: "var(--bg-surface)", border: "1px solid var(--teal)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
+                  <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 13, color: "var(--text-primary)", marginBottom: 12 }}>
+                    {deliveryProviders.find((p) => p.id === deliveryForm.provider)?.label || deliveryForm.provider}
+                  </div>
+                  {deliveryProviders
+                    .find((p) => p.id === deliveryForm.provider)
+                    ?.fields.map((field) => (
+                      <div key={field.key} style={{ display: "grid", gridTemplateColumns: "160px 1fr", alignItems: "center", gap: 16, marginBottom: 12 }}>
+                        <label style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "var(--font-main)", fontWeight: 500 }}>
+                          {field.label}
+                        </label>
+                        <input
+                          type={field.type || "text"}
+                          value={deliveryForm.credentials?.[field.key] || ""}
+                          onChange={(e) =>
+                            setDeliveryForm((f) => ({
+                              ...f,
+                              credentials: { ...f.credentials, [field.key]: e.target.value },
+                            }))
+                          }
+                          placeholder={field.label}
+                          style={inp}
+                        />
+                      </div>
+                    ))}
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryForm(null)}
+                      style={{ padding: "8px 16px", borderRadius: 8, background: "transparent", border: "1px solid var(--border)", color: "var(--text-secondary)", fontSize: 13, cursor: "pointer" }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={saveDelivery}
+                      disabled={savingDelivery}
+                      style={{
+                        padding: "8px 20px",
+                        borderRadius: 8,
+                        background: savingDelivery ? "var(--bg-hover)" : "var(--teal)",
+                        border: "none",
+                        color: "#fff",
+                        fontFamily: "var(--font-main)",
+                        fontWeight: 600,
+                        fontSize: 13,
+                        cursor: savingDelivery ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {savingDelivery ? "Saving..." : "Save"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                deliveryProviders.filter((p) => !deliveryConfigs.some((c) => c.provider === p.id)).length > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "160px 1fr", alignItems: "center", gap: 16 }}>
+                    <label style={{ fontSize: 12, color: "var(--text-secondary)", fontFamily: "var(--font-main)", fontWeight: 500 }}>
+                      Connect a panel
+                    </label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) setDeliveryForm({ provider: e.target.value, enabled: true, credentials: {} });
+                      }}
+                      style={inp}
+                    >
+                      <option value="">+ Add a delivery partner…</option>
+                      {deliveryProviders
+                        .filter((p) => !deliveryConfigs.some((c) => c.provider === p.id))
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>{p.label}</option>
+                        ))}
+                    </select>
+                  </div>
+                )
+              )}
             </div>
           </div>
 

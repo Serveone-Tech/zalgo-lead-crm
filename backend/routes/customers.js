@@ -4,6 +4,7 @@ const { auth, requirePermission, requireSubscription, requirePlanFeature } = req
 const { fireTrigger } = require("../utils/automation-trigger");
 const { isOwner } = require("../utils/permissions");
 const { getStageStockActions, isDeductStage, isRestoreStage, deductStockForOrder, restoreStockForOrder } = require("../utils/inventory");
+const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
 
 const router = express.Router();
 
@@ -318,6 +319,8 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     email,
     alternate_phone,
     address,
+    city,
+    state,
     pincode,
     amount,
     payment_type,
@@ -328,6 +331,10 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     stage,
     notes,
     items,
+    package_weight_kg,
+    package_length_cm,
+    package_width_cm,
+    package_height_cm,
   } = req.body;
   try {
     const vis = visibilityClause(req, 3);
@@ -368,8 +375,14 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
          tracking_id=COALESCE($7, tracking_id),
          provider=COALESCE($8, provider),
          stage=COALESCE($9, stage),
-         notes=COALESCE($10, notes)
-       WHERE id=$11 AND customer_id=$12 AND deleted_at IS NULL RETURNING *`,
+         notes=COALESCE($10, notes),
+         city=COALESCE($11, city),
+         state=COALESCE($12, state),
+         package_weight_kg=COALESCE($13, package_weight_kg),
+         package_length_cm=COALESCE($14, package_length_cm),
+         package_width_cm=COALESCE($15, package_width_cm),
+         package_height_cm=COALESCE($16, package_height_cm)
+       WHERE id=$17 AND customer_id=$18 AND deleted_at IS NULL RETURNING *`,
       [
         address !== undefined ? address : null,
         pincode !== undefined ? pincode : null,
@@ -381,6 +394,12 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
         provider !== undefined ? provider : null,
         stage !== undefined ? stage : null,
         notes !== undefined ? notes : null,
+        city !== undefined ? city : null,
+        state !== undefined ? state : null,
+        package_weight_kg !== undefined && package_weight_kg !== "" ? parseFloat(package_weight_kg) : null,
+        package_length_cm !== undefined && package_length_cm !== "" ? parseFloat(package_length_cm) : null,
+        package_width_cm !== undefined && package_width_cm !== "" ? parseFloat(package_width_cm) : null,
+        package_height_cm !== undefined && package_height_cm !== "" ? parseFloat(package_height_cm) : null,
         req.params.orderId,
         req.params.id,
       ],
@@ -418,15 +437,39 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     //    to restore.
     // The inventory_deducted flag is what makes both directions safe to run
     // repeatedly as the stage flips back and forth.
+    let shipped = false;
     if (stage !== undefined) {
       const stageRows = await getStageStockActions(req.tenantId);
       if (!result.rows[0].inventory_deducted && isDeductStage(stageRows, stage)) {
         await deductStockForOrder(req.params.orderId, req.tenantId);
         result.rows[0].inventory_deducted = true;
+        // Same stage transition that draws down stock is what ships the
+        // order — create it at whichever courier was picked (no-op if none).
+        await createCourierShipmentForOrder(req.params.orderId, req.tenantId);
+        shipped = true;
       } else if (result.rows[0].inventory_deducted && isRestoreStage(stageRows, stage)) {
         await restoreStockForOrder(req.params.orderId, req.tenantId);
         result.rows[0].inventory_deducted = false;
       }
+    }
+
+    // Admin picked/changed the Delivery Provider on an order that hasn't
+    // shipped yet — e.g. fixing a wrong choice after a failed attempt.
+    // Without this, changing the dropdown only updated the `provider`
+    // column and left the *previous* provider's courier_error sitting
+    // there unchanged, which read as if the retry had already happened.
+    if (!shipped && provider !== undefined && !result.rows[0].courier_order_created) {
+      await pool.query("UPDATE customer_orders SET courier_error='' WHERE id=$1", [req.params.orderId]);
+      if (provider) await createCourierShipmentForOrder(req.params.orderId, req.tenantId);
+      shipped = true;
+    }
+
+    // createCourierShipmentForOrder wrote tracking_id/courier_error directly
+    // to the row — re-fetch so the response reflects it instead of the
+    // stale in-memory copy from before that call.
+    if (shipped) {
+      const fresh = await pool.query("SELECT * FROM customer_orders WHERE id=$1", [req.params.orderId]);
+      if (fresh.rows[0]) result.rows[0] = fresh.rows[0];
     }
 
     res.json(result.rows[0]);

@@ -44,33 +44,44 @@ router.put(
   auth,
   requirePermission("manage_settings"),
   async (req, res) => {
-    const { currency, currency_symbol, institute_name, order_fulfillment_stage, low_stock_threshold } = req.body;
+    const { currency, currency_symbol, institute_name, order_fulfillment_stage, low_stock_threshold, default_item_weight_kg } = req.body;
     try {
-      // order_fulfillment_stage / low_stock_threshold are each saved from a
-      // different Settings tab — when a call doesn't include one, keep
-      // whatever was already saved instead of blanking/zeroing it out.
+      // Each Settings tab saves only the field(s) it owns — when a call
+      // doesn't include one, keep whatever was already saved instead of
+      // blanking/zeroing it out (this previously only applied to
+      // order_fulfillment_stage/low_stock_threshold, silently resetting
+      // currency/institute_name to defaults on every threshold-only save
+      // from the Inventory page — now consistent across all fields).
       const stageParam =
         order_fulfillment_stage !== undefined ? order_fulfillment_stage : null;
       const thresholdParam =
         low_stock_threshold !== undefined && low_stock_threshold !== ""
           ? parseInt(low_stock_threshold)
           : null;
+      const weightParam =
+        default_item_weight_kg !== undefined && default_item_weight_kg !== ""
+          ? parseFloat(default_item_weight_kg)
+          : null;
       const result = await pool.query(
-        `INSERT INTO user_settings (user_id, currency, currency_symbol, institute_name, order_fulfillment_stage, low_stock_threshold, updated_at)
-       VALUES ($1,$2,$3,$4,COALESCE($5,''),COALESCE($6,10),NOW())
+        `INSERT INTO user_settings (user_id, currency, currency_symbol, institute_name, order_fulfillment_stage, low_stock_threshold, default_item_weight_kg, updated_at)
+       VALUES ($1,COALESCE($2,'INR'),COALESCE($3,'₹'),COALESCE($4,''),COALESCE($5,''),COALESCE($6,10),COALESCE($7,0.5),NOW())
        ON CONFLICT (user_id) DO UPDATE SET
-         currency=$2, currency_symbol=$3, institute_name=$4,
+         currency=COALESCE($2, user_settings.currency),
+         currency_symbol=COALESCE($3, user_settings.currency_symbol),
+         institute_name=COALESCE($4, user_settings.institute_name),
          order_fulfillment_stage=COALESCE($5, user_settings.order_fulfillment_stage),
          low_stock_threshold=COALESCE($6, user_settings.low_stock_threshold),
+         default_item_weight_kg=COALESCE($7, user_settings.default_item_weight_kg),
          updated_at=NOW()
        RETURNING *`,
         [
           req.tenantId,
-          currency || "INR",
-          currency_symbol || "₹",
-          institute_name || "",
+          currency || null,
+          currency_symbol || null,
+          institute_name !== undefined ? institute_name : null,
           stageParam,
           thresholdParam,
+          weightParam,
         ],
       );
       res.json(result.rows[0]);
