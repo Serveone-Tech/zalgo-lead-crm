@@ -112,6 +112,16 @@ const initDB = async () => {
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS package_length_cm DECIMAL(10,2)`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS package_width_cm DECIMAL(10,2)`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS package_height_cm DECIMAL(10,2)`,
+      // Who placed this order — powers the Sales Report's "Employee" column.
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id) ON DELETE SET NULL`,
+      // Set once, the first time this order's stage reaches an
+      // is_delivered-flagged stage — the Sales Report's date filter runs
+      // against this (falling back to created_at for older orders that
+      // reached that stage before this column/flag existed).
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP`,
+      // Whether this is the customer's first order or a repeat purchase —
+      // shown on the fulfillment form and as a Sales Report column.
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(10) DEFAULT 'FRESH'`,
     ];
     for (const q of alterCustomerOrders) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -124,6 +134,9 @@ const initDB = async () => {
       // Any number of stages (Cancelled, Returned, ...) can be flagged so
       // orders sitting there stop counting toward pending-dues totals.
       `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS excludes_dues BOOLEAN DEFAULT false`,
+      // Any number of stages (Delivered, Completed, ...) can be flagged so
+      // orders that reach them show up in the Sales Report.
+      `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS is_delivered BOOLEAN DEFAULT false`,
     ];
     for (const q of alterOrderStages) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -140,10 +153,19 @@ const initDB = async () => {
     await client
       .query(`UPDATE order_stages SET excludes_dues=true WHERE excludes_dues=false AND LOWER(name) IN ('cancelled', 'canceled', 'returned', 'return')`)
       .catch((e) => console.log("alter skip:", e.message));
+    // One-time backfill: an already-existing "Delivered"/"Completed" stage
+    // almost certainly should count toward the Sales Report, even though it
+    // predates the is_delivered column.
+    await client
+      .query(`UPDATE order_stages SET is_delivered=true WHERE is_delivered=false AND LOWER(name) IN ('delivered', 'completed', 'complete')`)
+      .catch((e) => console.log("alter skip:", e.message));
 
-    // inventory_items predates weight_kg — add it for already-existing tenants.
+    // inventory_items predates weight_kg/hsn_code — add them for already-existing tenants.
     await client
       .query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS weight_kg DECIMAL(10,3) DEFAULT 0`)
+      .catch((e) => console.log("alter skip:", e.message));
+    await client
+      .query(`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS hsn_code VARCHAR(20) DEFAULT ''`)
       .catch((e) => console.log("alter skip:", e.message));
 
     // delivery_credentials predates multi-provider support and was created
@@ -315,6 +337,8 @@ const initDB = async () => {
         stock_qty INTEGER DEFAULT 0,
         -- Used to compute a courier shipment's total package weight.
         weight_kg DECIMAL(10,3) DEFAULT 0,
+        -- Tax classification code shown per line item in the Sales Report.
+        hsn_code VARCHAR(20) DEFAULT '',
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );

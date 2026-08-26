@@ -3,8 +3,10 @@ const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { fireTrigger } = require("../utils/automation-trigger");
 const { isOwner } = require("../utils/permissions");
-const { getStageStockActions, isDeductStage, isRestoreStage, deductStockForOrder, restoreStockForOrder } = require("../utils/inventory");
+const { getStageStockActions, isDeductStage, isRestoreStage, isDeliveredStage, deductStockForOrder, restoreStockForOrder } = require("../utils/inventory");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
+const { PROVIDERS } = require("../utils/delivery-providers");
+const ExcelJS = require("exceljs");
 
 const router = express.Router();
 
@@ -85,6 +87,106 @@ router.get("/due/upcoming", auth, requireSubscription, requirePlanFeature("custo
     res.json(result.rows);
   } catch (e) {
     console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── GET Sales Report (Excel) — delivered orders only, one row per item.
+// BEFORE /:id so "reports" never gets swallowed as an :id param. "Delivered"
+// means the order's current stage is flagged is_delivered in Settings →
+// Order Stages (any number of stages can carry that flag, same pattern as
+// excludes_dues) — not a hardcoded stage name, since tenants rename/retype
+// their own stages (one tenant's is literally "DELIVERDED", a typo).
+router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: "from and to dates are required" });
+
+    const vis = visibilityClause(req, 4);
+    // One row per ORDER, not per item — items/HSN/quantity are aggregated
+    // into comma-separated lists (still positionally aligned with each
+    // other) so a 3-item order doesn't repeat its full total 3 times.
+    // Employee = the customer's assigned employee, not who logged the
+    // order — that's what "Employee" is meant to answer here.
+    const result = await pool.query(
+      `SELECT
+         COALESCE(co.delivered_at, co.created_at) AS delivered_date,
+         c.name AS customer_name,
+         co.city, co.pincode, co.state,
+         items_agg.item_names,
+         items_agg.hsn_codes,
+         items_agg.quantities,
+         co.payment_type,
+         co.amount AS total_amount,
+         emp.name AS employee_name,
+         co.order_type,
+         co.tracking_id,
+         co.provider
+       FROM customer_orders co
+       JOIN customers c ON c.id = co.customer_id
+       JOIN order_stages os ON os.user_id = co.user_id AND os.name = co.stage AND os.is_delivered = true
+       LEFT JOIN users emp ON emp.id = c.assigned_to
+       LEFT JOIN (
+         SELECT oi.order_id,
+                STRING_AGG(oi.name, ', ' ORDER BY oi.id) AS item_names,
+                STRING_AGG(NULLIF(i.hsn_code, ''), ', ' ORDER BY oi.id) AS hsn_codes,
+                STRING_AGG(oi.quantity::text, ', ' ORDER BY oi.id) AS quantities
+         FROM order_items oi
+         LEFT JOIN inventory_items i ON i.id = oi.inventory_item_id
+         GROUP BY oi.order_id
+       ) items_agg ON items_agg.order_id = co.id
+       WHERE co.user_id=$1 AND co.deleted_at IS NULL
+         AND COALESCE(co.delivered_at, co.created_at) >= $2
+         AND COALESCE(co.delivered_at, co.created_at) < ($3::date + INTERVAL '1 day')${vis.clause}
+       ORDER BY delivered_date DESC, co.id`,
+      [req.tenantId, from, to, ...vis.params],
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Sales Report");
+    sheet.columns = [
+      { header: "Delivered Date", key: "delivered_date", width: 18 },
+      { header: "Customer Name", key: "customer_name", width: 24 },
+      { header: "City", key: "city", width: 16 },
+      { header: "Pincode", key: "pincode", width: 10 },
+      { header: "State", key: "state", width: 16 },
+      { header: "HSN Code", key: "hsn_code", width: 16 },
+      { header: "Item", key: "item_name", width: 32 },
+      { header: "Quantity", key: "quantity", width: 12 },
+      { header: "COD", key: "cod", width: 10 },
+      { header: "Total Amount", key: "total_amount", width: 14 },
+      { header: "Employee", key: "employee_name", width: 20 },
+      { header: "Order Type", key: "order_type", width: 12 },
+      { header: "Tracking ID", key: "tracking_id", width: 20 },
+      { header: "Courier", key: "courier", width: 16 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    for (const row of result.rows) {
+      sheet.addRow({
+        delivered_date: row.delivered_date ? row.delivered_date.split("T")[0] : "",
+        customer_name: row.customer_name,
+        city: row.city || "",
+        pincode: row.pincode || "",
+        state: row.state || "",
+        hsn_code: row.hsn_codes || "",
+        item_name: row.item_names || "",
+        quantity: row.quantities || "",
+        cod: row.payment_type === "cod" ? "COD" : "Prepaid",
+        total_amount: parseFloat(row.total_amount) || 0,
+        employee_name: row.employee_name || "",
+        order_type: row.order_type || "FRESH",
+        tracking_id: row.tracking_id || "",
+        courier: PROVIDERS[row.provider]?.label || row.provider || "",
+      });
+    }
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="sales-report-${from}-to-${to}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (e) {
+    console.error("Sales report error:", e.message);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -328,6 +430,7 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     next_due_date,
     tracking_id,
     provider,
+    order_type,
     stage,
     notes,
     items,
@@ -381,8 +484,9 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
          package_weight_kg=COALESCE($13, package_weight_kg),
          package_length_cm=COALESCE($14, package_length_cm),
          package_width_cm=COALESCE($15, package_width_cm),
-         package_height_cm=COALESCE($16, package_height_cm)
-       WHERE id=$17 AND customer_id=$18 AND deleted_at IS NULL RETURNING *`,
+         package_height_cm=COALESCE($16, package_height_cm),
+         order_type=COALESCE($17, order_type)
+       WHERE id=$18 AND customer_id=$19 AND deleted_at IS NULL RETURNING *`,
       [
         address !== undefined ? address : null,
         pincode !== undefined ? pincode : null,
@@ -400,6 +504,7 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
         package_length_cm !== undefined && package_length_cm !== "" ? parseFloat(package_length_cm) : null,
         package_width_cm !== undefined && package_width_cm !== "" ? parseFloat(package_width_cm) : null,
         package_height_cm !== undefined && package_height_cm !== "" ? parseFloat(package_height_cm) : null,
+        order_type === "FRESH" || order_type === "REPEAT" ? order_type : null,
         req.params.orderId,
         req.params.id,
       ],
@@ -450,6 +555,14 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
       } else if (result.rows[0].inventory_deducted && isRestoreStage(stageRows, stage)) {
         await restoreStockForOrder(req.params.orderId, req.tenantId);
         result.rows[0].inventory_deducted = false;
+      }
+
+      // Set once, the first time this order reaches a delivered stage — the
+      // Sales Report filters/sorts by this. Guarded so flipping back and
+      // forth between stages later doesn't keep resetting the original date.
+      if (isDeliveredStage(stageRows, stage) && !result.rows[0].delivered_at) {
+        await pool.query("UPDATE customer_orders SET delivered_at=NOW() WHERE id=$1", [req.params.orderId]);
+        result.rows[0].delivered_at = new Date().toISOString();
       }
     }
 

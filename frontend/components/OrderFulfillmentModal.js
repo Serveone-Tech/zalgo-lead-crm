@@ -19,6 +19,7 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
     pincode: order?.pincode || customer?.pincode || "",
     amount: order?.amount || "",
     payment_type: order?.payment_type || "prepaid",
+    order_type: order?.order_type || "FRESH",
     advance_paid: order?.advance_paid || "",
     next_due_date: order?.next_due_date ? order.next_due_date.split("T")[0] : "",
     tracking_id: order?.tracking_id || "",
@@ -299,6 +300,12 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
               <select name="payment_type" value={form.payment_type} onChange={handle} style={inp}>
                 <option value="prepaid">Prepaid</option>
                 <option value="cod">COD (Cash on Delivery)</option>
+              </select>
+            </Field>
+            <Field label="Order Type">
+              <select name="order_type" value={form.order_type} onChange={handle} style={inp}>
+                <option value="FRESH">FRESH</option>
+                <option value="REPEAT">REPEAT</option>
               </select>
             </Field>
 

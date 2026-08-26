@@ -41,7 +41,7 @@ export default function SettingsPage() {
   const [orderStages, setOrderStages]            = useState([]);
   const [orderStagesLoading, setOrderStagesLoading] = useState(true);
   const [editingOrderStage, setEditingOrderStage]   = useState(null);
-  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false });
+  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false });
   const [addingOrderStage, setAddingOrderStage]     = useState(false);
   const [orderStageError, setOrderStageError]       = useState('');
   const [orderStageSaving, setOrderStageSaving]     = useState(false);
@@ -149,9 +149,9 @@ export default function SettingsPage() {
   };
 
   // ── Order Stage CRUD ────────────────────────────────────────────
-  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, stock_action: s.stock_action || 'none', is_default: s.is_default, excludes_dues: s.excludes_dues }); setOrderStageError(''); };
+  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, stock_action: s.stock_action || 'none', is_default: s.is_default, excludes_dues: s.excludes_dues, is_delivered: s.is_delivered }); setOrderStageError(''); };
   const cancelEditOrderStage = () => { setEditingOrderStage(null); setOrderStageError(''); };
-  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false }); setOrderStageError(''); };
+  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false }); setOrderStageError(''); };
 
   const saveEditOrderStage = async () => {
     if (!editingOrderStage.name.trim()) { setOrderStageError('Name is required'); return; }
@@ -163,6 +163,7 @@ export default function SettingsPage() {
         stock_action: editingOrderStage.stock_action,
         is_default: editingOrderStage.is_default,
         excludes_dues: editingOrderStage.excludes_dues,
+        is_delivered: editingOrderStage.is_delivered,
       });
       setEditingOrderStage(null);
       await loadOrderStages();
@@ -181,9 +182,10 @@ export default function SettingsPage() {
         stock_action: newOrderStage.stock_action,
         is_default: newOrderStage.is_default,
         excludes_dues: newOrderStage.excludes_dues,
+        is_delivered: newOrderStage.is_delivered,
       });
       setAddingOrderStage(false);
-      setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false });
+      setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false });
       await loadOrderStages();
     } catch (err) { setOrderStageError(err.response?.data?.error || 'Failed to save'); }
     setOrderStageSaving(false);
@@ -412,8 +414,10 @@ export default function SettingsPage() {
             it — handy if orders sometimes get placed on hold before they&apos;re confirmed) or ↩ <strong>Restore
             stock</strong> (gives it back if an order later moves to Hold/Cancelled after being confirmed). Leave
             every stage unmarked to keep deducting stock immediately when an order is created (the default). You can
-            also mark one stage ⭐ as where new orders start out, and mark any stage ✕ <strong>Exclude from dues</strong>
-            (e.g. Cancelled, Returned) so orders sitting there stop counting toward pending dues totals.
+            also mark one stage ⭐ as where new orders start out, mark any stage ✕ <strong>Exclude from dues</strong>
+            (e.g. Cancelled, Returned) so orders sitting there stop counting toward pending dues totals, and mark
+            any stage 📬 <strong>Delivered</strong> so orders that reach it show up in the Customers page's Sales
+            Report download.
           </p>
 
           {orderStageError && <ErrorBox msg={orderStageError} />}
@@ -487,6 +491,12 @@ export default function SettingsPage() {
                             borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
                           }}>✕ Excluded from dues</span>
                         )}
+                        {s.is_delivered && (
+                          <span style={{
+                            fontSize: 10, color: 'var(--success)', background: 'rgba(82,184,138,0.12)',
+                            borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                          }}>📬 Delivered</span>
+                        )}
                         <span style={{
                           fontSize: 10, color: s.color, background: s.color + '22',
                           borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)',
@@ -548,6 +558,20 @@ export default function SettingsPage() {
                         }}
                       >
                         ✕ {editingOrderStage.excludes_dues ? 'Excluded from dues' : 'Exclude from dues'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingOrderStage(es => ({ ...es, is_delivered: !es.is_delivered }))}
+                        title="Orders that reach this stage show up in the Sales Report"
+                        style={{
+                          padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                          border: `1px solid ${editingOrderStage.is_delivered ? 'var(--success)' : 'var(--border)'}`,
+                          background: editingOrderStage.is_delivered ? 'rgba(82,184,138,0.12)' : 'transparent',
+                          color: editingOrderStage.is_delivered ? 'var(--success)' : 'var(--text-muted)',
+                          fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        📬 {editingOrderStage.is_delivered ? 'Counts as Delivered' : 'Mark as Delivered'}
                       </button>
                     </div>
                   )}
@@ -633,6 +657,20 @@ export default function SettingsPage() {
                       }}
                     >
                       ✕ {newOrderStage.excludes_dues ? 'Excluded from dues' : 'Exclude from dues'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewOrderStage(ns => ({ ...ns, is_delivered: !ns.is_delivered }))}
+                      title="Orders that reach this stage show up in the Sales Report"
+                      style={{
+                        padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                        border: `1px solid ${newOrderStage.is_delivered ? 'var(--success)' : 'var(--border)'}`,
+                        background: newOrderStage.is_delivered ? 'rgba(82,184,138,0.12)' : 'transparent',
+                        color: newOrderStage.is_delivered ? 'var(--success)' : 'var(--text-muted)',
+                        fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      📬 {newOrderStage.is_delivered ? 'Counts as Delivered' : 'Mark as Delivered'}
                     </button>
                   </div>
                 </div>

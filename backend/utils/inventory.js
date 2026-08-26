@@ -1,11 +1,12 @@
 const { pool } = require("../db");
 
 // Every order stage for this tenant with its stock_action ('none' | 'deduct'
-// | 'restore'). Any number of stages can be 'deduct' or 'restore' — there's
-// no single-stage restriction like there is for is_default.
+// | 'restore') and is_delivered flag. Any number of stages can be 'deduct',
+// 'restore', or is_delivered — there's no single-stage restriction like
+// there is for is_default.
 async function getStageStockActions(tenantId) {
   const { rows } = await pool.query(
-    "SELECT name, stock_action FROM order_stages WHERE user_id=$1",
+    "SELECT name, stock_action, is_delivered FROM order_stages WHERE user_id=$1",
     [tenantId],
   );
   return rows;
@@ -17,6 +18,11 @@ function isDeductStage(stageRows, stageName) {
 
 function isRestoreStage(stageRows, stageName) {
   return stageRows.some((r) => r.name === stageName && r.stock_action === "restore");
+}
+
+// Whether this stage counts an order as "delivered" for the Sales Report.
+function isDeliveredStage(stageRows, stageName) {
+  return stageRows.some((r) => r.name === stageName && r.is_delivered);
 }
 
 // If no stage anywhere is configured as 'deduct', the feature is effectively
@@ -64,6 +70,7 @@ module.exports = {
   getStageStockActions,
   isDeductStage,
   isRestoreStage,
+  isDeliveredStage,
   anyDeductStageConfigured,
   deductStockForOrder,
   restoreStockForOrder,

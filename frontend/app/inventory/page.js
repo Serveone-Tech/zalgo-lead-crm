@@ -13,7 +13,7 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", price: "", stock_qty: "", weight_kg: "" });
+  const [form, setForm] = useState({ name: "", price: "", stock_qty: "", weight_kg: "", hsn_code: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(null);
@@ -89,13 +89,13 @@ export default function InventoryPage() {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: "", price: "", stock_qty: "", weight_kg: "" });
+    setForm({ name: "", price: "", stock_qty: "", weight_kg: "", hsn_code: "" });
     setError("");
     setShowForm(true);
   };
   const openEdit = (item) => {
     setEditing(item);
-    setForm({ name: item.name, price: item.price, stock_qty: item.stock_qty, weight_kg: item.weight_kg });
+    setForm({ name: item.name, price: item.price, stock_qty: item.stock_qty, weight_kg: item.weight_kg, hsn_code: item.hsn_code });
     setError("");
     setShowForm(true);
   };
@@ -353,7 +353,7 @@ export default function InventoryPage() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ background: "var(--bg-surface)" }}>
-                {["Name", "Price", "Stock", "Weight", "Actions"].map((h) => (
+                {["Name", "Price", "Stock", "Weight", "HSN Code", "Actions"].map((h) => (
                   <th
                     key={h}
                     style={{
@@ -393,6 +393,9 @@ export default function InventoryPage() {
                   </td>
                   <td style={{ padding: "12px 14px", fontSize: 13, color: "var(--text-secondary)" }}>
                     {item.weight_kg ? `${item.weight_kg} kg` : <span style={{ color: "var(--text-muted)" }}>—</span>}
+                  </td>
+                  <td style={{ padding: "12px 14px", fontSize: 13, color: "var(--text-secondary)" }}>
+                    {item.hsn_code || <span style={{ color: "var(--text-muted)" }}>—</span>}
                   </td>
                   <td style={{ padding: "12px 14px", textAlign: "right" }}>
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -539,6 +542,15 @@ export default function InventoryPage() {
                       value={form.weight_kg}
                       onChange={(e) => setForm((f) => ({ ...f, weight_kg: e.target.value }))}
                       placeholder="0"
+                      style={inp}
+                    />
+                  </div>
+                  <div>
+                    <label style={lbl}>HSN Code</label>
+                    <input
+                      value={form.hsn_code}
+                      onChange={(e) => setForm((f) => ({ ...f, hsn_code: e.target.value }))}
+                      placeholder="e.g. 30049099"
                       style={inp}
                     />
                   </div>

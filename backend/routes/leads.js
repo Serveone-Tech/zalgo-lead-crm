@@ -5,7 +5,7 @@ const { hasPermission, isOwner } = require("../utils/permissions");
 const { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
 const { getOrCreateCustomerFromLead } = require("../utils/customer-conversion");
 const { savePendingLead } = require("../utils/pending-leads");
-const { getStageStockActions, isDeductStage, anyDeductStageConfigured, deductStockForOrder } = require("../utils/inventory");
+const { getStageStockActions, isDeductStage, isDeliveredStage, anyDeductStageConfigured, deductStockForOrder } = require("../utils/inventory");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
 
 let fireTrigger = async () => {}; // safe default
@@ -551,6 +551,7 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
     next_due_date,
     tracking_id,
     provider,
+    order_type,
     stage,
     notes,
     items,
@@ -593,8 +594,8 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
 
     const orderRes = await pool.query(
       `INSERT INTO customer_orders
-        (user_id, customer_id, address, city, state, pincode, amount, payment_type, advance_paid, next_due_date, tracking_id, provider, stage, notes, package_weight_kg, package_length_cm, package_width_cm, package_height_cm)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
+        (user_id, customer_id, address, city, state, pincode, amount, payment_type, advance_paid, next_due_date, tracking_id, provider, stage, notes, package_weight_kg, package_length_cm, package_width_cm, package_height_cm, created_by, order_type)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING *`,
       [
         req.tenantId,
         customer.id,
@@ -614,6 +615,8 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
         package_length_cm !== undefined && package_length_cm !== "" ? parseFloat(package_length_cm) : null,
         package_width_cm !== undefined && package_width_cm !== "" ? parseFloat(package_width_cm) : null,
         package_height_cm !== undefined && package_height_cm !== "" ? parseFloat(package_height_cm) : null,
+        req.user.id,
+        order_type === "REPEAT" ? "REPEAT" : "FRESH",
       ],
     );
     const order = orderRes.rows[0];
@@ -639,6 +642,12 @@ router.post("/:id/fulfill-order", auth, async (req, res) => {
       // Same moment stock draws down is when the order should ship — create
       // it at whichever courier was picked (no-op if none was selected).
       await createCourierShipmentForOrder(order.id, req.tenantId);
+    }
+    // Rare, but an order can be fulfilled directly onto a delivered stage
+    // (e.g. a walk-in sale logged after the fact) — the Sales Report needs
+    // delivered_at set for it too, same as the stage-change path below.
+    if (isDeliveredStage(stageRows, stage || "")) {
+      await pool.query("UPDATE customer_orders SET delivered_at=NOW() WHERE id=$1", [order.id]);
     }
 
     res.json({ customer_id: customer.id, order_id: order.id });

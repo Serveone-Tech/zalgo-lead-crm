@@ -689,6 +689,21 @@ export default function CustomerDetailPage() {
                           >
                             {o.payment_type === "cod" ? "COD" : "Prepaid"}
                           </span>
+                          {o.order_type && (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                borderRadius: 20,
+                                padding: "2px 8px",
+                                background: o.order_type === "REPEAT" ? "rgba(122,90,197,0.12)" : "var(--bg-card)",
+                                color: o.order_type === "REPEAT" ? "#7b5ea7" : "var(--text-secondary)",
+                                border: "1px solid var(--border)",
+                              }}
+                            >
+                              {o.order_type}
+                            </span>
+                          )}
                         </div>
                         <div style={{ marginTop: 4 }}>
                           {(isOwnerUser(user) || hasPerm(user, "manage_customers")) ? (

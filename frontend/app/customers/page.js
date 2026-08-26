@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
-import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar } from "lucide-react";
+import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar, Download } from "lucide-react";
 
 function today() {
   return new Date().toISOString().split("T")[0];
@@ -47,6 +47,11 @@ export default function CustomersPage() {
   const [dateTo, setDateTo] = useState("");
   const [orderStages, setOrderStages] = useState([]);
   const [stageChanging, setStageChanging] = useState(null);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportFrom, setReportFrom] = useState("");
+  const [reportTo, setReportTo] = useState("");
+  const [reportDownloading, setReportDownloading] = useState(false);
+  const [reportError, setReportError] = useState("");
 
   useEffect(() => {
     setMounted(true);
@@ -76,6 +81,56 @@ export default function CustomersPage() {
       // no-op — dropdown just stays on whatever it was
     }
     setStageChanging(null);
+  };
+
+  const openReportModal = () => {
+    const now = new Date();
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    setReportFrom(firstOfMonth.toISOString().split("T")[0]);
+    setReportTo(now.toISOString().split("T")[0]);
+    setReportError("");
+    setShowReportModal(true);
+  };
+
+  const setReportRangeThisMonth = () => {
+    const now = new Date();
+    setReportFrom(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]);
+    setReportTo(now.toISOString().split("T")[0]);
+  };
+
+  const setReportRangeLastMonth = () => {
+    const now = new Date();
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    setReportFrom(lastMonthStart.toISOString().split("T")[0]);
+    setReportTo(lastMonthEnd.toISOString().split("T")[0]);
+  };
+
+  const downloadSalesReport = async () => {
+    if (!reportFrom || !reportTo) {
+      setReportError("Pick both a from and to date");
+      return;
+    }
+    setReportDownloading(true);
+    setReportError("");
+    try {
+      const res = await api.get("/customers/reports/sales-excel", {
+        params: { from: reportFrom, to: reportTo },
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `sales-report-${reportFrom}-to-${reportTo}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setShowReportModal(false);
+    } catch {
+      setReportError("Failed to download report. Please try again.");
+    }
+    setReportDownloading(false);
   };
 
   const load = async () => {
@@ -211,6 +266,25 @@ export default function CustomersPage() {
               <Trash2 size={15} /> Trash
             </button>
           )}
+          <button
+            onClick={openReportModal}
+            style={{
+              background: "transparent",
+              color: "var(--text-secondary)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+              padding: "9px 18px",
+              fontFamily: "var(--font-main)",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Download size={15} /> Sales Report
+          </button>
           <button
             onClick={() => setShowAdd(true)}
             style={{
@@ -970,6 +1044,173 @@ export default function CustomersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showReportModal && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowReportModal(false);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: 14,
+              padding: "26px 24px",
+              width: "100%",
+              maxWidth: 420,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 18,
+              }}
+            >
+              <h2
+                style={{
+                  fontFamily: "var(--font-main)",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: "var(--text-primary)",
+                }}
+              >
+                Sales Report
+              </h2>
+              <button
+                onClick={() => setShowReportModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  fontSize: 20,
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
+              Excel download of every order marked 📬 Delivered (Settings → Order Stages), one row per order —
+              delivered date, customer, city/pincode/state, items/HSN codes/quantities, COD/Prepaid, total amount,
+              order type, the customer's assigned employee, and tracking ID/courier.
+            </p>
+
+            {reportError && (
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: "9px 13px",
+                  background: "var(--danger-dim)",
+                  border: "1px solid var(--danger)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  color: "var(--danger)",
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                ⚠ {reportError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <button
+                type="button"
+                onClick={setReportRangeThisMonth}
+                style={{
+                  flex: 1,
+                  padding: "7px 10px",
+                  borderRadius: 7,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text-secondary)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                This Month
+              </button>
+              <button
+                type="button"
+                onClick={setReportRangeLastMonth}
+                style={{
+                  flex: 1,
+                  padding: "7px 10px",
+                  borderRadius: 7,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text-secondary)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                Last Month
+              </button>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+              <F label="From">
+                <input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} style={inp} />
+              </F>
+              <F label="To">
+                <input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} style={inp} />
+              </F>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(false)}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: 8,
+                  background: "transparent",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                  fontSize: 13,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={downloadSalesReport}
+                disabled={reportDownloading}
+                style={{
+                  padding: "9px 20px",
+                  borderRadius: 8,
+                  background: reportDownloading ? "var(--bg-hover)" : "var(--teal)",
+                  border: "none",
+                  color: "#fff",
+                  fontFamily: "var(--font-main)",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: reportDownloading ? "not-allowed" : "pointer",
+                }}
+              >
+                {reportDownloading ? "Downloading..." : "Download"}
+              </button>
+            </div>
           </div>
         </div>
       )}
