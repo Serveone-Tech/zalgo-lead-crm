@@ -409,6 +409,28 @@ router.delete("/:id", auth, requirePermission("delete_customers"), async (req, r
   }
 });
 
+// POST bulk delete — same permanent delete as the single-customer route
+// above (no trash/undo for customers themselves, only orders have that),
+// just applied to a whole list-page selection at once. POST (not DELETE)
+// so the id list can travel safely in the body.
+router.post("/bulk-delete", auth, requirePermission("delete_customers"), async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: "No customers selected" });
+  }
+  try {
+    const vis = visibilityClause(req, 3);
+    const result = await pool.query(
+      `DELETE FROM customers c WHERE id=ANY($1) AND user_id=$2${vis.clause} RETURNING id`,
+      [ids, req.tenantId, ...vis.params],
+    );
+    res.json({ success: true, deleted: result.rows.length });
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // PUT order — the full Order Fulfillment record (customer name/email/alt
 // phone/address, order amount/payment/tracking, items) stays editable after
 // submission, since none of it is reliably final at the moment of first

@@ -52,6 +52,9 @@ export default function CustomersPage() {
   const [reportTo, setReportTo] = useState("");
   const [reportDownloading, setReportDownloading] = useState(false);
   const [reportError, setReportError] = useState("");
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -194,6 +197,34 @@ export default function CustomersPage() {
     }
     setDeleting(null);
     setConfirmDelete(null);
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) =>
+      prev.size === filtered.length ? new Set() : new Set(filtered.map((c) => c.id)),
+    );
+  };
+
+  const bulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      await api.post("/customers/bulk-delete", { ids: Array.from(selectedIds) });
+      setSelectedIds(new Set());
+      load();
+    } catch {
+      // no-op — selection stays as-is so the user can retry
+    }
+    setBulkDeleting(false);
+    setConfirmBulkDelete(false);
   };
 
   const fmt = mounted ? formatCurrency : (n) => `₹${parseFloat(n) || 0}`;
@@ -448,6 +479,63 @@ export default function CustomersPage() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div
+          style={{
+            marginBottom: 16,
+            padding: "10px 16px",
+            background: "var(--danger-dim)",
+            border: "1px solid var(--danger)",
+            borderRadius: 10,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+          }}
+        >
+          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--danger)", fontFamily: "var(--font-main)" }}>
+            {selectedIds.size} customer{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 7,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                color: "var(--text-secondary)",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "var(--font-main)",
+              }}
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => setConfirmBulkDelete(true)}
+              style={{
+                padding: "7px 14px",
+                borderRadius: 7,
+                background: "var(--danger)",
+                border: "none",
+                color: "#fff",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "var(--font-main)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <Trash2 size={13} /> Delete Selected
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         style={{
           background: "var(--bg-card)",
@@ -498,6 +586,22 @@ export default function CustomersPage() {
             >
               <thead>
                 <tr style={{ background: "var(--bg-surface)" }}>
+                  {(isOwnerUser(user) || hasPerm(user, "delete_customers")) && (
+                    <th
+                      style={{
+                        padding: "11px 14px",
+                        borderBottom: "1px solid var(--border)",
+                        width: 1,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                        onChange={toggleSelectAll}
+                        style={{ cursor: "pointer" }}
+                      />
+                    </th>
+                  )}
                   {[
                     "#",
                     "Name",
@@ -538,6 +642,7 @@ export default function CustomersPage() {
                   const balance = parseFloat(c.total_due_amount || 0);
                   const over = isOverdue(c.next_due_date),
                     tod = isToday(c.next_due_date);
+                  const isSelected = selectedIds.has(c.id);
                   return (
                     <tr
                       key={c.id}
@@ -545,15 +650,26 @@ export default function CustomersPage() {
                         borderBottom: "1px solid var(--border)",
                         transition: "background 0.15s",
                         cursor: "pointer",
+                        background: isSelected ? "var(--bg-hover)" : "transparent",
                       }}
                       onMouseEnter={(e) =>
                         (e.currentTarget.style.background = "var(--bg-hover)")
                       }
                       onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = "transparent")
+                        (e.currentTarget.style.background = isSelected ? "var(--bg-hover)" : "transparent")
                       }
                       onClick={() => router.push(`/customers/${c.id}`)}
                     >
+                      {(isOwnerUser(user) || hasPerm(user, "delete_customers")) && (
+                        <td style={{ padding: "12px 14px" }} onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSelect(c.id)}
+                            style={{ cursor: "pointer" }}
+                          />
+                        </td>
+                      )}
                       <td
                         style={{
                           padding: "12px 14px",
@@ -1308,6 +1424,105 @@ export default function CustomersPage() {
                 }}
               >
                 {deleting === confirmDelete.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmBulkDelete && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmBulkDelete(false);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 300,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: 14,
+              padding: "26px 24px",
+              width: "100%",
+              maxWidth: 400,
+              boxShadow: "var(--shadow-lg)",
+            }}
+          >
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "var(--danger-dim)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 20,
+                marginBottom: 14,
+              }}
+            >
+              ⚠️
+            </div>
+            <h2
+              style={{
+                fontFamily: "var(--font-main)",
+                fontSize: 16,
+                fontWeight: 700,
+                color: "var(--text-primary)",
+                marginBottom: 8,
+              }}
+            >
+              Delete {selectedIds.size} customer{selectedIds.size !== 1 ? "s" : ""}?
+            </h2>
+            <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 22 }}>
+              This will permanently delete all {selectedIds.size} selected customer{selectedIds.size !== 1 ? "s" : ""}{" "}
+              and their payment records, orders, and history. This action cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setConfirmBulkDelete(false)}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: 8,
+                  background: "transparent",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-secondary)",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={bulkDelete}
+                disabled={bulkDeleting}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: 8,
+                  background: "var(--danger)",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: bulkDeleting ? "not-allowed" : "pointer",
+                  opacity: bulkDeleting ? 0.6 : 1,
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                {bulkDeleting ? "Deleting..." : "Delete All"}
               </button>
             </div>
           </div>
