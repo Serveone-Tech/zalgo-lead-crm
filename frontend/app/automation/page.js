@@ -196,7 +196,6 @@ export default function AutomationPage() {
     whatsapp_enabled: false,
     wa_account_sid: "",
     wa_auth_token: "",
-    wa_from: "",
   });
   const [triggers, setTriggers] = useState({});
   const [deliveryProviders, setDeliveryProviders] = useState([]);
@@ -527,17 +526,16 @@ export default function AutomationPage() {
             },
             {
               key: "whatsapp",
-              title: "WhatsApp (Twilio)",
+              title: "WhatsApp (Meta Cloud API)",
               icon: "🟢",
               fields: [
-                { k: "wa_account_sid", l: "Account SID", ph: "ACxxxxxxxxxx" },
+                { k: "wa_account_sid", l: "Phone Number ID", ph: "e.g. 1261586240366783" },
                 {
                   k: "wa_auth_token",
-                  l: "Auth Token",
-                  ph: "Your auth token",
+                  l: "Access Token",
+                  ph: "Your Meta access token",
                   type: "password",
                 },
-                { k: "wa_from", l: "WhatsApp Number", ph: "+14155238886" },
               ],
             },
           ].map(({ key, title, icon, fields }) => {

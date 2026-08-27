@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
+const { sendWhatsAppViaMeta } = require("../utils/whatsapp-meta");
 
 const router = express.Router();
 
@@ -108,13 +109,15 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
         sms_from: fields.sms_from || cur.sms_from || "",
       };
     } else if (channel === "whatsapp") {
+      // wa_account_sid/wa_auth_token now hold Meta's Phone Number ID /
+      // Access Token (repurposed from the old Twilio-shaped columns —
+      // Meta needs no separate "from" number, so wa_from is unused).
       cols = {
         whatsapp_enabled: !!fields.whatsapp_enabled,
         wa_account_sid: fields.wa_account_sid || cur.wa_account_sid || "",
         wa_auth_token: fields.wa_auth_token?.includes("****")
           ? cur.wa_auth_token || ""
           : fields.wa_auth_token || "",
-        wa_from: fields.wa_from || cur.wa_from || "",
       };
     } else return res.status(400).json({ error: "Invalid channel" });
 
@@ -295,7 +298,7 @@ router.post("/send", auth, requireSubscription, requirePlanFeature("automation")
       return res.json({ success: true, message: `SMS sent to ${toNum}` });
     }
 
-    // ── WhatsApp via Twilio ──
+    // ── WhatsApp via Meta Cloud API ──
     if (channel === "whatsapp") {
       if (!creds.whatsapp_enabled)
         return res
@@ -304,39 +307,16 @@ router.post("/send", auth, requireSubscription, requirePlanFeature("automation")
       if (!creds.wa_account_sid)
         return res
           .status(400)
-          .json({ error: "Twilio Account SID not configured" });
+          .json({ error: "Meta Phone Number ID not configured" });
       if (!creds.wa_auth_token)
         return res
           .status(400)
-          .json({ error: "Twilio Auth Token not configured" });
-      if (!creds.wa_from)
-        return res
-          .status(400)
-          .json({ error: "WhatsApp From number not configured" });
-
-      let twilio;
-      try {
-        twilio = require("twilio");
-      } catch {
-        return res
-          .status(500)
-          .json({ error: "twilio not installed. Run: npm install twilio" });
-      }
-
-      const client = twilio(creds.wa_account_sid, creds.wa_auth_token);
+          .json({ error: "Meta Access Token not configured" });
 
       let toNum = to.replace(/\s+/g, "");
-      if (!toNum.startsWith("+")) toNum = "+91" + toNum;
-      const waTo = toNum.startsWith("whatsapp:") ? toNum : `whatsapp:${toNum}`;
-      const waFrom = creds.wa_from.startsWith("whatsapp:")
-        ? creds.wa_from
-        : `whatsapp:${creds.wa_from}`;
+      if (!toNum.startsWith("+") && !/^\d{11,}$/.test(toNum)) toNum = "+91" + toNum;
 
-      await client.messages.create({
-        body: message,
-        from: waFrom,
-        to: waTo,
-      });
+      await sendWhatsAppViaMeta(creds, toNum, message);
 
       return res.json({ success: true, message: `WhatsApp sent to ${toNum}` });
     }

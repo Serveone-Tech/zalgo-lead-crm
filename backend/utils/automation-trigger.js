@@ -1,4 +1,5 @@
 const { pool } = require("../db");
+const { sendWhatsAppViaMeta } = require("./whatsapp-meta");
 
 function replaceVars(template, data) {
   return template
@@ -71,12 +72,7 @@ async function sendSMS(creds, phone, message) {
 }
 
 async function sendWhatsApp(creds, phone, message) {
-  if (
-    !creds.whatsapp_enabled ||
-    !creds.wa_account_sid ||
-    !creds.wa_auth_token ||
-    !creds.wa_from
-  ) {
+  if (!creds.whatsapp_enabled || !creds.wa_account_sid || !creds.wa_auth_token) {
     console.log("WhatsApp skipped — not configured");
     return;
   }
@@ -86,16 +82,7 @@ async function sendWhatsApp(creds, phone, message) {
     return;
   }
 
-  const twilio = require("twilio");
-  const client = twilio(creds.wa_account_sid, creds.wa_auth_token);
-
-  // ✅ Proper WhatsApp format
-  const waTo = `whatsapp:${toNum}`;
-  const waFrom = creds.wa_from.startsWith("whatsapp:")
-    ? creds.wa_from
-    : `whatsapp:${creds.wa_from}`;
-
-  await client.messages.create({ body: message, from: waFrom, to: waTo });
+  await sendWhatsAppViaMeta(creds, toNum, message);
   console.log("✅ WhatsApp sent to:", toNum);
 }
 
