@@ -13,9 +13,14 @@ function replaceVars(template, data) {
 
 function cleanPhone(phone) {
   if (!phone) return "";
-  let p = phone.toString().replace(/\s+/g, "").replace(/-/g, "");
-  if (!p.startsWith("+")) p = "+91" + p;
-  return p;
+  const p = phone.toString().replace(/\s+/g, "").replace(/-/g, "");
+  if (p.startsWith("+")) return p;
+  // Already carries the 91 country code without a leading + (e.g. leads
+  // captured from WhatsApp's "from" field, like "918269231206") — adding
+  // another +91 on top produced a broken, undeliverable number.
+  if (/^91\d{10}$/.test(p)) return "+" + p;
+  if (/^\d{10}$/.test(p)) return "+91" + p;
+  return "+" + p;
 }
 
 async function sendEmail(creds, to, message, subject) {
