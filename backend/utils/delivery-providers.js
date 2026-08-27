@@ -78,6 +78,11 @@ async function createOrderDelhivery(credentials, payload) {
     seller_inv: "",
     quantity: String((payload.items || []).reduce((s, i) => s + (parseInt(i.quantity) || 1), 0) || 1),
     waybill: "",
+    // Delhivery's own documented sample payload only shows shipment_width/
+    // shipment_height (no length field) — shipment_length is added
+    // defensively in case their API accepts it anyway despite the sample
+    // omitting it; unknown fields are typically ignored, not rejected.
+    shipment_length: String(payload.lengthCm || 10),
     shipment_width: String(payload.widthCm || 10),
     shipment_height: String(payload.heightCm || 10),
     // Delhivery expects weight in grams.
