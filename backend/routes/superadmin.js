@@ -33,13 +33,14 @@ router.get('/users', superadminAuth, async (req, res) => {
 // ── GET dashboard stats
 router.get('/stats', superadminAuth, async (req, res) => {
   try {
-    const [total, active, trial, expired, cancelled, revenue] = await Promise.all([
+    const [total, active, trial, expired, cancelled, revenue, newContacts] = await Promise.all([
       pool.query("SELECT COUNT(*) FROM users WHERE role!='superadmin'"),
       pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='active'"),
       pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='trial'"),
       pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='expired'"),
       pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='cancelled'"),
       pool.query("SELECT COALESCE(SUM(amount_paid),0) as total FROM subscriptions WHERE status='active'"),
+      pool.query("SELECT COUNT(*) FROM contact_requests WHERE status='new'"),
     ]);
     res.json({
       total_users: parseInt(total.rows[0].count),
@@ -48,7 +49,32 @@ router.get('/stats', superadminAuth, async (req, res) => {
       expired: parseInt(expired.rows[0].count),
       cancelled: parseInt(cancelled.rows[0].count),
       total_revenue: parseFloat(revenue.rows[0].total),
+      newContactRequests: parseInt(newContacts.rows[0].count),
     });
+  } catch { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── GET contact form submissions (marketing site inbox)
+router.get('/contact-requests', superadminAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM contact_requests ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUT update a contact request's status
+router.put('/contact-requests/:id', superadminAuth, async (req, res) => {
+  const { status } = req.body;
+  if (!['new', 'contacted', 'closed'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE contact_requests SET status=$1 WHERE id=$2 RETURNING *',
+      [status, req.params.id],
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Not found' });
+    res.json(result.rows[0]);
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 

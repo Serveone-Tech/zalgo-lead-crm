@@ -229,6 +229,21 @@ const initDB = async () => {
         updated_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- Public "Contact Us" form submissions from the marketing site — not
+      -- tenant-scoped (no user_id), since the submitter may not have an
+      -- account yet. Surfaced in the Super Admin inbox.
+      CREATE TABLE IF NOT EXISTS contact_requests (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        phone VARCHAR(50) DEFAULT '',
+        company VARCHAR(255) DEFAULT '',
+        message TEXT DEFAULT '',
+        source VARCHAR(50) DEFAULT '',
+        status VARCHAR(20) DEFAULT 'new',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS user_settings (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,

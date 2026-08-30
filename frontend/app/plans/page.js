@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { FEATURE_LABELS } from "../../lib/plan-features";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -103,13 +104,6 @@ export default function PlansPage() {
     );
 
   const planColors = ["var(--teal)", "var(--blue)", "var(--warn)"];
-
-  const FEATURE_LABELS = {
-    customers:   "Customer & Payment Management",
-    automation:  "Full Automation (Email + SMS + WhatsApp)",
-    bulk_upload: "Bulk Lead Import (CSV)",
-    employees:   "Team / Employee Management",
-  };
 
   return (
     <div

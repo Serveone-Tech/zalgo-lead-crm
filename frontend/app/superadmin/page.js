@@ -96,6 +96,7 @@ export default function SuperAdminDashboard() {
     { label:"On Trial",        value:stats?.trial||0,        color:"var(--blue)",    icon:"⏳" },
     { label:"Expired",         value:stats?.expired||0,      color:"var(--danger)",  icon:"⚠️" },
     { label:"Total Revenue",   value:`₹${(stats?.total_revenue||0).toLocaleString()}`, color:"var(--warn)", icon:"💰" },
+    { label:"New Contact Requests", value:stats?.newContactRequests||0, color:"var(--blue)", icon:"📩" },
   ];
 
   return (
@@ -113,6 +114,7 @@ export default function SuperAdminDashboard() {
             { label:"Dashboard",  icon:"📊", active:true },
             { label:"All Users",  icon:"👥", href:"#users" },
             { label:"Plans",      icon:"📋", href:"/superadmin/plans" },
+            { label:"Contact Requests", icon:"📩", href:"/superadmin/contact-requests" },
           ].map(item=>(
             <Link key={item.label} href={item.href||"#"} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:8, marginBottom:4, color: item.active?"var(--teal-light)":"var(--text-secondary)", background: item.active?"var(--teal-dim)":"transparent", fontFamily:"var(--font-main)", fontWeight: item.active?600:400, fontSize:13, textDecoration:"none", borderLeft: item.active?"2px solid var(--teal)":"2px solid transparent" }}>
               <span>{item.icon}</span>{item.label}

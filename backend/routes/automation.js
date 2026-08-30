@@ -136,7 +136,7 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
 });
 
 // ── GET webhook URLs — for auto-capturing leads from Google Ads / WhatsApp ──
-router.get("/webhook-urls", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+router.get("/webhook-urls", auth, requireSubscription, requirePlanFeature("lead_sources"), requirePermission("manage_automation"), async (req, res) => {
   try {
     const token = await ensureWebhookToken(req.tenantId);
     res.json(webhookUrls(req, token));
@@ -147,7 +147,7 @@ router.get("/webhook-urls", auth, requireSubscription, requirePlanFeature("autom
 });
 
 // ── POST regenerate webhook token — invalidates the old URLs ──
-router.post("/webhook-urls/regenerate", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+router.post("/webhook-urls/regenerate", auth, requireSubscription, requirePlanFeature("lead_sources"), requirePermission("manage_automation"), async (req, res) => {
   try {
     const token = crypto.randomBytes(24).toString("hex");
     await pool.query(

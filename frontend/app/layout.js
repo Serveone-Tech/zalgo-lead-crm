@@ -3,7 +3,11 @@ import './globals.css';
 import { usePathname } from 'next/navigation';
 import Sidebar from '../components/Sidebar';
 
-const NO_SIDEBAR = ['/login', '/register', '/onboarding', '/plans', '/superadmin'];
+const NO_SIDEBAR = [
+  '/', '/login', '/register', '/onboarding', '/plans', '/superadmin',
+  // Public marketing site — no auth, no in-app sidebar.
+  '/features', '/solutions', '/automation-suite', '/pricing', '/resources', '/contact',
+];
 
 export default function RootLayout({ children }) {
   const pathname = usePathname();

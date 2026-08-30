@@ -215,14 +215,46 @@ export default function AutomationPage() {
   });
   const [webhooks, setWebhooks] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [sub, setSub] = useState(null);
 
   useEffect(() => {
-    if (!localStorage.getItem("crm_token")) {
+    const raw = localStorage.getItem("crm_token");
+    if (!raw) {
       router.push("/login");
       return;
     }
+    const cachedUser = localStorage.getItem("crm_user");
+    const u = cachedUser ? JSON.parse(cachedUser) : null;
+    // Employees defer to the backend's own plan-feature check (it already
+    // gates every route) — only owners need the tab-level check here, same
+    // split Sidebar.js uses for its own hasPlanFeature.
+    if (u && u.role !== "superadmin" && !u.parent_id) {
+      api.get("/auth/subscription").then(({ data: s }) => setSub(s)).catch(() => {});
+    }
     load();
   }, []);
+
+  const planFeatures = sub?.features
+    ? typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features
+    : null;
+  const hasPlanFeature = (feat) => {
+    const cachedUser = typeof window !== "undefined" ? localStorage.getItem("crm_user") : null;
+    const u = cachedUser ? JSON.parse(cachedUser) : null;
+    if (!u || u.parent_id) return true; // employees — backend guards anyway
+    if (!planFeatures) return true; // owner but sub not loaded yet
+    return planFeatures.includes(feat);
+  };
+
+  // A Pro-tier owner (lead_sources but not automation) would otherwise land
+  // on the now-hidden "Channel Setup" tab by default — bump them to
+  // whichever tab their plan actually shows once we know what that is.
+  useEffect(() => {
+    if (!planFeatures) return;
+    if (tab === "channels" && !hasPlanFeature("automation") && hasPlanFeature("lead_sources")) {
+      setTab("sources");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planFeatures]);
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -457,10 +489,10 @@ export default function AutomationPage() {
         }}
       >
         {[
-          { k: "channels", l: "⚡ Channel Setup" },
-          { k: "triggers", l: "🔔 Triggers" },
-          { k: "manual", l: "✉ Manual Send" },
-          { k: "sources", l: "🔗 Lead Sources" },
+          ...(hasPlanFeature("automation") ? [{ k: "channels", l: "⚡ Channel Setup" }] : []),
+          ...(hasPlanFeature("automation") ? [{ k: "triggers", l: "🔔 Triggers" }] : []),
+          ...(hasPlanFeature("automation") ? [{ k: "manual", l: "✉ Manual Send" }] : []),
+          ...(hasPlanFeature("lead_sources") ? [{ k: "sources", l: "🔗 Lead Sources" }] : []),
         ].map((t) => (
           <button
             key={t.k}

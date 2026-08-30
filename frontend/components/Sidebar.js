@@ -295,7 +295,7 @@ export default function Sidebar() {
     {
       section: "SETTINGS",
       items: [
-        ...(hasPlanFeature("automation")
+        ...(hasPlanFeature("automation") || hasPlanFeature("lead_sources")
           ? [
               {
                 href: "/automation",

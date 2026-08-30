@@ -17,6 +17,7 @@ const inventoryRoutes   = require('./routes/inventory');
 const webhooksRoutes   = require('./routes/webhooks');
 const pendingLeadsRoutes = require('./routes/pending-leads');
 const deliveryRoutes   = require('./routes/delivery');
+const contactRoutes    = require('./routes/contact');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,6 +39,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/webhooks',   webhooksRoutes);
 app.use('/api/pending-leads', pendingLeadsRoutes);
 app.use('/api/delivery',   deliveryRoutes);
+app.use('/api/contact',    contactRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

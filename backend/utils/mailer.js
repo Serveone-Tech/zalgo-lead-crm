@@ -177,6 +177,46 @@ async function sendPlanCancelled(email, name, planName) {
   `));
 }
 
+// ── CONTACT FORM SUBMISSION (public marketing site → admin inbox) ──
+const SUPERADMIN_NOTIFY_EMAIL = "zalgoinfotec@gmail.com";
+// Public, unauthenticated form — escape before interpolating into HTML email.
+function escapeHtml(s) {
+  return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+async function sendContactNotification({ name, email, phone, company, message }) {
+  name = escapeHtml(name);
+  email = escapeHtml(email);
+  phone = escapeHtml(phone);
+  company = escapeHtml(company);
+  message = escapeHtml(message);
+  await send(SUPERADMIN_NOTIFY_EMAIL, `New Contact Request — ${name}`, wrap(`
+    <h2 style="color:#00c4ca;margin:0 0 8px">New Contact Request 📩</h2>
+    <p style="color:#94a3b8;margin:0 0 20px">Someone submitted the contact form on the website.</p>
+    <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="color:#5a7a96;font-size:12px;padding:6px 0;text-transform:uppercase;letter-spacing:0.06em">Name</td>
+          <td style="color:#e2e8f0;font-size:14px;font-weight:600;padding:6px 0;text-align:right">${name}</td>
+        </tr>
+        <tr>
+          <td style="color:#5a7a96;font-size:12px;padding:6px 0;text-transform:uppercase;letter-spacing:0.06em">Email</td>
+          <td style="color:#00c4ca;font-size:14px;font-weight:600;padding:6px 0;text-align:right">${email}</td>
+        </tr>
+        <tr>
+          <td style="color:#5a7a96;font-size:12px;padding:6px 0;text-transform:uppercase;letter-spacing:0.06em">Phone</td>
+          <td style="color:#e2e8f0;font-size:14px;font-weight:600;padding:6px 0;text-align:right">${phone || "—"}</td>
+        </tr>
+        <tr>
+          <td style="color:#5a7a96;font-size:12px;padding:6px 0;text-transform:uppercase;letter-spacing:0.06em">Company</td>
+          <td style="color:#e2e8f0;font-size:14px;font-weight:600;padding:6px 0;text-align:right">${company || "—"}</td>
+        </tr>
+      </table>
+    </div>
+    <p style="color:#5a7a96;font-size:12px;margin:0 0 6px;text-transform:uppercase;letter-spacing:0.06em">Message</p>
+    <p style="color:#e2e8f0;font-size:14px;line-height:1.6;margin:0;white-space:pre-wrap">${message || "—"}</p>
+  `));
+}
+
 module.exports = {
   sendOtp,
   sendTrialStarted,
@@ -185,4 +225,5 @@ module.exports = {
   sendExpiryReminder,
   sendPlanExpired,
   sendPlanCancelled,
+  sendContactNotification,
 };
