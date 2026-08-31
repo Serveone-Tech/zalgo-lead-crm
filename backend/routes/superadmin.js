@@ -14,9 +14,11 @@ router.get('/users', superadminAuth, async (req, res) => {
         o.name as org_name, o.phone as org_phone, o.logo_url,
         s.id as sub_id, s.status as sub_status, s.billing_cycle,
         s.starts_at, s.ends_at, s.trial_ends_at, s.amount_paid,
-        p.id as plan_id, p.name as plan_name, p.price_monthly,
+        s.employee_limit_override,
+        p.id as plan_id, p.name as plan_name, p.price_monthly, p.max_employees,
         (SELECT COUNT(*) FROM leads l WHERE l.user_id=u.id) as lead_count,
-        (SELECT COUNT(*) FROM customers c WHERE c.user_id=u.id) as customer_count
+        (SELECT COUNT(*) FROM customers c WHERE c.user_id=u.id) as customer_count,
+        (SELECT COUNT(*) FROM users e WHERE e.parent_id=u.id) as employee_count
       FROM users u
       LEFT JOIN organisations o ON o.user_id=u.id
       LEFT JOIN LATERAL (
@@ -150,11 +152,17 @@ router.post('/users/:id/subscription', superadminAuth, async (req, res) => {
       const d = parseInt(days) || (billing_cycle === 'yearly' ? 365 : 30);
       const ends_at = new Date(now.getTime() + d * 86400000);
 
+      // Changing plans replaces the subscription row — carry over any
+      // employee-limit override so switching plans doesn't silently reset
+      // a seat increase the tenant already had.
+      const prevOverride = await pool.query(
+        'SELECT employee_limit_override FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]
+      );
       await pool.query("UPDATE subscriptions SET status='cancelled' WHERE user_id=$1", [userId]);
       await pool.query(
-        `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, ends_at, notes, created_by)
-         VALUES ($1,$2,'active',$3,$4,$5,$6,$7)`,
-        [userId, plan_id, billing_cycle||'monthly', now, ends_at, notes||'', req.userId]
+        `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, ends_at, notes, created_by, employee_limit_override)
+         VALUES ($1,$2,'active',$3,$4,$5,$6,$7,$8)`,
+        [userId, plan_id, billing_cycle||'monthly', now, ends_at, notes||'', req.userId, prevOverride.rows[0]?.employee_limit_override ?? null]
       );
       if (u) mailer.sendPlanActivated(u.email, u.name, plan.rows[0].name, billing_cycle||'monthly', ends_at);
 
@@ -187,16 +195,41 @@ router.post('/users/:id/subscription', superadminAuth, async (req, res) => {
       const plan = await pool.query('SELECT * FROM plans WHERE id=$1', [plan_id || 1]);
       const now = new Date();
       const trial_ends_at = new Date(now.getTime() + (parseInt(days)||14) * 86400000);
+      const prevOverride = await pool.query(
+        'SELECT employee_limit_override FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]
+      );
       await pool.query("UPDATE subscriptions SET status='cancelled' WHERE user_id=$1", [userId]);
       await pool.query(
-        `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, trial_ends_at, notes, created_by)
-         VALUES ($1,$2,'trial','trial',$3,$4,$5,$6)`,
-        [userId, plan.rows[0]?.id || 1, now, trial_ends_at, notes||'Trial extended by admin', req.userId]
+        `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, trial_ends_at, notes, created_by, employee_limit_override)
+         VALUES ($1,$2,'trial','trial',$3,$4,$5,$6,$7)`,
+        [userId, plan.rows[0]?.id || 1, now, trial_ends_at, notes||'Trial extended by admin', req.userId, prevOverride.rows[0]?.employee_limit_override ?? null]
       );
       if (u) mailer.sendTrialStarted(u.email, u.name, plan.rows[0]?.name || 'Trial', trial_ends_at);
     }
 
     res.json({ success: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUT set a per-tenant employee-seat override — used when a tenant on
+// Basic/Pro (10 seats) or Pro Max (15) asks for more than their plan allows.
+// A null/empty limit clears the override back to the plan's own default.
+router.put('/users/:id/employee-limit', superadminAuth, async (req, res) => {
+  const { limit } = req.body;
+  const userId = req.params.id;
+  try {
+    const value = limit === '' || limit === null || limit === undefined ? null : parseInt(limit);
+    if (value !== null && (isNaN(value) || value < 0)) {
+      return res.status(400).json({ error: 'Limit must be a non-negative number' });
+    }
+    const result = await pool.query(
+      `UPDATE subscriptions SET employee_limit_override=$1, updated_at=NOW()
+       WHERE id = (SELECT id FROM subscriptions WHERE user_id=$2 ORDER BY created_at DESC LIMIT 1)
+       RETURNING id`,
+      [value, userId],
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'No subscription found' });
+    res.json({ success: true, employee_limit_override: value });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 

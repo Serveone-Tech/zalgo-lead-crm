@@ -31,6 +31,8 @@ export default function SuperAdminDashboard() {
   const [filterStatus, setFilterStatus] = useState("");
   const [actionUser, setActionUser]     = useState(null);
   const [actionData, setActionData]     = useState({ action:"activate", plan_id:"", billing_cycle:"monthly", days:30, notes:"" });
+  const [empLimitInput, setEmpLimitInput] = useState("");
+  const [savingLimit, setSavingLimit]   = useState(false);
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState(null);
 
@@ -167,14 +169,14 @@ export default function SuperAdminDashboard() {
             <table style={{ width:"100%", borderCollapse:"collapse", minWidth:900 }}>
               <thead>
                 <tr style={{ background:"var(--bg-surface)" }}>
-                  {["#","User / Org","Email","Plan","Status","Expires","Leads","Customers","Actions"].map(h=>(
+                  {["#","User / Org","Email","Plan","Status","Expires","Leads","Customers","Employees","Actions"].map(h=>(
                     <th key={h} style={{ padding:"11px 14px", textAlign:"left", fontSize:10, color:"var(--text-muted)", fontWeight:600, letterSpacing:"0.07em", textTransform:"uppercase", borderBottom:"1px solid var(--border)", fontFamily:"var(--font-main)", whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={9} style={{ padding:40, textAlign:"center", color:"var(--text-muted)" }}>No users found</td></tr>
+                  <tr><td colSpan={10} style={{ padding:40, textAlign:"center", color:"var(--text-muted)" }}>No users found</td></tr>
                 ) : filtered.map((u,i)=>{
                   const sc = STATUS_COLORS[u.sub_status] || { bg:"rgba(100,100,100,0.12)", color:"#888", label:u.sub_status||"No Plan" };
                   const expiry = u.sub_status==="trial" ? u.trial_ends_at : u.ends_at;
@@ -213,9 +215,17 @@ export default function SuperAdminDashboard() {
                       </td>
                       <td style={{ padding:"12px 14px", fontSize:12, color:"var(--text-secondary)", textAlign:"center" }}>{u.lead_count||0}</td>
                       <td style={{ padding:"12px 14px", fontSize:12, color:"var(--text-secondary)", textAlign:"center" }}>{u.customer_count||0}</td>
+                      <td style={{ padding:"12px 14px", fontSize:12, color:"var(--text-secondary)", textAlign:"center", whiteSpace:"nowrap" }}>
+                        {u.max_employees != null ? (
+                          <>
+                            {u.employee_count||0} / {(u.employee_limit_override ?? u.max_employees) === -1 ? "∞" : (u.employee_limit_override ?? u.max_employees)}
+                            {u.employee_limit_override != null && <span title="Custom limit set by Super Admin" style={{ color:"var(--teal)" }}> ★</span>}
+                          </>
+                        ) : "—"}
+                      </td>
                       <td style={{ padding:"12px 14px" }}>
                         <div style={{ display:"flex", gap:6 }}>
-                          <button onClick={()=>{ setActionUser(u); setActionData(d=>({...d, plan_id: u.plan_id||plans[0]?.id||""})); }} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--teal)", fontSize:11, cursor:"pointer", fontWeight:600 }}
+                          <button onClick={()=>{ setActionUser(u); setActionData(d=>({...d, plan_id: u.plan_id||plans[0]?.id||""})); setEmpLimitInput(u.employee_limit_override ?? ""); }} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--teal)", fontSize:11, cursor:"pointer", fontWeight:600 }}
                             onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal)"}
                             onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>Manage</button>
                           <button onClick={()=>deleteUser(u.id)} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--danger)", fontSize:11, cursor:"pointer", fontWeight:600 }}
@@ -297,6 +307,38 @@ export default function SuperAdminDashboard() {
               <div>
                 <Lbl>Notes (optional)</Lbl>
                 <input value={actionData.notes} onChange={e=>setActionData(d=>({...d,notes:e.target.value}))} placeholder="Reason for this action..." style={inp} />
+              </div>
+            </div>
+
+            <div style={{ marginTop:20, padding:14, border:"1px solid var(--border)", borderRadius:10 }}>
+              <Lbl>Employee Seat Limit — plan default is {actionUser.max_employees === -1 ? "unlimited" : (actionUser.max_employees ?? "—")}</Lbl>
+              <div style={{ display:"flex", gap:8 }}>
+                <input
+                  type="number" min="0"
+                  value={empLimitInput}
+                  onChange={e=>setEmpLimitInput(e.target.value)}
+                  placeholder="Leave blank to use plan default"
+                  style={{ ...inp, flex:1 }}
+                />
+                <button
+                  disabled={savingLimit}
+                  onClick={async ()=>{
+                    setSavingLimit(true);
+                    try {
+                      await api.put(`/superadmin/users/${actionUser.id}/employee-limit`, { limit: empLimitInput === "" ? null : parseInt(empLimitInput) });
+                      showToast("Employee seat limit updated!");
+                      loadAll();
+                      setActionUser(null);
+                    } catch { showToast("Failed to update seat limit", "error"); }
+                    setSavingLimit(false);
+                  }}
+                  style={{ padding:"9px 16px", borderRadius:8, background:"var(--teal)", border:"none", color:"#fff", fontFamily:"var(--font-main)", fontWeight:600, fontSize:12, cursor:"pointer", whiteSpace:"nowrap" }}
+                >
+                  {savingLimit ? "Saving..." : "Save Limit"}
+                </button>
+              </div>
+              <div style={{ fontSize:11, color:"var(--text-muted)", marginTop:6 }}>
+                Currently used: {actionUser.employee_count||0}. Set a number to override this tenant's seat count (e.g. after they request more), or leave blank to fall back to the plan's default.
               </div>
             </div>
 

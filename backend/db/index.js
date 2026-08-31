@@ -52,7 +52,16 @@ const initDB = async () => {
     const alterSubscriptions = [
       `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS expiry_reminder_sent BOOLEAN DEFAULT false`,
       `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS expired_email_sent BOOLEAN DEFAULT false`,
+      // NULL = use the plan's own max_employees; set by Super Admin when a
+      // tenant asks for more seats than their plan allows.
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS employee_limit_override INTEGER`,
     ];
+    const alterPlans = [
+      `ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_employees INTEGER DEFAULT 10`,
+    ];
+    for (const q of alterPlans) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
     const alterAutomationCredentials = [
       `ALTER TABLE automation_credentials ADD COLUMN IF NOT EXISTS webhook_token VARCHAR(64) UNIQUE`,
     ];

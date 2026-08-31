@@ -68,7 +68,7 @@ const requireSubscription = async (req, res, next) => {
     }
 
     const sub = await pool.query(
-      `SELECT s.*, p.name as plan_name, p.max_leads, p.max_customers, p.features
+      `SELECT s.*, p.name as plan_name, p.max_leads, p.max_customers, p.max_employees, p.features
        FROM subscriptions s JOIN plans p ON p.id = s.plan_id
        WHERE s.user_id = $1 ORDER BY s.created_at DESC LIMIT 1`,
       [tenantId]

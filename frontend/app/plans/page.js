@@ -491,6 +491,7 @@ export default function PlansPage() {
                     {[
                       plan.max_leads > 0 ? `Up to ${plan.max_leads} Leads` : "Unlimited Leads",
                       plan.max_customers > 0 ? `Up to ${plan.max_customers} Customers` : plan.max_customers === 0 ? null : "Unlimited Customers",
+                      features.includes("employees") ? (plan.max_employees > 0 ? `Up to ${plan.max_employees} Team Members` : "Unlimited Team Members") : null,
                     ].filter(Boolean).map((label, li) => (
                       <li key={`limit-${li}`} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, fontSize: 12, color: "var(--text-secondary)" }}>
                         <span style={{ color: accentColor, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>

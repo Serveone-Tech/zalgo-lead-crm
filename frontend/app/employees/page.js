@@ -37,6 +37,7 @@ function summarizeModulePerms(permissions) {
 export default function EmployeesPage() {
   const router = useRouter();
   const [employees, setEmployees] = useState([]);
+  const [sub, setSub] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -50,6 +51,7 @@ export default function EmployeesPage() {
       return;
     }
     load();
+    api.get("/auth/subscription").then((r) => setSub(r.data)).catch(() => {});
   }, []);
 
   const load = async () => {
@@ -65,6 +67,11 @@ export default function EmployeesPage() {
       setLoading(false);
     }
   };
+
+  // -1 on the plan means unlimited; a Super Admin-granted override always
+  // wins over the plan's own default seat count.
+  const employeeLimit = sub ? (sub.employee_limit_override ?? sub.max_employees) : null;
+  const atLimit = employeeLimit !== null && employeeLimit !== -1 && employees.length >= employeeLimit;
 
   const openAdd = () => {
     setEditing(null);
@@ -161,9 +168,15 @@ export default function EmployeesPage() {
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
             {employees.length} employee{employees.length !== 1 ? "s" : ""}
+            {employeeLimit !== null && employeeLimit !== -1 && ` of ${employeeLimit} on your plan`}
           </p>
+          {atLimit && (
+            <p style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>
+              You've reached your plan's employee limit. Contact us to request more seats.
+            </p>
+          )}
         </div>
-        <button onClick={openAdd} style={primaryBtn}>
+        <button onClick={openAdd} disabled={atLimit} style={{ ...primaryBtn, ...(atLimit ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}>
           <span style={{ fontSize: 16 }}>+</span> Add Employee
         </button>
       </div>

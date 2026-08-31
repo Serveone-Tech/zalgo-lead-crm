@@ -48,6 +48,19 @@ router.post("/", auth, requireSubscription, requirePlanFeature("employees"), req
   if (!name || !email || !password)
     return res.status(400).json({ error: "Name, email, password required" });
   try {
+    // -1 on the plan means unlimited; an admin-set override on the
+    // subscription (given when a tenant asks for more seats) always wins
+    // over the plan's own default.
+    const limit = req.subscription.employee_limit_override ?? req.subscription.max_employees;
+    if (limit !== -1 && limit !== null) {
+      const { rows } = await pool.query("SELECT COUNT(*) FROM users WHERE parent_id=$1", [req.tenantId]);
+      if (parseInt(rows[0].count) >= limit) {
+        return res.status(403).json({
+          error: `Employee limit reached (${limit} on your plan). Contact us to request more seats.`,
+        });
+      }
+    }
+
     const existing = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
     if (existing.rows.length > 0)
       return res.status(400).json({ error: "Email already in use" });
