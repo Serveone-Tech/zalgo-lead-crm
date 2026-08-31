@@ -2,6 +2,8 @@
 import { useState, useEffect } from "react";
 import api from "../lib/api";
 
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
+
 // Handles both creating an order (pass `lead`) and editing an existing one
 // (pass `order` + `customer`) — same field set either way. Only the primary
 // phone number stays locked/read-only in both modes: it's the identity key
@@ -41,6 +43,8 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
         }))
       : [{ inventory_item_id: "", name: "", quantity: 1, price: "" }],
   );
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const existingAttachment = { path: order?.attachment_path || "", name: order?.attachment_name || "" };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [stages, setStages] = useState([]);
@@ -170,10 +174,19 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
     setError("");
     setSaving(true);
     try {
-      await onSave({
+      const result = await onSave({
         ...form,
         items: items.filter((it) => it.name.trim()),
       });
+      if (attachmentFile) {
+        const orderId = order?.id || result?.order_id || result?.id;
+        const customerId = customer?.id || result?.customer_id;
+        if (orderId && customerId) {
+          const fd = new FormData();
+          fd.append("file", attachmentFile);
+          await api.post(`/customers/${customerId}/orders/${orderId}/attachment`, fd);
+        }
+      }
     } catch (err) {
       setError(
         err?.response?.data?.message ||
@@ -452,6 +465,27 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
           <div style={{ marginTop: 14 }}>
             <Field label="Notes">
               <textarea name="notes" value={form.notes} onChange={handle} rows={2} placeholder="Anything else about this order..." style={{ ...inp, resize: "vertical" }} />
+            </Field>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <Field label="Attachment (payment screenshot, report, etc.) — optional">
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,.pdf"
+                onChange={(e) => setAttachmentFile(e.target.files?.[0] || null)}
+                style={{ ...inp, padding: "7px 11px" }}
+              />
+              {attachmentFile ? (
+                <div style={{ marginTop: 6, fontSize: 11, color: "var(--text-muted)" }}>Selected: {attachmentFile.name}</div>
+              ) : existingAttachment.path ? (
+                <div style={{ marginTop: 6, fontSize: 11 }}>
+                  <a href={`${API_ORIGIN}${existingAttachment.path}`} target="_blank" rel="noopener noreferrer" style={{ color: "var(--teal)" }}>
+                    📎 View current attachment {existingAttachment.name ? `(${existingAttachment.name})` : ""}
+                  </a>
+                  <span style={{ color: "var(--text-muted)" }}> — choose a file above to replace it</span>
+                </div>
+              ) : null}
             </Field>
           </div>
 

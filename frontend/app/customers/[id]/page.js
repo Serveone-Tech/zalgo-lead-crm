@@ -133,9 +133,10 @@ export default function CustomerDetailPage() {
   };
 
   const saveOrderEdit = async (form) => {
-    await api.put(`/customers/${id}/orders/${editOrderModal.id}`, form);
+    const { data } = await api.put(`/customers/${id}/orders/${editOrderModal.id}`, form);
     setEditOrderModal(null);
     load();
+    return data;
   };
 
   const markOrderPaid = async (order) => {

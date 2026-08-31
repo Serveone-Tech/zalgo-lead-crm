@@ -209,9 +209,10 @@ function LeadsContent() {
   const openFulfill = (lead) => setFulfillLead(lead);
   const closeFulfill = () => setFulfillLead(null);
   const saveFulfillment = async (form) => {
-    await api.post(`/leads/${fulfillLead.id}/fulfill-order`, form);
+    const { data } = await api.post(`/leads/${fulfillLead.id}/fulfill-order`, form);
     closeFulfill();
     showToast(`✓ Order saved for "${form.name}".`);
+    return data;
   };
 
   // Checkbox helpers

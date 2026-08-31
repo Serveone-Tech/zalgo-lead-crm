@@ -122,6 +122,11 @@ const initDB = async () => {
       // Whether this is the customer's first order or a repeat purchase —
       // shown on the fulfillment form and as a Sales Report column.
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS order_type VARCHAR(10) DEFAULT 'FRESH'`,
+      // An optional proof file (advance payment screenshot, a report, etc.)
+      // attached from the fulfillment form. Stored on disk under
+      // /uploads/order-attachments; this column holds its public path.
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS attachment_path TEXT DEFAULT ''`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS attachment_name TEXT DEFAULT ''`,
     ];
     for (const q of alterCustomerOrders) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));

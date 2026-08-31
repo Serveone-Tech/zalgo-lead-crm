@@ -7,6 +7,7 @@ const { getStageStockActions, isDeductStage, isRestoreStage, isDeliveredStage, d
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
 const { PROVIDERS } = require("../utils/delivery-providers");
 const ExcelJS = require("exceljs");
+const upload = require("../middleware/upload");
 
 const router = express.Router();
 
@@ -618,6 +619,35 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
   } catch (e) {
     res.status(500).json({ error: "Server error" });
   }
+});
+
+// Optional proof file attached from the fulfillment form — an advance
+// payment screenshot, a report, whatever the tenant wants on record for
+// this order. Re-uploading replaces whatever was attached before.
+router.post("/:id/orders/:orderId/attachment", auth, requirePermission("manage_customers"), (req, res) => {
+  upload.single("file")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    try {
+      const vis = visibilityClause(req, 3);
+      const owns = await pool.query(
+        `SELECT id FROM customers c WHERE id=$1 AND user_id=$2${vis.clause}`,
+        [req.params.id, req.tenantId, ...vis.params],
+      );
+      if (!owns.rows[0]) return res.status(404).json({ error: "Not found" });
+
+      const attachmentPath = `/uploads/order-attachments/${req.file.filename}`;
+      const result = await pool.query(
+        `UPDATE customer_orders SET attachment_path=$1, attachment_name=$2
+         WHERE id=$3 AND customer_id=$4 AND deleted_at IS NULL RETURNING id, attachment_path, attachment_name`,
+        [attachmentPath, req.file.originalname, req.params.orderId, req.params.id],
+      );
+      if (!result.rows[0]) return res.status(404).json({ error: "Order not found" });
+      res.json(result.rows[0]);
+    } catch (e) {
+      res.status(500).json({ error: "Server error" });
+    }
+  });
 });
 
 // DELETE order — soft delete only. An employee with manage_customers can
