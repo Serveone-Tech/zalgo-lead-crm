@@ -565,8 +565,9 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     // The inventory_deducted flag is what makes both directions safe to run
     // repeatedly as the stage flips back and forth.
     let shipped = false;
+    let stageRows = null;
     if (stage !== undefined) {
-      const stageRows = await getStageStockActions(req.tenantId);
+      stageRows = await getStageStockActions(req.tenantId);
       if (!result.rows[0].inventory_deducted && isDeductStage(stageRows, stage)) {
         await deductStockForOrder(req.params.orderId, req.tenantId);
         result.rows[0].inventory_deducted = true;
@@ -593,10 +594,16 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
     // Without this, changing the dropdown only updated the `provider`
     // column and left the *previous* provider's courier_error sitting
     // there unchanged, which read as if the retry had already happened.
+    // Only auto-ship once the order's stage is actually confirmed (a
+    // 'deduct' stage) — picking a courier while still on an unconfirmed
+    // stage (e.g. the default Processing) just saves the choice for later.
     if (!shipped && provider !== undefined && !result.rows[0].courier_order_created) {
-      await pool.query("UPDATE customer_orders SET courier_error='' WHERE id=$1", [req.params.orderId]);
-      if (provider) await createCourierShipmentForOrder(req.params.orderId, req.tenantId);
-      shipped = true;
+      if (stageRows === null) stageRows = await getStageStockActions(req.tenantId);
+      if (isDeductStage(stageRows, result.rows[0].stage)) {
+        await pool.query("UPDATE customer_orders SET courier_error='' WHERE id=$1", [req.params.orderId]);
+        if (provider) await createCourierShipmentForOrder(req.params.orderId, req.tenantId);
+        shipped = true;
+      }
     }
 
     // createCourierShipmentForOrder wrote tracking_id/courier_error directly
