@@ -42,4 +42,4 @@ async function downloadWhatsAppMedia(mediaId, accessToken) {
   return { mediaUrl: `/uploads/whatsapp-media/${filename}`, mimeType: meta.mime_type || "" };
 }
 
-module.exports = { downloadWhatsAppMedia };
+module.exports = { downloadWhatsAppMedia, UPLOAD_DIR };

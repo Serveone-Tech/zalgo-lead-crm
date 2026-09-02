@@ -24,6 +24,7 @@ export default function WhatsAppChat({ leadId }) {
   const [error, setError] = useState("");
   const [preview, setPreview] = useState(null);
   const bottomRef = useRef(null);
+  const fileRef = useRef(null);
 
   const load = async (silent) => {
     if (!silent) setLoading(true);
@@ -62,6 +63,25 @@ export default function WhatsAppChat({ leadId }) {
       setError(err?.response?.data?.error || "Failed to send message");
     } finally {
       setSending(false);
+    }
+  };
+
+  const sendFile = async (file) => {
+    if (!file || sending) return;
+    setError("");
+    setSending(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      if (text.trim()) fd.append("caption", text.trim());
+      await api.post(`/leads/${leadId}/whatsapp-send-media`, fd);
+      setText("");
+      load(true);
+    } catch (err) {
+      setError(err?.response?.data?.error || "Failed to send file");
+    } finally {
+      setSending(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
   };
 
@@ -148,6 +168,31 @@ export default function WhatsAppChat({ leadId }) {
       )}
 
       <div style={{ display: "flex", gap: 8 }}>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf,.doc,.docx,audio/*,video/mp4,video/3gpp"
+          onChange={(e) => sendFile(e.target.files?.[0])}
+          style={{ display: "none" }}
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={sending}
+          title="Attach an image, document, audio, or video"
+          style={{
+            padding: "9px 12px",
+            borderRadius: 8,
+            background: "var(--bg-input)",
+            border: "1px solid var(--border)",
+            color: "var(--text-secondary)",
+            fontSize: 14,
+            cursor: sending ? "not-allowed" : "pointer",
+            flexShrink: 0,
+          }}
+        >
+          📎
+        </button>
         <input
           value={text}
           onChange={(e) => setText(e.target.value)}

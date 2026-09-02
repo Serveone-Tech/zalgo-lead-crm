@@ -1183,7 +1183,7 @@ function LeadsContent() {
                         {/* Actions */}
                         <td style={{ padding: "12px 14px" }}>
                           <div style={{ display: "flex", gap: 6 }}>
-                            {lead.platform === "WhatsApp" && lead.phone && hasPlanFeature("automation") && (
+                            {lead.phone && hasPlanFeature("automation") && (
                               <button
                                 onClick={() => setChatLead(lead)}
                                 style={{

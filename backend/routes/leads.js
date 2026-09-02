@@ -7,7 +7,9 @@ const { getOrCreateCustomerFromLead } = require("../utils/customer-conversion");
 const { savePendingLead } = require("../utils/pending-leads");
 const { getStageStockActions, isDeductStage, isDeliveredStage, anyDeductStageConfigured, deductStockForOrder } = require("../utils/inventory");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
-const { sendWhatsAppViaMeta } = require("../utils/whatsapp-meta");
+const { sendWhatsAppViaMeta, sendWhatsAppMediaViaMeta } = require("../utils/whatsapp-meta");
+const whatsappUpload = require("../middleware/whatsapp-upload");
+const fs = require("fs");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -576,6 +578,70 @@ router.post("/:id/whatsapp-send", auth, requireSubscription, requirePlanFeature(
     res.status(500).json({ error: e.message || "Failed to send WhatsApp message" });
   }
 });
+
+const WA_TYPE_BY_MIME_PREFIX = { image: "image", audio: "audio", video: "video" };
+
+// POST send a live WhatsApp media reply (image/document/audio/video) —
+// same idea as the text route above, but the file goes to Meta's media
+// store first and gets referenced by id in the actual message.
+router.post(
+  "/:id/whatsapp-send-media",
+  auth,
+  requireSubscription,
+  requirePlanFeature("automation"),
+  (req, res) => {
+    whatsappUpload.single("file")(req, res, async (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+      try {
+        const lead = await pool.query(
+          "SELECT id, phone, assigned_to FROM leads WHERE id=$1 AND user_id=$2",
+          [req.params.id, req.tenantId],
+        );
+        if (!lead.rows[0]) return res.status(404).json({ error: "Lead not found" });
+        const canSeeAll = isOwner(req) || hasPermission(req, "view_all_leads");
+        if (!canSeeAll && lead.rows[0].assigned_to !== req.user.id) {
+          return res.status(403).json({ error: "Permission denied" });
+        }
+        if (!lead.rows[0].phone) return res.status(400).json({ error: "This lead has no phone number" });
+
+        const credsRes = await pool.query("SELECT * FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
+        const creds = credsRes.rows[0];
+        if (!creds?.whatsapp_enabled) {
+          return res.status(400).json({ error: "WhatsApp isn't connected — set it up under Automation first" });
+        }
+
+        const mimePrefix = req.file.mimetype.split("/")[0];
+        const type = WA_TYPE_BY_MIME_PREFIX[mimePrefix] || "document";
+        const buffer = fs.readFileSync(req.file.path);
+        const caption = (req.body.caption || "").trim();
+
+        await sendWhatsAppMediaViaMeta(creds, lead.rows[0].phone, {
+          buffer,
+          mimeType: req.file.mimetype,
+          filename: req.file.originalname,
+          type,
+          caption,
+        });
+
+        const mediaUrl = `/uploads/whatsapp-media/${req.file.filename}`;
+        const result = await pool.query(
+          `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction, media_url, media_type, media_name)
+           VALUES ($1,$2,$3,NOW(),'out',$4,$5,$6) RETURNING *`,
+          [req.params.id, req.user.id, caption || `[${type}]`, mediaUrl, type, req.file.originalname],
+        );
+        await pool.query(
+          "UPDATE leads SET last_message=$1, updated_at=NOW() WHERE id=$2",
+          [caption || `[${type}]`, req.params.id],
+        );
+
+        res.json(result.rows[0]);
+      } catch (e) {
+        res.status(500).json({ error: e.message || "Failed to send WhatsApp media" });
+      }
+    });
+  },
+);
 
 // POST fulfil an order for a lead — creates/reuses the matching Customer
 // record (same as a stage-based conversion) and logs the order + items
