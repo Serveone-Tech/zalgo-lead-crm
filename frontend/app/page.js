@@ -2,8 +2,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bell,
-  Search,
   ArrowRight,
   Download,
   BellRing,
@@ -22,6 +20,8 @@ import { GoogleAdsGlyph, MetaGlyph, PhoneCallGlyph, WhatsAppGlyph } from "../com
 import MarketingNav from "../components/MarketingNav";
 import MarketingFooter from "../components/MarketingFooter";
 import SectionHeading from "../components/SectionHeading";
+import Reveal from "../components/Reveal";
+import DashboardMockup from "../components/mockups/DashboardMockup";
 
 export default function HomePage() {
   const router = useRouter();
@@ -49,30 +49,30 @@ export default function HomePage() {
     {
       icon: <Download size={20} color={teal} />,
       title: "Automatic\nLead Capture",
-      desc: "Capture leads from all channels automatically in real-time.",
+      desc: "The moment someone fills a form, messages you, or misses a call, it's already sitting in your CRM — no manual entry, no copy-paste between tools.",
     },
     {
       icon: <BellRing size={20} color={teal} />,
       title: "Smart Follow-up\nReminders",
-      desc: "Never forget a follow-up with smart reminders & nudges.",
+      desc: "Set a follow-up once and it nudges the right person at the right time — every lead gets chased until it's actually closed, not forgotten in a spreadsheet.",
     },
     {
       icon: <MessagesSquare size={20} color={teal} />,
       title: "WhatsApp, SMS &\nEmail Automation",
-      desc: "Automate personalized messages across multiple channels.",
+      desc: "Trigger a personalized WhatsApp, SMS, or email the instant a lead comes in, changes stage, or has a payment due — fully automated, sent from your own numbers.",
     },
     {
       icon: <TrendingUpIcon size={20} color={teal} />,
       title: "Lead Status &\nSales Tracking",
-      desc: "Track lead status, conversations & conversions seamlessly.",
+      desc: "See exactly where every lead sits in your pipeline, who's handling it, and what was last said — a full history, not a guess.",
     },
   ];
 
   const steps = [
-    { icon: <Download size={22} color="#fff" />, title: "Capture", desc: "Leads from multiple channels in real-time." },
-    { icon: <UserPlus size={22} color="#fff" />, title: "Assign", desc: "Auto-assign leads to the right representative." },
-    { icon: <Send size={22} color="#fff" />, title: "Automate", desc: "Engage instantly with automated messages & reminders." },
-    { icon: <Target size={22} color="#fff" />, title: "Convert", desc: "Track progress and close more deals." },
+    { icon: <Download size={22} color="#fff" />, title: "Capture", desc: "Every lead from every connected channel lands automatically, tagged with its source." },
+    { icon: <UserPlus size={22} color="#fff" />, title: "Assign", desc: "Routed to the right team member instantly — nothing sits in a shared inbox unowned." },
+    { icon: <Send size={22} color="#fff" />, title: "Automate", desc: "An automated first message goes out in seconds, then reminders keep follow-ups on track." },
+    { icon: <Target size={22} color="#fff" />, title: "Convert", desc: "Move the lead through your pipeline, fulfill the order, and track it straight through to delivery." },
   ];
 
   const benefits = [
@@ -154,137 +154,25 @@ export default function HomePage() {
           </div>
 
           {/* Dashboard mockup */}
-          <div style={{ position: "relative", zIndex: 2 }}>
-            <div
-              style={{
-                background: "#fff",
-                borderRadius: 16,
-                border: `1px solid ${border}`,
-                boxShadow: "0 24px 60px rgba(20,30,35,0.14)",
-                overflow: "hidden",
-              }}
-            >
-              <div style={{ display: "flex" }}>
-                <div style={{ width: 110, background: ink, padding: "16px 10px", flexShrink: 0 }}>
-                  <div style={{ color: "#fff", fontSize: 11, fontWeight: 800, letterSpacing: "0.05em", marginBottom: 18, paddingLeft: 4 }}>
-                    ZALGO
-                  </div>
-                  {["Dashboard", "Leads", "Inbox", "Calls", "Follow-ups", "Automation", "Reports", "Settings"].map((item, i) => (
-                    <div
-                      key={item}
-                      style={{
-                        fontSize: 10,
-                        color: i === 0 ? "#fff" : "rgba(255,255,255,0.55)",
-                        background: i === 0 ? teal : "transparent",
-                        borderRadius: 6,
-                        padding: "6px 8px",
-                        marginBottom: 3,
-                        fontWeight: i === 0 ? 700 : 500,
-                      }}
-                    >
-                      {item}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ flex: 1, padding: "14px 16px", minWidth: 0 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700 }}>Dashboard</div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 5, background: "#f2f3f5", borderRadius: 6, padding: "4px 8px" }}>
-                        <Search size={10} color={muted} />
-                        <span style={{ fontSize: 9, color: muted }}>Search leads, calls, notes...</span>
-                      </div>
-                      <Bell size={13} color={sub} />
-                      <div style={{ width: 18, height: 18, borderRadius: "50%", background: teal }} />
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 12 }}>
-                    {[
-                      { l: "Total Leads", v: "1,248", d: "+18% this week", up: true },
-                      { l: "New Leads", v: "312", d: "-12% this week", up: false },
-                      { l: "Contacted", v: "680", d: "+16% this week", up: true },
-                      { l: "Converted", v: "124", d: "+20% this week", up: true },
-                    ].map((s) => (
-                      <div key={s.l} style={{ border: `1px solid ${border}`, borderRadius: 8, padding: "8px 9px" }}>
-                        <div style={{ fontSize: 8, color: muted, marginBottom: 3 }}>{s.l}</div>
-                        <div style={{ fontSize: 13, fontWeight: 700 }}>{s.v}</div>
-                        <div style={{ fontSize: 7, color: s.up ? "#1f8a5c" : "#c8372f", marginTop: 2 }}>{s.d}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 10 }}>
-                    <div style={{ border: `1px solid ${border}`, borderRadius: 8, padding: 9 }}>
-                      <div style={{ fontSize: 9, fontWeight: 700, marginBottom: 6 }}>Recent Leads</div>
-                      {[
-                        { n: "Rahul Sharma", p: "+91 98765 43210", s: "New", sc: "#2a6fb0", src: "WhatsApp" },
-                        { n: "Priya Verma", p: "+91 91234 56789", s: "Contacted", sc: "#b06a00", src: "Meta Lead Form" },
-                        { n: "Vivek Singh", p: "+91 99876 54321", s: "Follow-up", sc: "#565d63", src: "Missed Call" },
-                        { n: "Anjali Mehta", p: "+91 97654 32109", s: "Interested", sc: "#00868a", src: "Google Ads (Beta)" },
-                      ].map((r) => (
-                        <div key={r.n} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "4px 0", borderTop: `1px solid ${border}` }}>
-                          <div style={{ minWidth: 0 }}>
-                            <div style={{ fontSize: 8, fontWeight: 600 }}>{r.n}</div>
-                            <div style={{ fontSize: 7, color: muted }}>{r.p}</div>
-                          </div>
-                          <span style={{ fontSize: 6.5, fontWeight: 700, color: r.sc, background: `${r.sc}18`, borderRadius: 10, padding: "2px 6px", whiteSpace: "nowrap" }}>
-                            {r.s}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      <div style={{ border: `1px solid ${border}`, borderRadius: 8, padding: 9 }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, marginBottom: 4 }}>Reminders</div>
-                        {["Follow up with Priya · in 15m", "Call back Vivek · in 30m", "Send proposal to Anjali · in 1h"].map((r) => (
-                          <div key={r} style={{ fontSize: 6.5, color: sub, marginBottom: 4 }}>
-                            {r}
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ border: `1px solid ${border}`, borderRadius: 8, padding: 9, textAlign: "center" }}>
-                        <div style={{ fontSize: 9, fontWeight: 700, marginBottom: 4 }}>Today&apos;s Calls</div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: teal }}>28</div>
-                        <div style={{ fontSize: 6.5, color: muted }}>Total Calls</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 10, border: `1px solid ${border}`, borderRadius: 8, padding: 9 }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, marginBottom: 6 }}>Automation Overview</div>
-                    <div style={{ display: "flex", gap: 16 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <WhatsAppGlyph size={14} />
-                        <span style={{ fontSize: 8 }}>WhatsApp Sent <b>156</b></span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <MessagesSquare size={12} color={teal} />
-                        <span style={{ fontSize: 8 }}>SMS Sent <b>98</b></span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <Mail size={12} color={teal} />
-                        <span style={{ fontSize: 8 }}>Emails Sent <b>72</b></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <Reveal delay={0.1} style={{ position: "relative", zIndex: 2 }}>
+            <div className="float-mockup">
+              <DashboardMockup />
             </div>
-          </div>
+          </Reveal>
         </div>
       </div>
 
       {/* ── SMART INBOX ─────────────────────────────────── */}
       <div style={{ maxWidth: 1140, margin: "0 auto", padding: "96px 48px 40px" }}>
-        <SectionHeading>
+        <SectionHeading subtitle="Meta Lead Forms, missed calls, WhatsApp messages, and Google Ads leads all land in the same place — your team stops jumping between apps and starts working one queue.">
           Every Lead. One <span style={{ color: teal }}>Smart Inbox.</span>
         </SectionHeading>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 20, marginBottom: 4 }}>
-          {inboxChannels.map((c) => (
-            <div
+          {inboxChannels.map((c, i) => (
+            <Reveal
               key={c.label}
+              delay={i * 0.08}
               style={{
                 border: `1px solid ${border}`,
                 borderRadius: 12,
@@ -294,7 +182,7 @@ export default function HomePage() {
             >
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 12 }}>{c.icon}</div>
               <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: "pre-line", lineHeight: 1.4 }}>{c.label}</div>
-            </div>
+            </Reveal>
           ))}
         </div>
 
@@ -325,10 +213,18 @@ export default function HomePage() {
           @keyframes flowDash {
             to { stroke-dashoffset: -24; }
           }
+          .float-mockup {
+            animation: floatMockup 5s ease-in-out infinite;
+          }
+          @keyframes floatMockup {
+            0%, 100% { transform: rotate(-1deg) translateY(0); }
+            50% { transform: rotate(-1deg) translateY(-10px); }
+          }
         `}</style>
 
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 44 }}>
           <div
+            className="crm-pulse"
             style={{
               background: teal,
               color: "#fff",
@@ -344,8 +240,8 @@ export default function HomePage() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 20 }}>
-          {capabilityCards.map((c) => (
-            <div key={c.title} style={{ border: `1px solid ${border}`, borderRadius: 12, padding: "20px 18px" }}>
+          {capabilityCards.map((c, i) => (
+            <Reveal key={c.title} delay={i * 0.08} style={{ border: `1px solid ${border}`, borderRadius: 12, padding: "20px 18px" }}>
               <div
                 style={{
                   width: 38,
@@ -362,14 +258,24 @@ export default function HomePage() {
               </div>
               <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: "pre-line", lineHeight: 1.35, marginBottom: 6 }}>{c.title}</div>
               <div style={{ fontSize: 12.5, color: sub, lineHeight: 1.5 }}>{c.desc}</div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </div>
 
+      <style>{`
+        .crm-pulse {
+          animation: crmPulse 2.6s ease-in-out infinite;
+        }
+        @keyframes crmPulse {
+          0%, 100% { box-shadow: 0 16px 34px rgba(0,134,138,0.3); }
+          50% { box-shadow: 0 16px 44px rgba(0,134,138,0.5); }
+        }
+      `}</style>
+
       {/* ── FIRST ENQUIRY TO CONVERSION ─────────────────── */}
       <div style={{ maxWidth: 1140, margin: "0 auto", padding: "80px 48px" }}>
-        <SectionHeading>
+        <SectionHeading subtitle="Four steps, start to finish — every lead follows the same reliable path from the moment it lands to the moment it's a paying customer.">
           From First Enquiry to <span style={{ color: teal }}>Conversion</span>
         </SectionHeading>
 
@@ -386,7 +292,7 @@ export default function HomePage() {
             }}
           />
           {steps.map((s, i) => (
-            <div key={s.title} style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
+            <Reveal key={s.title} delay={i * 0.12} style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
               <div
                 style={{
                   width: 44,
@@ -407,7 +313,7 @@ export default function HomePage() {
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>{s.title}</div>
               <div style={{ fontSize: 12.5, color: sub, maxWidth: 190, margin: "0 auto", lineHeight: 1.5 }}>{s.desc}</div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </div>
@@ -424,12 +330,14 @@ export default function HomePage() {
             alignItems: "center",
           }}
         >
-          <div>
+          <Reveal>
             <h3 style={{ fontSize: 27, fontWeight: 700, lineHeight: 1.3, marginBottom: 14 }}>
               Turn Every Enquiry Into an <span style={{ color: teal }}>Opportunity</span>
             </h3>
             <p style={{ fontSize: 14.5, color: sub, lineHeight: 1.6, marginBottom: 26, maxWidth: 380 }}>
-              Engage leads instantly &amp; consistently across their preferred channels.
+              A lead that doesn't hear back in the first few minutes is a lead you're about to lose. Zalgo CRM
+              replies the instant a lead lands, on whichever channel they actually check — WhatsApp, SMS, or
+              email — so your team walks in to a warm conversation instead of a cold one.
             </p>
             <div style={{ display: "flex", gap: 28 }}>
               {[
@@ -443,9 +351,10 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-          </div>
+          </Reveal>
 
-          <div
+          <Reveal
+            delay={0.15}
             style={{
               background: "#fff",
               border: `1px solid ${border}`,
@@ -490,15 +399,15 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-          </div>
+          </Reveal>
         </div>
       </div>
 
       {/* ── BENEFITS ─────────────────────────────────────── */}
       <div style={{ maxWidth: 1140, margin: "0 auto", padding: "64px 48px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 20 }}>
-          {benefits.map((b) => (
-            <div key={b.title} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          {benefits.map((b, i) => (
+            <Reveal key={b.title} delay={i * 0.08} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
               <div
                 style={{
                   width: 38,
@@ -517,13 +426,13 @@ export default function HomePage() {
                 <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>{b.title}</div>
                 <div style={{ fontSize: 12.5, color: sub, lineHeight: 1.5 }}>{b.desc}</div>
               </div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </div>
 
       {/* ── BOTTOM CTA ───────────────────────────────────── */}
-      <div style={{ padding: "0 48px 48px" }}>
+      <Reveal as="div" style={{ padding: "0 48px 48px" }}>
         <div
           style={{
             maxWidth: 1140,
@@ -596,7 +505,7 @@ export default function HomePage() {
             Book a Free Demo <ArrowRight size={15} />
           </button>
         </div>
-      </div>
+      </Reveal>
 
       <MarketingFooter />
     </div>

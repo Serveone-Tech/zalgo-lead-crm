@@ -1,26 +1,29 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { MessagesSquare, Mail, ArrowRight } from "lucide-react";
+import { MessagesSquare, Mail, ArrowRight, Zap } from "lucide-react";
 import { teal, ink, sub, muted, border } from "../../lib/marketing-theme";
 import { WhatsAppGlyph } from "../../components/BrandIcons";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import SectionHeading from "../../components/SectionHeading";
+import Reveal from "../../components/Reveal";
+import AutomationMockup from "../../components/mockups/AutomationMockup";
 
 const CHANNELS = [
   {
     icon: <WhatsAppGlyph size={30} />,
     title: "WhatsApp Automation",
-    desc: "Auto-reply to new leads, send order confirmations, and follow up on payments — all via WhatsApp, without lifting a finger.",
+    desc: "Auto-reply to new leads, send order confirmations, and follow up on payments — all via WhatsApp Cloud API, from your own business number, without lifting a finger.",
   },
   {
     icon: <MessagesSquare size={26} color={teal} />,
     title: "SMS Automation",
-    desc: "Reach customers who don't have WhatsApp with automated SMS updates for the same triggers.",
+    desc: "Reach customers who don't have WhatsApp with automated SMS updates for the exact same triggers — nobody gets left out.",
   },
   {
     icon: <Mail size={26} color={teal} />,
     title: "Email Automation",
-    desc: "Send branded email notifications automatically for new leads, conversions, and payment reminders.",
+    desc: "Send branded email notifications automatically for new leads, conversions, and payment reminders — consistent, on time, every time.",
   },
 ];
 
@@ -35,38 +38,82 @@ const TRIGGERS = [
 export default function AutomationSuitePage() {
   const router = useRouter();
   return (
-    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif", overflow: "hidden" }}>
       <MarketingNav />
 
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "72px 48px 24px", textAlign: "center" }}>
-        <h1 style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 14 }}>
-          Automate Every <span style={{ color: teal }}>Follow-Up</span>, Every Channel
-        </h1>
-        <p style={{ fontSize: 16, color: sub, maxWidth: 600, margin: "0 auto" }}>
-          Set it up once — WhatsApp, SMS, and Email messages go out automatically the moment something happens.
-        </p>
+      <div style={{ position: "relative" }}>
+        <div
+          style={{
+            position: "absolute",
+            top: -100,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: 600,
+            height: 380,
+            borderRadius: "50%",
+            background: "radial-gradient(circle, rgba(0,168,173,0.12) 0%, rgba(0,168,173,0) 70%)",
+            pointerEvents: "none",
+          }}
+        />
+        <Reveal style={{ maxWidth: 900, margin: "0 auto", padding: "72px 48px 24px", textAlign: "center", position: "relative" }}>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              background: "rgba(0,134,138,0.1)",
+              color: teal,
+              borderRadius: 20,
+              padding: "5px 14px",
+              fontSize: 12,
+              fontWeight: 700,
+              marginBottom: 18,
+            }}
+          >
+            <Zap size={13} /> Pro Max feature
+          </div>
+          <h1 style={{ fontSize: 42, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 16 }}>
+            Automate Every <span style={{ color: teal }}>Follow-Up</span>, Every Channel
+          </h1>
+          <p style={{ fontSize: 16, color: sub, maxWidth: 620, margin: "0 auto", lineHeight: 1.6 }}>
+            Set it up once — WhatsApp, SMS, and Email messages go out automatically the moment something happens,
+            so a lead never waits on a human to be free.
+          </p>
+        </Reveal>
+
+        <Reveal delay={0.15} style={{ maxWidth: 940, margin: "36px auto 0", padding: "0 48px" }}>
+          <AutomationMockup />
+        </Reveal>
       </div>
 
-      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "48px 48px" }}>
+      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "88px 48px 40px" }}>
+        <SectionHeading subtitle="Three channels, one setup — connect them once and every automated trigger can reach a lead however they actually prefer to be contacted.">
+          Three Channels, <span style={{ color: teal }}>One Setup</span>
+        </SectionHeading>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
-          {CHANNELS.map((c) => (
-            <div key={c.title} style={{ border: `1px solid ${border}`, borderRadius: 14, padding: "28px 22px", textAlign: "center" }}>
+          {CHANNELS.map((c, i) => (
+            <Reveal
+              key={c.title}
+              delay={i * 0.1}
+              style={{ border: `1px solid ${border}`, borderRadius: 14, padding: "28px 22px", textAlign: "center" }}
+            >
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>{c.icon}</div>
               <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 10 }}>{c.title}</div>
               <div style={{ fontSize: 13, color: sub, lineHeight: 1.55 }}>{c.desc}</div>
-            </div>
+            </Reveal>
           ))}
         </div>
       </div>
 
       <div style={{ background: "#f7fafa", padding: "72px 48px" }}>
         <div style={{ maxWidth: 1140, margin: "0 auto", display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 56, alignItems: "center" }}>
-          <div>
+          <Reveal>
             <h3 style={{ fontSize: 27, fontWeight: 700, lineHeight: 1.3, marginBottom: 14 }}>
               Pick a <span style={{ color: teal }}>trigger</span>, write a message, done.
             </h3>
             <p style={{ fontSize: 14.5, color: sub, lineHeight: 1.6, marginBottom: 22, maxWidth: 380 }}>
-              Every trigger below can send through WhatsApp, SMS, or Email — mix and match per trigger.
+              No code, no separate automation tool to learn. Every trigger below can send through WhatsApp, SMS, or
+              Email — mix and match per trigger, and edit the message text anytime.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {TRIGGERS.map((t) => (
@@ -76,9 +123,9 @@ export default function AutomationSuitePage() {
                 </div>
               ))}
             </div>
-          </div>
+          </Reveal>
 
-          <div style={{ background: "#fff", border: `1px solid ${border}`, borderRadius: 14, padding: 22, boxShadow: "0 16px 40px rgba(20,30,35,0.08)" }}>
+          <Reveal delay={0.15} style={{ background: "#fff", border: `1px solid ${border}`, borderRadius: 14, padding: 22, boxShadow: "0 16px 40px rgba(20,30,35,0.08)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 700 }}>WhatsApp Automation</div>
               <div style={{ width: 34, height: 18, borderRadius: 20, background: teal, position: "relative" }}>
@@ -115,11 +162,11 @@ export default function AutomationSuitePage() {
                 </div>
               ))}
             </div>
-          </div>
+          </Reveal>
         </div>
       </div>
 
-      <div style={{ padding: "80px 48px" }}>
+      <Reveal as="div" style={{ padding: "80px 48px" }}>
         <div
           style={{
             maxWidth: 1140,
@@ -160,7 +207,7 @@ export default function AutomationSuitePage() {
             View Pricing <ArrowRight size={15} />
           </button>
         </div>
-      </div>
+      </Reveal>
 
       <MarketingFooter />
     </div>

@@ -12,6 +12,7 @@ import {
 import { teal, ink, sub, border } from "../../lib/marketing-theme";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import Reveal from "../../components/Reveal";
 
 const SECTIONS = [
   {
@@ -61,20 +62,22 @@ export default function DocsPage() {
     <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketingNav />
 
-      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "72px 32px 24px", textAlign: "center" }}>
+      <Reveal style={{ maxWidth: 1000, margin: "0 auto", padding: "72px 32px 24px", textAlign: "center" }}>
         <h1 style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 14 }}>
           Documentation
         </h1>
-        <p style={{ fontSize: 16, color: sub, maxWidth: 560, margin: "0 auto" }}>
-          A quick tour of how Zalgo CRM's modules fit together.
+        <p style={{ fontSize: 16, color: sub, maxWidth: 560, margin: "0 auto", lineHeight: 1.6 }}>
+          A quick tour of how Zalgo CRM's modules fit together — enough to get your whole team moving in an
+          afternoon.
         </p>
-      </div>
+      </Reveal>
 
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "48px 32px 96px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          {SECTIONS.map((s) => (
-            <div
+          {SECTIONS.map((s, i) => (
+            <Reveal
               key={s.title}
+              delay={(i % 4) * 0.08}
               style={{
                 border: `1px solid ${border}`,
                 borderRadius: 14,
@@ -102,11 +105,12 @@ export default function DocsPage() {
                 <div style={{ fontSize: 15.5, fontWeight: 700, marginBottom: 6 }}>{s.title}</div>
                 <div style={{ fontSize: 13.5, color: sub, lineHeight: 1.65 }}>{s.body}</div>
               </div>
-            </div>
+            </Reveal>
           ))}
         </div>
 
-        <div
+        <Reveal
+          delay={0.2}
           style={{
             marginTop: 32,
             border: `1px dashed ${border}`,
@@ -136,7 +140,7 @@ export default function DocsPage() {
           >
             Contact Us
           </a>
-        </div>
+        </Reveal>
       </div>
 
       <MarketingFooter />

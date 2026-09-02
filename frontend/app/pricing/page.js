@@ -7,6 +7,7 @@ import { teal, ink, sub, muted, border } from "../../lib/marketing-theme";
 import { FEATURE_LABELS } from "../../lib/plan-features";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import Reveal from "../../components/Reveal";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -48,14 +49,15 @@ export default function PricingPage() {
     <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketingNav />
 
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "72px 48px 24px", textAlign: "center" }}>
+      <Reveal style={{ maxWidth: 1180, margin: "0 auto", padding: "72px 48px 24px", textAlign: "center" }}>
         <h1 style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 14 }}>
           Simple, <span style={{ color: teal }}>Transparent</span> Pricing
         </h1>
-        <p style={{ fontSize: 16, color: sub, maxWidth: 560, margin: "0 auto" }}>
-          Start with what you need today, upgrade the moment you need more. No hidden fees, no surprises.
+        <p style={{ fontSize: 16, color: sub, maxWidth: 560, margin: "0 auto", lineHeight: 1.6 }}>
+          Start with what you need today, upgrade the moment you need more — every plan begins with a free trial,
+          no card required. No hidden fees, no surprises.
         </p>
-      </div>
+      </Reveal>
 
       <div style={{ maxWidth: 1180, margin: "0 auto", padding: "40px 48px 96px" }}>
         {loading ? (
@@ -65,8 +67,10 @@ export default function PricingPage() {
             {cards.map((p, i) => {
               const highlighted = p.name === "Pro";
               return (
-                <div
+                <Reveal
                   key={p.id}
+                  delay={i * 0.08}
+                  className="price-card"
                   style={{
                     border: highlighted ? `2px solid ${teal}` : `1px solid ${border}`,
                     borderRadius: 16,
@@ -140,12 +144,21 @@ export default function PricingPage() {
                   >
                     {p.custom ? "Contact Us" : "Get Started"} <ArrowRight size={15} />
                   </button>
-                </div>
+                </Reveal>
               );
             })}
           </div>
         )}
       </div>
+
+      <style>{`
+        .price-card {
+          transition: box-shadow 0.25s;
+        }
+        .price-card:hover {
+          box-shadow: 0 20px 44px rgba(20,30,35,0.12);
+        }
+      `}</style>
 
       <MarketingFooter />
     </div>

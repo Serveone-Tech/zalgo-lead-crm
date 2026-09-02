@@ -5,6 +5,7 @@ import { Mail, Send, CheckCircle2 } from "lucide-react";
 import { teal, ink, sub, muted, border } from "../../lib/marketing-theme";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import Reveal from "../../components/Reveal";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -55,17 +56,17 @@ export default function ContactPage() {
       <MarketingNav />
 
       <div style={{ maxWidth: 1140, margin: "0 auto", padding: "72px 48px 96px" }}>
-        <div style={{ textAlign: "center", marginBottom: 56 }}>
+        <Reveal style={{ textAlign: "center", marginBottom: 56 }}>
           <h1 style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 14 }}>
             Get in <span style={{ color: teal }}>Touch</span>
           </h1>
-          <p style={{ fontSize: 16, color: sub, maxWidth: 520, margin: "0 auto" }}>
+          <p style={{ fontSize: 16, color: sub, maxWidth: 520, margin: "0 auto", lineHeight: 1.6 }}>
             Questions about pricing, a custom plan, or just want a walkthrough? We&apos;ll get back to you shortly.
           </p>
-        </div>
+        </Reveal>
 
         <div style={{ display: "grid", gridTemplateColumns: "0.8fr 1.2fr", gap: 48 }}>
-          <div>
+          <Reveal>
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               {[
                 { icon: <Mail size={18} color={teal} />, label: "Email", value: "zalgoinfotec@gmail.com" },
@@ -94,9 +95,10 @@ export default function ContactPage() {
                 </div>
               ))}
             </div>
-          </div>
+          </Reveal>
 
-          <div
+          <Reveal
+            delay={0.15}
             style={{
               border: `1px solid ${border}`,
               borderRadius: 16,
@@ -180,7 +182,7 @@ export default function ContactPage() {
                 </button>
               </form>
             )}
-          </div>
+          </Reveal>
         </div>
       </div>
 
