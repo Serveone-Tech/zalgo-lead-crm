@@ -2,6 +2,7 @@ const express = require("express");
 const { pool } = require("../db");
 const { findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
 const { savePendingLead } = require("../utils/pending-leads");
+const { downloadWhatsAppMedia } = require("../utils/whatsapp-media");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -37,40 +38,45 @@ async function withinLeadLimit(tenantId) {
 
 // Shared by any inbound-message source (WhatsApp today, maybe Instagram/SMS
 // later): create a new lead on first contact, or just log the message
-// against the existing one if this phone already has a lead.
-async function captureInboundMessage(tenantId, { phone, name, message, platform }) {
+// against the existing one if this phone already has a lead. `media` is
+// optional — {url, type, name} for an inbound image/document/etc.
+async function captureInboundMessage(tenantId, { phone, name, message, platform, media, waMessageId }) {
   const existing = await findDuplicateLeadByPhone(tenantId, phone);
+  const leadId = existing
+    ? existing.id
+    : await (async () => {
+        if (!(await withinLeadLimit(tenantId))) {
+          console.log(`${platform} lead skipped — plan limit reached for tenant ${tenantId}`);
+          return null;
+        }
+        const { rows } = await pool.query(
+          `INSERT INTO leads (user_id, name, phone, platform, last_message, notes)
+           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+          [
+            tenantId,
+            name || phone,
+            phone,
+            platform,
+            message,
+            `Auto-captured from incoming ${platform} message`,
+          ],
+        );
+        fireTrigger("new_lead", tenantId, { name: name || phone, phone, email: "" }).catch(() => {});
+        return rows[0].id;
+      })();
+  if (!leadId) return;
+
   if (existing) {
     await pool.query(
       "UPDATE leads SET last_message=$1, updated_at=NOW() WHERE id=$2",
-      [message, existing.id],
+      [message, leadId],
     );
-    await pool.query(
-      "INSERT INTO lead_messages (lead_id, message, message_date) VALUES ($1,$2,NOW())",
-      [existing.id, message],
-    );
-    return;
   }
-
-  if (!(await withinLeadLimit(tenantId))) {
-    console.log(`${platform} lead skipped — plan limit reached for tenant ${tenantId}`);
-    return;
-  }
-
   await pool.query(
-    `INSERT INTO leads (user_id, name, phone, platform, last_message, notes)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [
-      tenantId,
-      name || phone,
-      phone,
-      platform,
-      message,
-      `Auto-captured from incoming ${platform} message`,
-    ],
+    `INSERT INTO lead_messages (lead_id, message, message_date, direction, media_url, media_type, media_name, wa_message_id)
+     VALUES ($1,$2,NOW(),'in',$3,$4,$5,$6)`,
+    [leadId, message, media?.url || null, media?.type || null, media?.name || null, waMessageId || null],
   );
-
-  fireTrigger("new_lead", tenantId, { name: name || phone, phone, email: "" }).catch(() => {});
 }
 
 // ── POST /api/webhooks/google-leads/:token ──────────────────────
@@ -171,15 +177,44 @@ router.post("/whatsapp/:token", express.json(), async (req, res) => {
 
     const from = message.from; // sender's WhatsApp ID — digits only, e.g. "919123456780"
     const profileName = value?.contacts?.[0]?.profile?.name || "";
-    const messageBody =
-      message.text?.body || (message.type ? `[${message.type} message]` : "");
     if (!from) return;
+
+    // Media types carry the id of the file under a key named after the
+    // type itself (message.image.id, message.document.id, ...) plus an
+    // optional caption — everything else (text, location, etc) is treated
+    // as plain text, falling back to a "[type]" placeholder if there's
+    // truly nothing to show.
+    const MEDIA_TYPES = ["image", "document", "audio", "video", "sticker"];
+    let messageBody = message.text?.body || "";
+    let media = null;
+
+    if (MEDIA_TYPES.includes(message.type) && message[message.type]?.id) {
+      const mediaPayload = message[message.type];
+      messageBody = mediaPayload.caption || `[${message.type}]`;
+      try {
+        const creds = await pool.query(
+          "SELECT wa_account_sid, wa_auth_token FROM automation_credentials WHERE user_id=$1",
+          [tenantId],
+        );
+        const accessToken = creds.rows[0]?.wa_auth_token;
+        if (accessToken) {
+          const { mediaUrl } = await downloadWhatsAppMedia(mediaPayload.id, accessToken);
+          media = { url: mediaUrl, type: message.type, name: mediaPayload.filename || mediaPayload.caption || "" };
+        }
+      } catch (e) {
+        console.error("WhatsApp media download failed:", e.message);
+      }
+    } else if (!messageBody) {
+      messageBody = message.type ? `[${message.type}]` : "";
+    }
 
     await captureInboundMessage(tenantId, {
       phone: from,
       name: profileName,
       message: messageBody,
       platform: "WhatsApp",
+      media,
+      waMessageId: message.id || null,
     });
   } catch (e) {
     console.error("WhatsApp webhook error:", e.message);

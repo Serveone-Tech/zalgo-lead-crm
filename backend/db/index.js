@@ -49,6 +49,27 @@ const initDB = async () => {
       `ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL`,
     ];
 
+    // Turns the flat conversation log into a real two-way chat: which side
+    // sent it, and — for WhatsApp — any attached media. NULL user_id used to
+    // be the only signal a row was inbound; direction makes that explicit
+    // and survives even if a message is later re-attributed.
+    const alterLeadMessages = [
+      `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS direction VARCHAR(10) DEFAULT 'out'`,
+      `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS media_url TEXT`,
+      `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(20)`,
+      `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS media_name TEXT`,
+      `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS wa_message_id VARCHAR(120)`,
+    ];
+    for (const q of alterLeadMessages) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
+    // One-time backfill for rows that predate the `direction` column — a
+    // NULL user_id meant "came from the webhook" under the old convention.
+    // Idempotent: already-migrated rows no longer match direction='out'.
+    await client
+      .query(`UPDATE lead_messages SET direction='in' WHERE user_id IS NULL AND direction='out'`)
+      .catch((e) => console.log("backfill skip:", e.message));
+
     const alterSubscriptions = [
       `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS expiry_reminder_sent BOOLEAN DEFAULT false`,
       `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS expired_email_sent BOOLEAN DEFAULT false`,

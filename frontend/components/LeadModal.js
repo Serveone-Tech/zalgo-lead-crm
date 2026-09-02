@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import api from "../lib/api";
 import { isOwnerUser, hasPerm } from "../lib/permissions";
 import { STAGES as FALLBACK_STAGES } from "../lib/stages";
+import WhatsAppChat from "./WhatsAppChat";
 const PLATFORMS = [
   "LinkedIn",
   "Instagram",
@@ -373,8 +374,31 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
             </div>
           </div>
 
-          {/* Conversation Log — only once the lead exists */}
-          {lead?.id && (
+          {/* WhatsApp leads get a real two-way chat thread (inbound messages,
+              images/files, and a live reply box) instead of the manual note
+              log every other platform uses. */}
+          {lead?.id && lead.platform === "WhatsApp" && lead.phone && (
+            <div style={{ marginTop: 18 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "var(--text-secondary)",
+                  marginBottom: 8,
+                  fontWeight: 500,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                WhatsApp Chat
+              </div>
+              <WhatsAppChat leadId={lead.id} />
+            </div>
+          )}
+
+          {/* Conversation Log — only once the lead exists, and only for
+              non-WhatsApp leads (see chat thread above for WhatsApp). */}
+          {lead?.id && !(lead.platform === "WhatsApp" && lead.phone) && (
             <div style={{ marginTop: 18 }}>
               <div
                 style={{

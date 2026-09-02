@@ -7,6 +7,7 @@ const { getOrCreateCustomerFromLead } = require("../utils/customer-conversion");
 const { savePendingLead } = require("../utils/pending-leads");
 const { getStageStockActions, isDeductStage, isDeliveredStage, anyDeductStageConfigured, deductStockForOrder } = require("../utils/inventory");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
+const { sendWhatsAppViaMeta } = require("../utils/whatsapp-meta");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -527,6 +528,52 @@ router.post("/:id/messages", auth, async (req, res) => {
   } catch (e) {
     console.error(e.message);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST send a live WhatsApp reply — unlike the note-only route above, this
+// actually calls Meta's API to deliver the message, then logs it the same
+// way an inbound message gets logged, so the two sides of the conversation
+// sit in one thread.
+router.post("/:id/whatsapp-send", auth, async (req, res) => {
+  const { message } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: "Message required" });
+  try {
+    const lead = await pool.query(
+      "SELECT id, phone, assigned_to FROM leads WHERE id=$1 AND user_id=$2",
+      [req.params.id, req.tenantId],
+    );
+    if (!lead.rows[0]) return res.status(404).json({ error: "Lead not found" });
+    const canSeeAll = isOwner(req) || hasPermission(req, "view_all_leads");
+    if (!canSeeAll && lead.rows[0].assigned_to !== req.user.id) {
+      return res.status(403).json({ error: "Permission denied" });
+    }
+    if (!lead.rows[0].phone) return res.status(400).json({ error: "This lead has no phone number" });
+
+    const credsRes = await pool.query(
+      "SELECT * FROM automation_credentials WHERE user_id=$1",
+      [req.tenantId],
+    );
+    const creds = credsRes.rows[0];
+    if (!creds?.whatsapp_enabled) {
+      return res.status(400).json({ error: "WhatsApp isn't connected — set it up under Automation first" });
+    }
+
+    await sendWhatsAppViaMeta(creds, lead.rows[0].phone, message.trim());
+
+    const result = await pool.query(
+      `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction)
+       VALUES ($1,$2,$3,NOW(),'out') RETURNING *`,
+      [req.params.id, req.user.id, message.trim()],
+    );
+    await pool.query(
+      "UPDATE leads SET last_message=$1, updated_at=NOW() WHERE id=$2",
+      [message.trim(), req.params.id],
+    );
+
+    res.json(result.rows[0]);
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Failed to send WhatsApp message" });
   }
 });
 
