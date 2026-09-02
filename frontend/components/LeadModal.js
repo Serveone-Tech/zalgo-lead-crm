@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import api from "../lib/api";
 import { isOwnerUser, hasPerm } from "../lib/permissions";
 import { STAGES as FALLBACK_STAGES } from "../lib/stages";
-import WhatsAppChat from "./WhatsAppChat";
 const PLATFORMS = [
   "LinkedIn",
   "Instagram",
@@ -41,7 +40,6 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [user, setUser] = useState(null);
-  const [sub, setSub] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMsg, setNewMsg] = useState("");
   const [newMsgDate, setNewMsgDate] = useState(nowLocal());
@@ -49,26 +47,8 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
 
   useEffect(() => {
     const u = localStorage.getItem("crm_user");
-    if (u) {
-      const parsed = JSON.parse(u);
-      setUser(parsed);
-      // The live WhatsApp chat is a Pro Max ("automation") feature — only
-      // owner accounts carry a subscription; employees defer to the
-      // backend's own gate on the send route.
-      if (parsed.role !== "superadmin" && !parsed.parent_id) {
-        api.get("/auth/subscription").then(({ data: s }) => setSub(s)).catch(() => {});
-      }
-    }
+    if (u) setUser(JSON.parse(u));
   }, []);
-
-  const planFeatures = sub?.features
-    ? (typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features)
-    : null;
-  const hasPlanFeature = (feat) => {
-    if (!user || user.parent_id) return true; // employees — backend guards anyway
-    if (!planFeatures) return true; // owner but subscription not loaded yet
-    return planFeatures.includes(feat);
-  };
 
   useEffect(() => {
     if (lead) {
@@ -393,31 +373,8 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
             </div>
           </div>
 
-          {/* WhatsApp leads get a real two-way chat thread (inbound messages,
-              images/files, and a live reply box) instead of the manual note
-              log every other platform uses. */}
-          {lead?.id && lead.platform === "WhatsApp" && lead.phone && hasPlanFeature("automation") && (
-            <div style={{ marginTop: 18 }}>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "var(--text-secondary)",
-                  marginBottom: 8,
-                  fontWeight: 500,
-                  letterSpacing: "0.05em",
-                  textTransform: "uppercase",
-                  fontFamily: "var(--font-main)",
-                }}
-              >
-                WhatsApp Chat
-              </div>
-              <WhatsAppChat leadId={lead.id} />
-            </div>
-          )}
-
-          {/* Conversation Log — only once the lead exists, and only for
-              non-WhatsApp leads (see chat thread above for WhatsApp). */}
-          {lead?.id && !(lead.platform === "WhatsApp" && lead.phone && hasPlanFeature("automation")) && (
+          {/* Conversation Log — only once the lead exists */}
+          {lead?.id && (
             <div style={{ marginTop: 18 }}>
               <div
                 style={{

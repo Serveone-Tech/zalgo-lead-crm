@@ -6,6 +6,7 @@ import LeadModal from "../../components/LeadModal";
 import KanbanBoard from "../../components/KanbanBoard";
 import BulkUploadModal from "../../components/BulkUploadModal";
 import OrderFulfillmentModal from "../../components/OrderFulfillmentModal";
+import WhatsAppChatModal from "../../components/WhatsAppChatModal";
 import { Upload, Plus, Calendar } from "lucide-react";
 import {
   STAGE_COLORS,
@@ -70,6 +71,8 @@ function LeadsContent() {
   const [dynamicStages, setDynamicStages] = useState([]);
   const [fulfillmentStage, setFulfillmentStage] = useState("");
   const [fulfillLead, setFulfillLead] = useState(null);
+  const [chatLead, setChatLead] = useState(null);
+  const [sub, setSub] = useState(null);
 
   // Bulk action state
   const [selected, setSelected] = useState(new Set());
@@ -85,7 +88,16 @@ function LeadsContent() {
       return;
     }
     const u = localStorage.getItem("crm_user");
-    if (u) setUser(JSON.parse(u));
+    if (u) {
+      const parsed = JSON.parse(u);
+      setUser(parsed);
+      // The live WhatsApp chat button is a Pro Max ("automation") feature —
+      // only owner accounts carry a subscription; employees defer to the
+      // backend's own gate on the send route.
+      if (parsed.role !== "superadmin" && !parsed.parent_id) {
+        api.get("/auth/subscription").then(({ data: s }) => setSub(s)).catch(() => {});
+      }
+    }
     refreshUser().then((fresh) => {
       if (fresh) setUser(fresh);
     });
@@ -106,6 +118,15 @@ function LeadsContent() {
 
   const canAssign = isOwnerUser(user) || hasPerm(user, "assign_leads");
   const canBulkUpload = isOwnerUser(user) || hasPerm(user, "bulk_upload_leads");
+
+  const planFeatures = sub?.features
+    ? (typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features)
+    : null;
+  const hasPlanFeature = (feat) => {
+    if (!user || user.parent_id) return true; // employees — backend guards anyway
+    if (!planFeatures) return true; // owner but subscription not loaded yet
+    return planFeatures.includes(feat);
+  };
 
   const employeeNames = useMemo(
     () => Object.fromEntries(employees.map((e) => [e.id, e.name])),
@@ -1162,6 +1183,25 @@ function LeadsContent() {
                         {/* Actions */}
                         <td style={{ padding: "12px 14px" }}>
                           <div style={{ display: "flex", gap: 6 }}>
+                            {lead.platform === "WhatsApp" && lead.phone && hasPlanFeature("automation") && (
+                              <button
+                                onClick={() => setChatLead(lead)}
+                                style={{
+                                  background: "transparent",
+                                  border: "1px solid var(--teal)",
+                                  borderRadius: 6,
+                                  padding: "5px 10px",
+                                  color: "var(--teal)",
+                                  fontSize: 11,
+                                  cursor: "pointer",
+                                  fontFamily: "var(--font-main)",
+                                  fontWeight: 600,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                💬 Chat
+                              </button>
+                            )}
                             <button
                               onClick={() => openEdit(lead)}
                               style={{
@@ -1285,6 +1325,9 @@ function LeadsContent() {
           onClose={closeFulfill}
           onSave={saveFulfillment}
         />
+      )}
+      {chatLead && (
+        <WhatsAppChatModal lead={chatLead} onClose={() => setChatLead(null)} />
       )}
     </div>
   );
