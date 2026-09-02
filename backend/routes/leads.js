@@ -1,6 +1,6 @@
 const express = require("express");
 const { pool } = require("../db");
-const { auth, requireSubscription } = require("../middleware/auth");
+const { auth, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { hasPermission, isOwner } = require("../utils/permissions");
 const { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
 const { getOrCreateCustomerFromLead } = require("../utils/customer-conversion");
@@ -535,7 +535,7 @@ router.post("/:id/messages", auth, async (req, res) => {
 // actually calls Meta's API to deliver the message, then logs it the same
 // way an inbound message gets logged, so the two sides of the conversation
 // sit in one thread.
-router.post("/:id/whatsapp-send", auth, async (req, res) => {
+router.post("/:id/whatsapp-send", auth, requireSubscription, requirePlanFeature("automation"), async (req, res) => {
   const { message } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: "Message required" });
   try {
