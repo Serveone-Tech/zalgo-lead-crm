@@ -1,5 +1,9 @@
 import axios from "axios";
 
+// The backend's own origin (no /api suffix) — for linking directly to
+// static files it serves, like /uploads/... order attachments.
+export const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
+
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api",
 });

@@ -1,7 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import api, { formatCurrency, refreshUser } from "../../../lib/api";
+import api, { formatCurrency, refreshUser, API_ORIGIN } from "../../../lib/api";
+
+const isImageAttachment = (name) => /\.(jpe?g|png|webp|gif)$/i.test(name || "");
 import OrderFulfillmentModal from "../../../components/OrderFulfillmentModal";
 import { isOwnerUser, hasPerm } from "../../../lib/permissions";
 
@@ -28,6 +30,8 @@ export default function CustomerDetailPage() {
   const [trackingId, setTrackingId] = useState(null);
   const [editOrderModal, setEditOrderModal] = useState(null);
   const [historyModalOrder, setHistoryModalOrder] = useState(null);
+  const [previewAttachment, setPreviewAttachment] = useState(null);
+  const [previewLoadFailed, setPreviewLoadFailed] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [user, setUser] = useState(null);
   const [deletingOrder, setDeletingOrder] = useState(null);
@@ -942,6 +946,29 @@ export default function CustomerDetailPage() {
                       <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic" }}>{o.notes}</div>
                     )}
 
+                    {o.attachment_path && (
+                      <div style={{ marginTop: 6 }}>
+                        <button
+                          onClick={() => { setPreviewLoadFailed(false); setPreviewAttachment(o); }}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 6,
+                            background: "var(--bg-card)",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            padding: "4px 10px",
+                            fontSize: 11,
+                            color: "var(--teal)",
+                            cursor: "pointer",
+                            fontFamily: "var(--font-main)",
+                          }}
+                        >
+                          📎 {o.attachment_name || "Attachment"}
+                        </button>
+                      </div>
+                    )}
+
                     {trackResults[o.id] && (
                       <div
                         style={{
@@ -1095,6 +1122,77 @@ export default function CustomerDetailPage() {
           onClose={() => setEditOrderModal(null)}
           onSave={saveOrderEdit}
         />
+      )}
+
+      {previewAttachment && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPreviewAttachment(null);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 300,
+            padding: 20,
+          }}
+        >
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border-strong)",
+              borderRadius: "var(--radius-lg)",
+              padding: 16,
+              maxWidth: "90vw",
+              maxHeight: "90vh",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 20 }}>
+              <div style={{ fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>
+                {previewAttachment.attachment_name || "Attachment"}
+              </div>
+              <button
+                onClick={() => setPreviewAttachment(null)}
+                style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, cursor: "pointer", padding: "2px 6px", borderRadius: 6 }}
+              >
+                ✕
+              </button>
+            </div>
+            {previewLoadFailed ? (
+              <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-muted)", fontSize: 13, maxWidth: "60vw" }}>
+                ⚠ Couldn't load this file here. If it was uploaded on a different server (e.g. the live site vs. local dev),
+                it won't be visible from this one — try opening it from wherever it was originally uploaded.
+              </div>
+            ) : isImageAttachment(previewAttachment.attachment_name) ? (
+              <img
+                src={`${API_ORIGIN}${previewAttachment.attachment_path}`}
+                alt={previewAttachment.attachment_name || "Attachment"}
+                onError={() => setPreviewLoadFailed(true)}
+                style={{ maxWidth: "85vw", maxHeight: "75vh", borderRadius: 8, objectFit: "contain" }}
+              />
+            ) : (
+              <iframe
+                src={`${API_ORIGIN}${previewAttachment.attachment_path}`}
+                title={previewAttachment.attachment_name || "Attachment"}
+                style={{ width: "80vw", height: "75vh", border: "none", borderRadius: 8, background: "#fff" }}
+              />
+            )}
+            <a
+              href={`${API_ORIGIN}${previewAttachment.attachment_path}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ alignSelf: "flex-end", fontSize: 11, color: "var(--teal)" }}
+            >
+              Open in new tab ↗
+            </a>
+          </div>
+        </div>
       )}
     </div>
   );

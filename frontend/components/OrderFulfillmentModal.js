@@ -1,8 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import api from "../lib/api";
-
-const API_ORIGIN = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api").replace(/\/api\/?$/, "");
+import api, { API_ORIGIN } from "../lib/api";
 
 // Handles both creating an order (pass `lead`) and editing an existing one
 // (pass `order` + `customer`) — same field set either way. Only the primary
