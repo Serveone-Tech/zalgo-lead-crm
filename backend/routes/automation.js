@@ -218,16 +218,16 @@ router.post("/send", auth, requireSubscription, requirePlanFeature("automation")
     }
     const creds = credResult.rows[0];
 
-    // ── EMAIL via Nodemailer + SendGrid SMTP ──
+    // ── EMAIL via Nodemailer + the tenant's own Gmail account ──
     if (channel === "email") {
       if (!creds.email_enabled)
         return res.status(400).json({ error: "Email channel is not enabled" });
       if (!creds.email_api_key)
         return res
           .status(400)
-          .json({ error: "SendGrid API key not configured" });
+          .json({ error: "Gmail App Password not configured" });
       if (!creds.email_from)
-        return res.status(400).json({ error: "From email not configured" });
+        return res.status(400).json({ error: "Gmail address not configured" });
 
       let nodemailer;
       try {
@@ -239,11 +239,12 @@ router.post("/send", auth, requireSubscription, requirePlanFeature("automation")
       }
 
       const transporter = nodemailer.createTransport({
-        host: "smtp.sendgrid.net",
-        port: 587,
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
         auth: {
-          user: "apikey",
-          pass: creds.email_api_key,
+          user: creds.email_from,
+          pass: creds.email_api_key.replace(/\s+/g, ""),
         },
       });
 

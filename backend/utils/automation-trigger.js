@@ -38,12 +38,16 @@ async function sendEmail(creds, to, message, subject) {
     return;
   }
 
+  // Sends straight through the tenant's own Gmail account — creds.email_from
+  // is the Gmail address (also the SMTP login), creds.email_api_key holds a
+  // 16-character Google App Password (requires 2-Step Verification to be on
+  // for that account; regular Gmail passwords are rejected by this SMTP).
   const nodemailer = require("nodemailer");
   const transporter = nodemailer.createTransport({
-    host: "smtp.sendgrid.net",
-    port: 587,
-    secure: false,
-    auth: { user: "apikey", pass: creds.email_api_key },
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: { user: creds.email_from, pass: creds.email_api_key.replace(/\s+/g, "") },
   });
   await transporter.sendMail({
     from: `"${creds.email_from_name || "CRM"}" <${creds.email_from}>`,

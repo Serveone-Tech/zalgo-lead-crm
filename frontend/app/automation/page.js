@@ -587,19 +587,21 @@ export default function AutomationPage() {
           {[
             {
               key: "email",
-              title: "Email (SendGrid)",
+              title: "Email (Gmail)",
               icon: "✉️",
+              helpText:
+                "Uses your Gmail account directly — no separate email service needed. Turn on 2-Step Verification on this Gmail account, then create an App Password at myaccount.google.com/apppasswords and paste the 16-digit code below.",
               fields: [
                 {
-                  k: "email_api_key",
-                  l: "SendGrid API Key",
-                  ph: "SG.xxxxxxxx",
-                  type: "password",
+                  k: "email_from",
+                  l: "Gmail Address",
+                  ph: "you@gmail.com",
                 },
                 {
-                  k: "email_from",
-                  l: "From Email",
-                  ph: "noreply@yourdomain.com",
+                  k: "email_api_key",
+                  l: "App Password (16 digits)",
+                  ph: "xxxx xxxx xxxx xxxx",
+                  type: "password",
                 },
                 { k: "email_from_name", l: "From Name", ph: "My Business" },
               ],
@@ -633,7 +635,7 @@ export default function AutomationPage() {
                 },
               ],
             },
-          ].map(({ key, title, icon, fields }) => {
+          ].map(({ key, title, icon, fields, helpText }) => {
             const enabledKey =
               key === "whatsapp" ? "whatsapp_enabled" : `${key}_enabled`;
             const enabled = creds[enabledKey];
@@ -696,6 +698,21 @@ export default function AutomationPage() {
                   />
                 </div>
                 <div style={{ padding: "18px 20px" }}>
+                  {helpText && (
+                    <div
+                      style={{
+                        fontSize: 11.5,
+                        color: "var(--text-muted)",
+                        lineHeight: 1.6,
+                        marginBottom: 16,
+                        padding: "10px 12px",
+                        background: "var(--bg-surface)",
+                        borderRadius: 8,
+                      }}
+                    >
+                      ℹ️ {helpText}
+                    </div>
+                  )}
                   {fields.map(({ k, l, ph, type }) => (
                     <div
                       key={k}
