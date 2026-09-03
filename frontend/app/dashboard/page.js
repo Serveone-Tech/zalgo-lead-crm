@@ -106,6 +106,7 @@ export default function DashboardPage() {
           (x) =>
             isOverdue(x.follow_up_date) &&
             x.stage !== "Closed" &&
+            x.stage !== "Lost" &&
             x.stage !== "Converted",
         ),
       );

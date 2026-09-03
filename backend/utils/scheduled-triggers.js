@@ -12,7 +12,7 @@ async function runScheduledTriggers() {
       SELECT id, user_id, name, phone, email
       FROM leads
       WHERE follow_up_date::date = CURRENT_DATE
-        AND stage NOT IN ('Closed','Converted')
+        AND stage NOT IN ('Closed','Lost','Converted')
         AND (followup_reminder_sent_date IS NULL OR followup_reminder_sent_date < CURRENT_DATE)
     `);
     for (const lead of followups.rows) {

@@ -45,7 +45,7 @@ router.get("/overdue", auth, async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const result = await pool.query(
-      `SELECT * FROM leads WHERE user_id=$1 AND follow_up_date<NOW() AND stage NOT IN ('Closed','Converted')${vis.clause} ORDER BY follow_up_date ASC`,
+      `SELECT * FROM leads WHERE user_id=$1 AND follow_up_date<NOW() AND stage NOT IN ('Closed','Lost','Converted')${vis.clause} ORDER BY follow_up_date ASC`,
       [req.tenantId, ...vis.params],
     );
     res.json(result.rows);
@@ -71,7 +71,7 @@ router.get("/stats", auth, async (req, res) => {
         // the same Closed/Converted terminal-stage convention already used
         // by the overdue count below.
         pool.query(
-          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage NOT IN ('Closed','Converted')${vis.clause}`,
+          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage NOT IN ('Closed','Lost','Converted')${vis.clause}`,
           [req.tenantId, ...vis.params],
         ),
         pool.query(
@@ -80,12 +80,12 @@ router.get("/stats", auth, async (req, res) => {
         ),
         // "Lost" — the other terminal stage besides Converted (won).
         pool.query(
-          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage='Closed'${vis.clause}`,
+          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage IN ('Closed','Lost')${vis.clause}`,
           [req.tenantId, ...vis.params],
         ),
         // Overdue: scheduled moment already passed (date+time), lead still open
         pool.query(
-          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND follow_up_date<NOW() AND stage NOT IN ('Closed','Converted')${visToday.clause}`,
+          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND follow_up_date<NOW() AND stage NOT IN ('Closed','Lost','Converted')${visToday.clause}`,
           [req.tenantId, ...visToday.params],
         ),
         // Due today: same calendar day as today, and the moment hasn't passed yet
@@ -361,7 +361,7 @@ router.get("/report/by-employee", auth, async (req, res) => {
          assigned_to,
          stage,
          COUNT(*) AS cnt,
-         COUNT(CASE WHEN follow_up_date < NOW() AND stage NOT IN ('Closed','Converted') THEN 1 END) AS overdue
+         COUNT(CASE WHEN follow_up_date < NOW() AND stage NOT IN ('Closed','Lost','Converted') THEN 1 END) AS overdue
        FROM leads WHERE user_id=$1
        GROUP BY assigned_to, stage`,
       [req.tenantId],
