@@ -156,7 +156,8 @@ export default function CustomersPage() {
           q &&
           !c.name.toLowerCase().includes(q) &&
           !(c.phone || "").includes(q) &&
-          !(c.email || "").toLowerCase().includes(q)
+          !(c.email || "").toLowerCase().includes(q) &&
+          !(c.latest_order_tracking_id || "").toLowerCase().includes(q)
         )
           return false;
         const enrolledDate = c.created_at ? c.created_at.split("T")[0] : null;
@@ -416,7 +417,7 @@ export default function CustomersPage() {
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍  Search by name, phone, email..."
+          placeholder="🔍  Search by name, phone, email, AWB/tracking ID..."
           style={{
             flex: 1,
             minWidth: 240,

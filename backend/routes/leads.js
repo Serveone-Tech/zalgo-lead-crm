@@ -59,7 +59,7 @@ router.get("/stats", auth, async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const visToday = visibilityClause(req, 2);
-    const [total, active, booked, overdue, followup, customers] =
+    const [total, active, booked, lost, overdue, followup, customers] =
       await Promise.all([
         pool.query(`SELECT COUNT(*) FROM leads WHERE user_id=$1${vis.clause}`, [
           req.tenantId,
@@ -78,6 +78,11 @@ router.get("/stats", auth, async (req, res) => {
           `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage='Booked'${vis.clause}`,
           [req.tenantId, ...vis.params],
         ),
+        // "Lost" — the other terminal stage besides Converted (won).
+        pool.query(
+          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage='Closed'${vis.clause}`,
+          [req.tenantId, ...vis.params],
+        ),
         // Overdue: scheduled moment already passed (date+time), lead still open
         pool.query(
           `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND follow_up_date<NOW() AND stage NOT IN ('Closed','Converted')${visToday.clause}`,
@@ -94,6 +99,7 @@ router.get("/stats", auth, async (req, res) => {
       total: parseInt(total.rows[0].count),
       active: parseInt(active.rows[0].count),
       booked: parseInt(booked.rows[0].count),
+      lost: parseInt(lost.rows[0].count),
       overdue: parseInt(overdue.rows[0].count),
       followup_today: parseInt(followup.rows[0].count),
       customers: parseInt(customers.rows[0].count),

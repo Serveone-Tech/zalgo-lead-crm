@@ -5,7 +5,7 @@ import api, { formatCurrency, refreshUser } from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import { STAGE_COLORS } from "../../lib/stages";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
-import { Users, Zap, TrendingUp, AlertTriangle, Bell, DollarSign, CreditCard, CheckCircle2, ChevronRight, Plus } from "lucide-react";
+import { Users, Zap, TrendingUp, AlertTriangle, Bell, DollarSign, CreditCard, CheckCircle2, ChevronRight, Plus, XCircle } from "lucide-react";
 
 function today() {
   const d = new Date();
@@ -188,6 +188,13 @@ export default function DashboardPage() {
       color: "var(--success)",
       dim: "var(--success-dim)",
       icon: <TrendingUp size={18} />,
+    },
+    {
+      label: "Lost",
+      value: stats?.lost ?? 0,
+      color: "var(--text-muted)",
+      dim: "var(--bg-hover)",
+      icon: <XCircle size={18} />,
     },
     {
       label: "Overdue",
