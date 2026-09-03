@@ -30,10 +30,21 @@ export default function PlansPage() {
   const [subscribing, setSubscribing] = useState(null);
   const [toast, setToast] = useState(null);
   const [upgradePrompt, setUpgradePrompt] = useState(false);
+  const [isEmployee, setIsEmployee] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
       router.push("/login");
+      return;
+    }
+    // The subscription plan belongs to the account owner — an employee can
+    // land here (e.g. the owner's plan expired and a gated action redirected
+    // them), but they can't see pricing or self-activate anything themselves.
+    const rawUser = localStorage.getItem("crm_user");
+    const u = rawUser ? JSON.parse(rawUser) : null;
+    if (u?.parent_id) {
+      setIsEmployee(true);
+      setLoading(false);
       return;
     }
     if (typeof window !== "undefined" && window.location.search.includes("upgrade=1")) {
@@ -100,6 +111,56 @@ export default function PlansPage() {
         }}
       >
         Loading plans...
+      </div>
+    );
+
+  if (isEmployee)
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "var(--bg-base)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 20,
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 420,
+            textAlign: "center",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderRadius: 14,
+            padding: "32px 28px",
+          }}
+        >
+          <div style={{ fontSize: 30, marginBottom: 12 }}>🔒</div>
+          <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 16, color: "var(--text-primary)", marginBottom: 8 }}>
+            Subscription is managed by your admin
+          </div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 20 }}>
+            Only the account owner can view pricing or change the plan. If something's not working, ask your admin
+            to check the organisation's subscription.
+          </div>
+          <button
+            onClick={() => router.push("/dashboard")}
+            style={{
+              padding: "9px 20px",
+              borderRadius: 8,
+              background: "var(--teal)",
+              border: "none",
+              color: "#fff",
+              fontFamily: "var(--font-main)",
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: "pointer",
+            }}
+          >
+            Back to Dashboard
+          </button>
+        </div>
       </div>
     );
 

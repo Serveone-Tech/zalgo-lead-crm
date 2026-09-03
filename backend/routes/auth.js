@@ -198,6 +198,14 @@ router.post("/onboarding", auth, async (req, res) => {
 router.post("/subscribe", auth, async (req, res) => {
   const { plan_id, billing_cycle } = req.body;
   if (!plan_id) return res.status(400).json({ error: "plan_id required" });
+  // Only the account owner (no parent_id) manages the org's subscription —
+  // an employee session hitting this directly would otherwise create a
+  // subscription row under their own id that's functionally inert (their
+  // access always resolves through the owner's plan anyway) but pollutes
+  // admin views as if they were a separate paying customer.
+  if (req.user?.parentId) {
+    return res.status(403).json({ error: "Only the account owner can manage the subscription. Ask your admin." });
+  }
   try {
     const plan = await pool.query("SELECT * FROM plans WHERE id=$1", [plan_id]);
     if (!plan.rows[0]) return res.status(404).json({ error: "Plan not found" });
