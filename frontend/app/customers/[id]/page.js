@@ -355,11 +355,12 @@ export default function CustomerDetailPage() {
                       }}
                     >
                       {customer.phone && (
-                        <span
-                          style={{ fontSize: 12, color: "var(--text-muted)" }}
+                        <a
+                          href={`tel:${customer.phone}`}
+                          style={{ fontSize: 12, color: "var(--teal-light)", textDecoration: "none" }}
                         >
                           📞 {customer.phone}
-                        </span>
+                        </a>
                       )}
                       {customer.email && (
                         <span

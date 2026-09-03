@@ -240,14 +240,36 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
 
             {/* Phone + Email */}
             <Field label="Phone Number">
-              <input
-                name="phone"
-                value={form.phone}
-                onChange={canEditDetails ? handle : undefined}
-                readOnly={!canEditDetails}
-                placeholder="9876543210"
-                style={canEditDetails ? inp : inpLocked}
-              />
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  name="phone"
+                  value={form.phone}
+                  onChange={canEditDetails ? handle : undefined}
+                  readOnly={!canEditDetails}
+                  placeholder="9876543210"
+                  style={{ ...(canEditDetails ? inp : inpLocked), flex: 1 }}
+                />
+                {form.phone && (
+                  <a
+                    href={`tel:${form.phone}`}
+                    title="Call"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 38,
+                      flexShrink: 0,
+                      borderRadius: 8,
+                      background: "var(--teal-dim)",
+                      color: "var(--teal-light)",
+                      textDecoration: "none",
+                      fontSize: 15,
+                    }}
+                  >
+                    📞
+                  </a>
+                )}
+              </div>
             </Field>
             <Field label="Email Address">
               <input

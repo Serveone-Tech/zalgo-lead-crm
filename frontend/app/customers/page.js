@@ -708,7 +708,15 @@ export default function CustomersPage() {
                           color: "var(--text-secondary)",
                         }}
                       >
-                        {c.phone || (
+                        {c.phone ? (
+                          <a
+                            href={`tel:${c.phone}`}
+                            style={{ color: "var(--teal-light)", textDecoration: "none" }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {c.phone}
+                          </a>
+                        ) : (
                           <span style={{ color: "var(--text-muted)" }}>—</span>
                         )}
                       </td>

@@ -41,7 +41,9 @@ export default function WhatsAppChatModal({ lead, onClose }) {
             <div style={{ fontFamily: "var(--font-main)", fontSize: 15, fontWeight: 700, color: "var(--text-primary)" }}>
               💬 {lead.name || "WhatsApp Chat"}
             </div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{lead.phone}</div>
+            <a href={`tel:${lead.phone}`} style={{ display: "block", fontSize: 12, color: "var(--teal-light)", marginTop: 2, textDecoration: "none" }}>
+              📞 {lead.phone}
+            </a>
           </div>
           <button
             onClick={onClose}

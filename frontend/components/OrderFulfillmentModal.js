@@ -252,7 +252,29 @@ export default function OrderFulfillmentModal({ lead, order, customer, onClose, 
             </div>
 
             <Field label="Phone (locked)">
-              <input value={phone} readOnly style={inpLocked} />
+              <div style={{ display: "flex", gap: 6 }}>
+                <input value={phone} readOnly style={{ ...inpLocked, flex: 1 }} />
+                {phone && (
+                  <a
+                    href={`tel:${phone}`}
+                    title="Call"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 38,
+                      flexShrink: 0,
+                      borderRadius: 8,
+                      background: "var(--teal-dim)",
+                      color: "var(--teal-light)",
+                      textDecoration: "none",
+                      fontSize: 15,
+                    }}
+                  >
+                    📞
+                  </a>
+                )}
+              </div>
             </Field>
             <Field label="Email">
               <input name="email" type="email" value={form.email} onChange={handle} style={inp} />
