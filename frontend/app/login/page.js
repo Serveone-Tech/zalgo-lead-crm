@@ -152,7 +152,7 @@ export default function LoginPage() {
                 Welcome back
               </h1>
               <p style={{ color: "var(--text-muted)", fontSize: 13, marginBottom: 24 }}>
-                Sign in to your coach workspace
+                Sign in to your workspace
               </p>
 
               {error && <ErrBox msg={error} />}

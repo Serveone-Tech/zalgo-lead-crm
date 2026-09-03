@@ -4,6 +4,7 @@ const path = require('path');
 require('dotenv').config();
 
 const { initDB } = require('./db');
+const { runScheduledTriggers } = require('./utils/scheduled-triggers');
 const authRoutes       = require('./routes/auth');
 const leadsRoutes      = require('./routes/leads');
 const customersRoutes  = require('./routes/customers');
@@ -47,4 +48,9 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 initDB().then(() => {
   app.listen(PORT, () => console.log(`🚀 Zalgo CRM API running on port ${PORT}`));
+  // Follow-up/payment-due reminders aren't tied to a single request — check
+  // for anything due every 30 minutes (each guarded so it only actually
+  // sends once per day per lead/order).
+  runScheduledTriggers();
+  setInterval(runScheduledTriggers, 30 * 60 * 1000);
 }).catch(err => { console.error('DB init failed:', err); process.exit(1); });

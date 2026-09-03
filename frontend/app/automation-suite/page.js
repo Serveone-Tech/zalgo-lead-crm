@@ -30,9 +30,10 @@ const CHANNELS = [
 const TRIGGERS = [
   "New Lead Added",
   "Lead Converted",
+  "Order Shipped",
   "Follow-up Due Today",
-  "Fee / Payment Due",
-  "Fee / Payment Overdue",
+  "Payment Due",
+  "Payment Overdue",
 ];
 
 export default function AutomationSuitePage() {

@@ -65,8 +65,13 @@ router.get("/stats", auth, async (req, res) => {
           req.tenantId,
           ...vis.params,
         ]),
+        // "Active" = not yet in a terminal stage — a literal stage='Active'
+        // match was almost always 0 since new leads start on "New" and
+        // tenants can rename/reorder their pipeline stages freely. Matches
+        // the same Closed/Converted terminal-stage convention already used
+        // by the overdue count below.
         pool.query(
-          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage='Active'${vis.clause}`,
+          `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND stage NOT IN ('Closed','Converted')${vis.clause}`,
           [req.tenantId, ...vis.params],
         ),
         pool.query(

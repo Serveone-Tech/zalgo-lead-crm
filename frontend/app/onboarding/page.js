@@ -91,7 +91,7 @@ export default function OnboardingPage() {
             Set up your organisation
           </h2>
           <p style={{ color: "var(--text-muted)", fontSize: 13 }}>
-            Tell us about your coaching business
+            Tell us about your business
           </p>
         </div>
 
@@ -245,12 +245,12 @@ export default function OnboardingPage() {
               </div>
 
               <div style={{ gridColumn: "1/-1" }}>
-                <label style={lbl}>Organisation / Institute Name *</label>
+                <label style={lbl}>Organisation Name *</label>
                 <input
                   name="name"
                   value={form.name}
                   onChange={handle}
-                  placeholder="e.g. Zalgo EduTech Coaching"
+                  placeholder="e.g. Zalgo Infotech"
                   required
                   style={inp}
                 />

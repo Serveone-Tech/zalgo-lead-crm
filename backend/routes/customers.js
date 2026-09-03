@@ -29,6 +29,7 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
     const result = await pool.query(
       `SELECT c.*, u.name AS assigned_to_name,
         COALESCE(SUM(co.advance_paid),0) AS total_collected,
+        COALESCE(SUM(co.amount),0) AS total_order_value,
         -- Cancelled/returned orders (stage flagged excludes_dues) no longer
         -- count toward what's still owed — the sale isn't happening.
         COALESCE(SUM(CASE WHEN co.payment_type='cod' AND NOT COALESCE(os_due.excludes_dues,false) THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,

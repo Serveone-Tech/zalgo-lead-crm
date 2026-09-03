@@ -10,7 +10,7 @@ const TRIGGER_DEFS = [
     icon: "👤",
     desc: "When a new lead is created",
     defaultTemplate:
-      "Hi {name}, Thank you for your interest! We will get back to you shortly. — {institute_name}",
+      "Hi {name}, thank you for your interest! Our team will get back to you shortly. — {business_name}",
   },
   {
     id: "lead_converted",
@@ -18,7 +18,15 @@ const TRIGGER_DEFS = [
     icon: "✅",
     desc: "When a lead is marked as Converted",
     defaultTemplate:
-      "Welcome {name}! You have successfully enrolled. We are excited to have you at {institute_name}!",
+      "Welcome {name}! Thank you for choosing us — we're excited to have you as a customer.",
+  },
+  {
+    id: "order_shipped",
+    label: "Order Shipped",
+    icon: "📦",
+    desc: "When a courier shipment is created and a tracking ID is generated",
+    defaultTemplate:
+      "Hi {name}, your order has been shipped via {provider}! Track it with AWB/Tracking ID: {tracking_id}",
   },
   {
     id: "follow_up_due",
@@ -28,20 +36,20 @@ const TRIGGER_DEFS = [
     defaultTemplate: "Reminder: Follow up with {name} ({phone}) today.",
   },
   {
-    id: "fee_due",
-    label: "Fee Payment Due",
+    id: "payment_due",
+    label: "Payment Due",
     icon: "💰",
-    desc: "When a customer payment due date arrives",
+    desc: "When a customer's COD balance payment due date arrives",
     defaultTemplate:
-      "Dear {name}, your fee of {amount} is due on {due_date}. Please make the payment. — {institute_name}",
+      "Dear {name}, your payment of {amount} is due on {due_date}. Please make the payment. — {business_name}",
   },
   {
-    id: "fee_overdue",
-    label: "Fee Payment Overdue",
+    id: "payment_overdue",
+    label: "Payment Overdue",
     icon: "⚠️",
     desc: "When a payment is past its due date",
     defaultTemplate:
-      "Dear {name}, your payment of {amount} for {institute_name} is overdue since {due_date}. Please clear dues immediately.",
+      "Dear {name}, your payment of {amount} is overdue since {due_date}. Please clear the balance at your earliest.",
   },
 ];
 const VARS = [
@@ -50,7 +58,9 @@ const VARS = [
   "{email}",
   "{amount}",
   "{due_date}",
-  "{institute_name}",
+  "{tracking_id}",
+  "{provider}",
+  "{business_name}",
 ];
 
 function buildAppsScript(webhookUrl) {
@@ -538,7 +548,7 @@ export default function AutomationPage() {
                   l: "From Email",
                   ph: "noreply@yourdomain.com",
                 },
-                { k: "email_from_name", l: "From Name", ph: "My Institute" },
+                { k: "email_from_name", l: "From Name", ph: "My Business" },
               ],
             },
             {
@@ -1207,7 +1217,7 @@ export default function AutomationPage() {
                   }
                   placeholder={
                     manual.channel === "email"
-                      ? "student@email.com"
+                      ? "customer@email.com"
                       : "+919876543210"
                   }
                   style={{ ...inp, marginTop: 6 }}

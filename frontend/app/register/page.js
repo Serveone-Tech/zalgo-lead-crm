@@ -111,7 +111,7 @@ export default function RegisterPage() {
               marginBottom: 24,
             }}
           >
-            Start managing your coaching business
+            Start managing your leads and customers
           </p>
 
           {error && (

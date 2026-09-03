@@ -649,7 +649,7 @@ export default function DashboardPage() {
             >
               <thead>
                 <tr style={{ background: "var(--bg-surface)" }}>
-                  {["Student", "Amount Due", "Due Date", "Action"].map((h) => (
+                  {["Customer", "Amount Due", "Due Date", "Action"].map((h) => (
                     <th
                       key={h}
                       style={{

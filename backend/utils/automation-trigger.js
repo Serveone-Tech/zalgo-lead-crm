@@ -8,6 +8,11 @@ function replaceVars(template, data) {
     .replace(/\{email\}/g, data.email || "")
     .replace(/\{amount\}/g, data.amount ? `${data.amount}` : "")
     .replace(/\{due_date\}/g, data.due_date || "")
+    .replace(/\{tracking_id\}/g, data.tracking_id || "")
+    .replace(/\{provider\}/g, data.provider || "")
+    // {business_name} is the current name for this — {institute_name} is
+    // kept working too so templates saved before the rename don't break.
+    .replace(/\{business_name\}/g, data.institute_name || "")
     .replace(/\{institute_name\}/g, data.institute_name || "");
 }
 

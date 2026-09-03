@@ -264,17 +264,17 @@ export default function SettingsPage() {
       {/* ── TAB: General ─────────────────────────────────────────── */}
       {activeTab === 'general' && (
         <div>
-          <Card title="Institute / Business Info">
+          <Card title="Business Info">
             <div style={{ marginBottom: 14 }}>
-              <label style={lbl}>Institute / Business Name</label>
+              <label style={lbl}>Business Name</label>
               <input
                 value={settings.institute_name}
                 onChange={e => setSettings(s => ({ ...s, institute_name: e.target.value }))}
-                placeholder="e.g. Zalgo EduTech"
+                placeholder="e.g. Zalgo Infotech"
                 style={inp}
               />
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-                This name will be used in automated messages sent to leads and students.
+                This name will be used in automated messages sent to leads and customers.
               </div>
             </div>
           </Card>

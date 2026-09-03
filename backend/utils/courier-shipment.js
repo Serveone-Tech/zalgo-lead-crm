@@ -1,6 +1,11 @@
 const { pool } = require("../db");
 const { PROVIDERS } = require("./delivery-providers");
 
+let fireTrigger = async () => {}; // safe default
+try {
+  fireTrigger = require("./automation-trigger").fireTrigger;
+} catch (e) {}
+
 // Creates the shipment at whichever courier the order's `provider` names,
 // and drops the AWB straight into the order's existing `tracking_id` field
 // so the current tracking feature keeps working unchanged. Called from the
@@ -80,6 +85,14 @@ async function createCourierShipmentForOrder(orderId, tenantId) {
         "UPDATE customer_orders SET tracking_id=$1, courier_order_created=true, courier_error='' WHERE id=$2",
         [awb, orderId],
       );
+      fireTrigger("order_shipped", tenantId, {
+        name: order.customer_name,
+        phone: order.phone,
+        email: order.email,
+        amount: order.amount,
+        tracking_id: awb,
+        provider: provider.label || order.provider,
+      }).catch(() => {});
     } else {
       // Shipment exists at the courier but no AWB yet — don't mark
       // courier_order_created so a retry can pick up where this left off,

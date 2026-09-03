@@ -231,8 +231,11 @@ export default function CustomersPage() {
   // Cards reflect whatever's currently filtered (search + date range), not
   // the whole unfiltered customer list — so picking a date range actually
   // changes the numbers shown, not just the table rows.
+  // Real order revenue (sum of every order's amount) — the old card summed
+  // customers.total_fee, a standalone manually-entered number left over from
+  // this product's coaching-tool origin that has no link to actual orders.
   const totalFee = filtered.reduce(
-    (s, c) => s + parseFloat(c.total_fee || 0),
+    (s, c) => s + parseFloat(c.total_order_value || 0),
     0,
   );
   const totalCollected = filtered.reduce(
@@ -354,7 +357,7 @@ export default function CustomersPage() {
             icon: <Users size={18} />,
           },
           {
-            label: "Total Fees",
+            label: "Total Order Value",
             value: fmt(totalFee),
             color: "var(--blue)",
             icon: <DollarSign size={18} />,

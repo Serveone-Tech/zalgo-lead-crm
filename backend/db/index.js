@@ -50,6 +50,9 @@ const initDB = async () => {
 
     const alterLeads = [
       `ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL`,
+      // Same once-per-day guard as customer_orders' payment reminders, for
+      // the follow_up_due automation trigger.
+      `ALTER TABLE leads ADD COLUMN IF NOT EXISTS followup_reminder_sent_date DATE`,
     ];
 
     // Turns the flat conversation log into a real two-way chat: which side
@@ -160,6 +163,11 @@ const initDB = async () => {
       // /uploads/order-attachments; this column holds its public path.
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS attachment_path TEXT DEFAULT ''`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS attachment_name TEXT DEFAULT ''`,
+      // Guards the payment_due/payment_overdue automation triggers against
+      // re-firing every time the scheduled check runs — set once per
+      // calendar day this order actually sent a reminder.
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_due_reminder_sent_date DATE`,
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_overdue_reminder_sent_date DATE`,
     ];
     for (const q of alterCustomerOrders) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
