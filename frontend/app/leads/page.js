@@ -54,6 +54,7 @@ function LeadsContent() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [stageF, setStageF] = useState("");
+  const [platformF, setPlatformF] = useState("");
   const [dateF, setDateF] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -164,6 +165,7 @@ function LeadsContent() {
         )
           return false;
         if (stageF && l.stage !== stageF) return false;
+        if (platformF && l.platform !== platformF) return false;
         if (dateF === "overdue" && !isOverdue(l.follow_up_date)) return false;
         if (dateF === "today" && !isToday(l.follow_up_date)) return false;
         if (assigneeF === "__unassigned__" && l.assigned_to) return false;
@@ -178,7 +180,15 @@ function LeadsContent() {
         if (dateTo && (!createdDate || createdDate > dateTo)) return false;
         return true;
       }),
-    [leads, search, stageF, dateF, assigneeF, dateFrom, dateTo],
+    [leads, search, stageF, platformF, dateF, assigneeF, dateFrom, dateTo],
+  );
+
+  // Built from whatever platform values actually exist on this tenant's
+  // leads — covers every capture source (WhatsApp, LinkedIn, Google Ads,
+  // Phone Call, manually-typed ones, etc.) without a hardcoded list.
+  const platformOptions = useMemo(
+    () => [...new Set(leads.map((l) => l.platform).filter(Boolean))].sort(),
+    [leads],
   );
 
   const openAdd = () => {
@@ -326,7 +336,7 @@ function LeadsContent() {
   ).length;
 
   const hasFilters =
-    search || stageF || dateF || assigneeF || dateFrom || dateTo;
+    search || stageF || platformF || dateF || assigneeF || dateFrom || dateTo;
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -506,6 +516,18 @@ function LeadsContent() {
           ))}
         </select>
         <select
+          value={platformF}
+          onChange={(e) => setPlatformF(e.target.value)}
+          style={selStyle}
+        >
+          <option value="">All Platforms</option>
+          {platformOptions.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+        <select
           value={dateF}
           onChange={(e) => setDateF(e.target.value)}
           style={selStyle}
@@ -588,6 +610,7 @@ function LeadsContent() {
             onClick={() => {
               setSearch("");
               setStageF("");
+              setPlatformF("");
               setDateF("");
               setAssigneeF("");
               setDateFrom("");
