@@ -11,11 +11,12 @@ const auth = async (req, res, next) => {
     req.userRole = decoded.role;
 
     const result = await pool.query(
-      'SELECT id, role, parent_id, permissions, role_label FROM users WHERE id=$1',
+      'SELECT id, role, parent_id, permissions, role_label, is_blocked FROM users WHERE id=$1',
       [decoded.userId]
     );
     const row = result.rows[0];
     if (!row) return res.status(401).json({ error: 'Invalid token' });
+    if (row.is_blocked) return res.status(403).json({ error: 'ACCOUNT_BLOCKED', message: 'This account has been blocked. Contact your admin.' });
 
     req.user = {
       id: row.id,

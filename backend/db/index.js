@@ -40,6 +40,9 @@ const initDB = async () => {
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS parent_id INTEGER REFERENCES users(id)`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS role_label VARCHAR(50) DEFAULT ''`,
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB DEFAULT '{}'`,
+      // Super Admin can block a specific employee login without touching the
+      // tenant's own subscription or their other employees.
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT false`,
     ];
     for (const q of alterUsers) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));

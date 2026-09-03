@@ -1,9 +1,25 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const { pool } = require('../db');
 const { superadminAuth } = require('../middleware/auth');
+const { PERMISSION_KEYS } = require('../utils/permissions');
 const mailer = require('../utils/mailer');
 
 const router = express.Router();
+
+const sanitizePermissions = (input = {}) => {
+  const clean = {};
+  for (const key of PERMISSION_KEYS) clean[key] = input[key] === true;
+  return clean;
+};
+
+// Confirms :id is an owner (not an employee/superadmin) and returns their
+// row — every employee route below is scoped through this so Super Admin
+// can only reach an employee via their actual parent, never by guessing ids.
+async function requireOwner(id) {
+  const { rows } = await pool.query("SELECT id FROM users WHERE id=$1 AND role='user' AND parent_id IS NULL", [id]);
+  return rows[0] || null;
+}
 
 // ── GET all users with subscription info
 router.get('/users', superadminAuth, async (req, res) => {
@@ -25,10 +41,112 @@ router.get('/users', superadminAuth, async (req, res) => {
         SELECT * FROM subscriptions WHERE user_id=u.id ORDER BY created_at DESC LIMIT 1
       ) s ON true
       LEFT JOIN plans p ON p.id=s.plan_id
-      WHERE u.role != 'superadmin'
+      WHERE u.role='user' AND u.parent_id IS NULL
       ORDER BY u.created_at DESC
     `);
     res.json(result.rows);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── GET one owner's employees — powers the nested view on the dashboard
+// (mixing owners and their sub-accounts into one flat list was confusing).
+router.get('/users/:id/employees', superadminAuth, async (req, res) => {
+  try {
+    const owner = await requireOwner(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'Owner not found' });
+    const result = await pool.query(
+      `SELECT id, name, email, role_label, permissions, is_blocked, created_at
+       FROM users WHERE parent_id=$1 ORDER BY created_at DESC`,
+      [req.params.id],
+    );
+    res.json(result.rows);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── POST add an employee under this owner — same shape as the tenant's own
+// Team page, just triggered by Super Admin on their behalf.
+router.post('/users/:id/employees', superadminAuth, async (req, res) => {
+  const { name, email, password, role_label, permissions } = req.body;
+  if (!name || !email || !password) return res.status(400).json({ error: 'Name, email, password required' });
+  try {
+    const owner = await requireOwner(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'Owner not found' });
+
+    // Same seat-limit rule the tenant themselves is held to — Super Admin
+    // sees the same error and can raise the limit from this same screen.
+    const subRes = await pool.query(
+      `SELECT s.employee_limit_override, p.max_employees FROM subscriptions s JOIN plans p ON p.id=s.plan_id
+       WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 1`,
+      [req.params.id],
+    );
+    const limit = subRes.rows[0]?.employee_limit_override ?? subRes.rows[0]?.max_employees;
+    if (limit != null && limit !== -1) {
+      const { rows } = await pool.query('SELECT COUNT(*) FROM users WHERE parent_id=$1', [req.params.id]);
+      if (parseInt(rows[0].count) >= limit) {
+        return res.status(403).json({ error: `Employee limit reached (${limit}). Raise the seat limit first.` });
+      }
+    }
+
+    const existing = await pool.query('SELECT id FROM users WHERE email=$1', [email]);
+    if (existing.rows.length > 0) return res.status(400).json({ error: 'Email already in use' });
+
+    const hashed = await bcrypt.hash(password, 10);
+    const result = await pool.query(
+      `INSERT INTO users (name, email, password, role, onboarded, parent_id, role_label, permissions)
+       VALUES ($1,$2,$3,'employee',true,$4,$5,$6)
+       RETURNING id, name, email, role_label, permissions, is_blocked, created_at`,
+      [name, email, hashed, req.params.id, role_label || '', sanitizePermissions(permissions)],
+    );
+    res.json(result.rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUT edit an employee (name/role/permissions, optional password reset)
+router.put('/users/:id/employees/:empId', superadminAuth, async (req, res) => {
+  const { name, role_label, permissions, password } = req.body;
+  try {
+    const owned = await pool.query('SELECT id FROM users WHERE id=$1 AND parent_id=$2', [req.params.empId, req.params.id]);
+    if (!owned.rows[0]) return res.status(404).json({ error: 'Employee not found' });
+
+    if (password) {
+      const hashed = await bcrypt.hash(password, 10);
+      await pool.query('UPDATE users SET password=$1 WHERE id=$2', [hashed, req.params.empId]);
+    }
+
+    const result = await pool.query(
+      `UPDATE users SET name=$1, role_label=$2, permissions=$3
+       WHERE id=$4 AND parent_id=$5
+       RETURNING id, name, email, role_label, permissions, is_blocked, created_at`,
+      [name, role_label || '', sanitizePermissions(permissions), req.params.empId, req.params.id],
+    );
+    res.json(result.rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUT block/unblock an employee — they simply can't log in or use an
+// existing token while blocked; nothing else about their account changes.
+router.put('/users/:id/employees/:empId/block', superadminAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE users SET is_blocked=$1 WHERE id=$2 AND parent_id=$3
+       RETURNING id, name, email, role_label, permissions, is_blocked, created_at`,
+      [!!req.body.blocked, req.params.empId, req.params.id],
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Employee not found' });
+    res.json(result.rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── DELETE an employee — unassign their leads first, same as the tenant's
+// own Team page does.
+router.delete('/users/:id/employees/:empId', superadminAuth, async (req, res) => {
+  try {
+    const owned = await pool.query('SELECT id FROM users WHERE id=$1 AND parent_id=$2', [req.params.empId, req.params.id]);
+    if (!owned.rows[0]) return res.status(404).json({ error: 'Employee not found' });
+
+    await pool.query('UPDATE leads SET assigned_to=NULL WHERE assigned_to=$1', [req.params.empId]);
+    await pool.query('DELETE FROM users WHERE id=$1 AND parent_id=$2', [req.params.empId, req.params.id]);
+    res.json({ success: true });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 

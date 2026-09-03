@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "../../lib/api";
+import EmployeesModal from "./EmployeesModal";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -32,6 +33,7 @@ export default function SuperAdminDashboard() {
   const [actionUser, setActionUser]     = useState(null);
   const [actionData, setActionData]     = useState({ action:"activate", plan_id:"", billing_cycle:"monthly", days:30, notes:"" });
   const [empLimitInput, setEmpLimitInput] = useState("");
+  const [employeesModalUser, setEmployeesModalUser] = useState(null);
   const [savingLimit, setSavingLimit]   = useState(false);
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState(null);
@@ -215,13 +217,17 @@ export default function SuperAdminDashboard() {
                       </td>
                       <td style={{ padding:"12px 14px", fontSize:12, color:"var(--text-secondary)", textAlign:"center" }}>{u.lead_count||0}</td>
                       <td style={{ padding:"12px 14px", fontSize:12, color:"var(--text-secondary)", textAlign:"center" }}>{u.customer_count||0}</td>
-                      <td style={{ padding:"12px 14px", fontSize:12, color:"var(--text-secondary)", textAlign:"center", whiteSpace:"nowrap" }}>
-                        {u.max_employees != null ? (
-                          <>
-                            {u.employee_count||0} / {(u.employee_limit_override ?? u.max_employees) === -1 ? "∞" : (u.employee_limit_override ?? u.max_employees)}
-                            {u.employee_limit_override != null && <span title="Custom limit set by Super Admin" style={{ color:"var(--teal)" }}> ★</span>}
-                          </>
-                        ) : "—"}
+                      <td style={{ padding:"12px 14px", fontSize:12, textAlign:"center", whiteSpace:"nowrap" }}>
+                        <button
+                          onClick={()=>setEmployeesModalUser(u)}
+                          title="View / manage this tenant's employees"
+                          style={{ background:"transparent", border:"1px solid var(--border)", borderRadius:6, padding:"4px 10px", color:"var(--teal)", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"var(--font-main)" }}
+                          onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal)"}
+                          onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}
+                        >
+                          {u.employee_count||0} / {u.max_employees == null ? "—" : (u.employee_limit_override ?? u.max_employees) === -1 ? "∞" : (u.employee_limit_override ?? u.max_employees)}
+                          {u.employee_limit_override != null && <span title="Custom limit set by Super Admin" style={{ color:"var(--teal)" }}> ★</span>}
+                        </button>
                       </td>
                       <td style={{ padding:"12px 14px" }}>
                         <div style={{ display:"flex", gap:6 }}>
@@ -350,6 +356,14 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
         </div>
+      )}
+
+      {employeesModalUser && (
+        <EmployeesModal
+          owner={employeesModalUser}
+          onClose={()=>setEmployeesModalUser(null)}
+          onChanged={loadAll}
+        />
       )}
     </div>
   );

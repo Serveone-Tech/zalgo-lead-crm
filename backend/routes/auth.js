@@ -48,6 +48,7 @@ router.post("/login", async (req, res) => {
 
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+    if (user.is_blocked) return res.status(403).json({ error: "This account has been blocked. Contact your admin." });
 
     const token = makeToken(user);
     let redirect = "/dashboard";
