@@ -171,4 +171,4 @@ async function fireTrigger(triggerId, userId, data = {}) {
   }
 }
 
-module.exports = { fireTrigger };
+module.exports = { fireTrigger, replaceVars, sendEmail, sendSMS, sendWhatsApp };

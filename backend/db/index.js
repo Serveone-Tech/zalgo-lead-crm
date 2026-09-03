@@ -486,6 +486,23 @@ const initDB = async () => {
         UNIQUE(user_id, trigger_id)
       );
 
+      -- Logs each bulk send (festival offers, win-back campaigns, etc.) so
+      -- the admin can see what was sent to whom and when — the send itself
+      -- reuses the same per-channel senders as automation triggers.
+      CREATE TABLE IF NOT EXISTS broadcast_campaigns (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        audience VARCHAR(30) NOT NULL,
+        audience_days INTEGER,
+        channels TEXT[] DEFAULT '{}',
+        message TEXT NOT NULL,
+        recipient_count INTEGER DEFAULT 0,
+        sent_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS stages (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,

@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { sendWhatsAppViaMeta } = require("../utils/whatsapp-meta");
+const { replaceVars, sendEmail, sendSMS, sendWhatsApp } = require("../utils/automation-trigger");
 
 const router = express.Router();
 
@@ -329,6 +330,114 @@ router.post("/send", auth, requireSubscription, requirePlanFeature("automation")
     // Return proper error message to frontend
     const errMsg = e.message || "Failed to send message";
     res.status(500).json({ error: errMsg });
+  }
+});
+
+// Resolves an audience name into the actual customer rows a broadcast will
+// go to. "new" and "inactive" both take a day window; "all" ignores it.
+async function resolveAudience(tenantId, audience, days) {
+  const d = Math.max(1, parseInt(days) || 30);
+  if (audience === "new") {
+    const { rows } = await pool.query(
+      `SELECT id, name, phone, email FROM customers
+       WHERE user_id=$1 AND created_at >= NOW() - ($2 || ' days')::interval`,
+      [tenantId, d],
+    );
+    return rows;
+  }
+  if (audience === "inactive") {
+    const { rows } = await pool.query(
+      `SELECT c.id, c.name, c.phone, c.email
+       FROM customers c
+       LEFT JOIN customer_orders co ON co.customer_id=c.id AND co.deleted_at IS NULL
+       WHERE c.user_id=$1
+       GROUP BY c.id
+       HAVING MAX(co.created_at) IS NULL OR MAX(co.created_at) < NOW() - ($2 || ' days')::interval`,
+      [tenantId, d],
+    );
+    return rows;
+  }
+  const { rows } = await pool.query("SELECT id, name, phone, email FROM customers WHERE user_id=$1", [tenantId]);
+  return rows;
+}
+
+// ── GET how many customers a given audience/day-window currently matches —
+// lets the admin see the reach before actually sending anything.
+router.get("/broadcast/audience-count", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const rows = await resolveAudience(req.tenantId, req.query.audience, req.query.days);
+    res.json({ count: rows.length });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── GET past campaigns — most recent first.
+router.get("/broadcast/history", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM broadcast_campaigns WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30",
+      [req.tenantId],
+    );
+    res.json(result.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── POST send a bulk broadcast — a festival offer, a win-back message to
+// customers who haven't ordered in a while, etc. Reuses the exact same
+// per-channel senders automation triggers use, just looped over an
+// audience instead of firing off one event.
+router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  const { audience, days, channels, message } = req.body;
+  if (!message?.trim()) return res.status(400).json({ error: "Message required" });
+  if (!Array.isArray(channels) || channels.length === 0) {
+    return res.status(400).json({ error: "Select at least one channel" });
+  }
+  try {
+    const recipients = await resolveAudience(req.tenantId, audience, days);
+    if (recipients.length === 0) {
+      return res.status(400).json({ error: "No customers match this audience" });
+    }
+
+    const credRes = await pool.query("SELECT * FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
+    const creds = credRes.rows[0];
+    if (!creds) {
+      return res.status(400).json({ error: "No channel credentials configured yet — set them up under Channel Setup first" });
+    }
+
+    const settRes = await pool.query("SELECT institute_name FROM user_settings WHERE user_id=$1", [req.tenantId]);
+    const businessName = settRes.rows[0]?.institute_name || "";
+    const subject = `Message from ${businessName || "us"}`;
+
+    let sent = 0, failed = 0;
+    const jobs = [];
+    for (const r of recipients) {
+      const personalized = replaceVars(message, { name: r.name, phone: r.phone, email: r.email, institute_name: businessName });
+      if (channels.includes("email") && r.email) {
+        jobs.push(sendEmail(creds, r.email, personalized, subject).then(() => sent++).catch(() => failed++));
+      }
+      if (channels.includes("sms") && r.phone) {
+        jobs.push(sendSMS(creds, r.phone, personalized).then(() => sent++).catch(() => failed++));
+      }
+      if (channels.includes("whatsapp") && r.phone) {
+        jobs.push(sendWhatsApp(creds, r.phone, personalized).then(() => sent++).catch(() => failed++));
+      }
+    }
+    await Promise.allSettled(jobs);
+
+    const campaign = await pool.query(
+      `INSERT INTO broadcast_campaigns (user_id, audience, audience_days, channels, message, recipient_count, sent_count, failed_count, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+      [req.tenantId, audience, days || null, channels, message, recipients.length, sent, failed, req.user.id],
+    );
+    res.json(campaign.rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
   }
 });
 

@@ -226,6 +226,11 @@ export default function AutomationPage() {
   const [webhooks, setWebhooks] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [sub, setSub] = useState(null);
+  const [broadcast, setBroadcast] = useState({ audience: "all", days: 30, channels: [], message: "" });
+  const [audienceCount, setAudienceCount] = useState(null);
+  const [countingAudience, setCountingAudience] = useState(false);
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [broadcastHistory, setBroadcastHistory] = useState([]);
 
   useEffect(() => {
     const raw = localStorage.getItem("crm_token");
@@ -265,6 +270,53 @@ export default function AutomationPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planFeatures]);
+
+  // Loaded lazily — only once the Broadcast tab is actually opened, since
+  // it's Pro Max-only and most owners visiting this page won't need it.
+  useEffect(() => {
+    if (tab !== "broadcast") return;
+    api.get("/automation/broadcast/history").then((r) => setBroadcastHistory(r.data)).catch(() => {});
+    checkAudienceCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  const checkAudienceCount = async () => {
+    setCountingAudience(true);
+    try {
+      const { data } = await api.get("/automation/broadcast/audience-count", {
+        params: { audience: broadcast.audience, days: broadcast.days },
+      });
+      setAudienceCount(data.count);
+    } catch {
+      setAudienceCount(null);
+    } finally {
+      setCountingAudience(false);
+    }
+  };
+
+  const toggleBroadcastChannel = (ch) => {
+    setBroadcast((b) => ({
+      ...b,
+      channels: b.channels.includes(ch) ? b.channels.filter((c) => c !== ch) : [...b.channels, ch],
+    }));
+  };
+
+  const sendBroadcast = async () => {
+    if (!broadcast.message.trim() || broadcast.channels.length === 0) return;
+    const reach = audienceCount ?? "an unknown number of";
+    if (!confirm(`Send this to ${reach} customer(s)? This can't be undone.`)) return;
+    setBroadcasting(true);
+    try {
+      const { data } = await api.post("/automation/broadcast", broadcast);
+      showToast(`Sent! ${data.sent_count} delivered, ${data.failed_count} failed, out of ${data.recipient_count} recipients.`);
+      setBroadcast((b) => ({ ...b, message: "" }));
+      setBroadcastHistory((h) => [data, ...h]);
+    } catch (err) {
+      showToast(err?.response?.data?.error || "Broadcast failed", "error");
+    } finally {
+      setBroadcasting(false);
+    }
+  };
 
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
@@ -502,6 +554,7 @@ export default function AutomationPage() {
           ...(hasPlanFeature("automation") ? [{ k: "channels", l: "⚡ Channel Setup" }] : []),
           ...(hasPlanFeature("automation") ? [{ k: "triggers", l: "🔔 Triggers" }] : []),
           ...(hasPlanFeature("automation") ? [{ k: "manual", l: "✉ Manual Send" }] : []),
+          ...(hasPlanFeature("automation") ? [{ k: "broadcast", l: "📣 Broadcast" }] : []),
           ...(hasPlanFeature("lead_sources") ? [{ k: "sources", l: "🔗 Lead Sources" }] : []),
         ].map((t) => (
           <button
@@ -1326,6 +1379,218 @@ export default function AutomationPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB — BROADCAST */}
+      {tab === "broadcast" && (
+        <div style={{ maxWidth: 620 }}>
+          <div
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: "24px",
+              marginBottom: 20,
+            }}
+          >
+            <h3 style={{ fontFamily: "var(--font-main)", fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>
+              Send a Bulk Message
+            </h3>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20 }}>
+              A festival offer, a discount for customers who haven't ordered in a while, an announcement — pick who
+              gets it, then send.
+            </p>
+
+            {/* Audience selector */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={lbl}>Audience</label>
+              <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                {[
+                  { k: "all", l: "All Customers" },
+                  { k: "new", l: "New Customers" },
+                  { k: "inactive", l: "Haven't Ordered Recently" },
+                ].map((a) => (
+                  <button
+                    key={a.k}
+                    onClick={() => { setBroadcast((b) => ({ ...b, audience: a.k })); setAudienceCount(null); }}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      border: `2px solid ${broadcast.audience === a.k ? "var(--teal)" : "var(--border)"}`,
+                      background: broadcast.audience === a.k ? "var(--teal-dim)" : "transparent",
+                      color: broadcast.audience === a.k ? "var(--teal-light)" : "var(--text-secondary)",
+                      fontFamily: "var(--font-main)",
+                      fontWeight: 600,
+                      fontSize: 12,
+                    }}
+                  >
+                    {a.l}
+                  </button>
+                ))}
+              </div>
+              {(broadcast.audience === "new" || broadcast.audience === "inactive") && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
+                    {broadcast.audience === "new" ? "Joined in the last" : "No order in the last"}
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={broadcast.days}
+                    onChange={(e) => { setBroadcast((b) => ({ ...b, days: e.target.value })); setAudienceCount(null); }}
+                    style={{ ...inp, width: 70, padding: "6px 9px" }}
+                  />
+                  <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>days</span>
+                </div>
+              )}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={checkAudienceCount}
+                  disabled={countingAudience}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: 7,
+                    background: "transparent",
+                    border: "1px solid var(--border)",
+                    color: "var(--teal)",
+                    fontSize: 11.5,
+                    fontWeight: 600,
+                    fontFamily: "var(--font-main)",
+                    cursor: countingAudience ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {countingAudience ? "Checking..." : "Preview Reach"}
+                </button>
+                {audienceCount !== null && (
+                  <span style={{ fontSize: 12.5, color: "var(--text-secondary)" }}>
+                    This will reach <strong style={{ color: "var(--teal-light)" }}>{audienceCount}</strong> customer
+                    {audienceCount === 1 ? "" : "s"}.
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Channels */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={lbl}>Send Via</label>
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                {[
+                  { k: "email", l: "Email", icon: "✉️", ok: creds.email_enabled },
+                  { k: "sms", l: "SMS", icon: "💬", ok: creds.sms_enabled },
+                  { k: "whatsapp", l: "WhatsApp", icon: "🟢", ok: creds.whatsapp_enabled },
+                ].map((ch) => (
+                  <button
+                    key={ch.k}
+                    onClick={() => toggleBroadcastChannel(ch.k)}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      border: `2px solid ${broadcast.channels.includes(ch.k) ? "var(--teal)" : "var(--border)"}`,
+                      background: broadcast.channels.includes(ch.k) ? "var(--teal-dim)" : "transparent",
+                      color: broadcast.channels.includes(ch.k) ? "var(--teal-light)" : "var(--text-secondary)",
+                      fontFamily: "var(--font-main)",
+                      fontWeight: 600,
+                      fontSize: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    {ch.icon} {ch.l}
+                    {!ch.ok && <span style={{ fontSize: 9, color: "var(--warn)" }}>(not set)</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Message */}
+            <div style={{ marginBottom: 8 }}>
+              <label style={lbl}>Message</label>
+              <textarea
+                value={broadcast.message}
+                onChange={(e) => setBroadcast((b) => ({ ...b, message: e.target.value }))}
+                rows={5}
+                placeholder="Hi {name}, we're running a festival offer just for you..."
+                style={{ ...inp, resize: "vertical", marginTop: 6, minHeight: 110 }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+              {["{name}", "{phone}", "{email}", "{business_name}"].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setBroadcast((b) => ({ ...b, message: b.message + v }))}
+                  style={{
+                    padding: "3px 10px",
+                    borderRadius: 20,
+                    background: "var(--bg-surface)",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-muted)",
+                    fontSize: 11,
+                    cursor: "pointer",
+                    fontFamily: "monospace",
+                  }}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                onClick={sendBroadcast}
+                disabled={broadcasting || !broadcast.message.trim() || broadcast.channels.length === 0}
+                style={{
+                  padding: "10px 24px",
+                  borderRadius: 8,
+                  border: "none",
+                  background:
+                    broadcasting || !broadcast.message.trim() || broadcast.channels.length === 0
+                      ? "var(--bg-surface)"
+                      : "var(--teal)",
+                  color: "#fff",
+                  fontFamily: "var(--font-main)",
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: broadcasting || !broadcast.message.trim() || broadcast.channels.length === 0 ? "not-allowed" : "pointer",
+                  opacity: broadcasting || !broadcast.message.trim() || broadcast.channels.length === 0 ? 0.6 : 1,
+                }}
+              >
+                {broadcasting ? "Sending..." : "📣 Send Broadcast"}
+              </button>
+            </div>
+          </div>
+
+          {/* History */}
+          {broadcastHistory.length > 0 && (
+            <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: "20px 24px" }}>
+              <h3 style={{ fontFamily: "var(--font-main)", fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
+                Past Broadcasts
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {broadcastHistory.map((c) => (
+                  <div key={c.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>
+                      <span>
+                        {c.audience === "all" ? "All Customers" : c.audience === "new" ? `New (${c.audience_days}d)` : `Inactive (${c.audience_days}d)`}
+                        {" · "}
+                        {(c.channels || []).join(", ")}
+                      </span>
+                      <span>{new Date(c.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--text-primary)", marginBottom: 4 }}>{c.message}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                      {c.recipient_count} recipients · {c.sent_count} sent · {c.failed_count} failed
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
