@@ -489,6 +489,23 @@ const initDB = async () => {
       -- Logs each bulk send (festival offers, win-back campaigns, etc.) so
       -- the admin can see what was sent to whom and when — the send itself
       -- reuses the same per-channel senders as automation triggers.
+      -- Every Razorpay order this platform creates for a plan purchase —
+      -- kept even for orders that are never paid (status stays 'created')
+      -- so there's a full audit trail independent of the subscriptions
+      -- table, which only reflects the current state.
+      CREATE TABLE IF NOT EXISTS payments (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        plan_id INTEGER REFERENCES plans(id) ON DELETE SET NULL,
+        billing_cycle VARCHAR(20),
+        amount DECIMAL(12,2) NOT NULL,
+        razorpay_order_id VARCHAR(64) NOT NULL UNIQUE,
+        razorpay_payment_id VARCHAR(64),
+        status VARCHAR(20) DEFAULT 'created',
+        created_at TIMESTAMP DEFAULT NOW(),
+        paid_at TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS broadcast_campaigns (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,

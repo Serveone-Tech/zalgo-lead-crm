@@ -97,6 +97,71 @@ export default function PlansPage() {
     }
   };
 
+  // Loads Razorpay's Checkout script once, lazily — only owners who might
+  // actually pay ever hit this page, so there's no reason to load it site-wide.
+  const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+
+  // Real payment, via Razorpay Checkout — used once an owner already has
+  // some subscription (even just a trial) and wants to actually pay to
+  // activate/renew, as opposed to the zero-friction free trial `subscribe`
+  // above that brand-new signups get.
+  const payNow = async (plan) => {
+    setSubscribing(plan.id);
+    try {
+      const ok = await loadRazorpayScript();
+      if (!ok) {
+        showToast("Could not load payment gateway. Check your connection.", "error");
+        setSubscribing(null);
+        return;
+      }
+      const { data: order } = await axios.post(
+        `${BASE}/payments/create-order`,
+        { plan_id: plan.id, billing_cycle: billing },
+        { headers: authHeaders() },
+      );
+
+      const rzp = new window.Razorpay({
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.order_id,
+        name: "Zalgo CRM",
+        description: `${order.plan_name} Plan — ${order.billing_cycle}`,
+        theme: { color: "#00868a" },
+        handler: async (response) => {
+          try {
+            await axios.post(`${BASE}/payments/verify`, response, { headers: authHeaders() });
+            showToast(`Payment successful! ${order.plan_name} plan activated.`);
+            setTimeout(() => router.push("/dashboard"), 1200);
+          } catch (err) {
+            showToast(err.response?.data?.error || "Payment succeeded but activation failed — contact support.", "error");
+          } finally {
+            setSubscribing(null);
+          }
+        },
+        modal: {
+          ondismiss: () => setSubscribing(null),
+        },
+      });
+      rzp.on("payment.failed", () => {
+        showToast("Payment failed. Please try again.", "error");
+        setSubscribing(null);
+      });
+      rzp.open();
+    } catch (err) {
+      showToast(err.response?.data?.error || "Could not start payment", "error");
+      setSubscribing(null);
+    }
+  };
+
   if (loading)
     return (
       <div
@@ -420,6 +485,11 @@ export default function PlansPage() {
               billing === "yearly" && !plan.is_free
                 ? plan.price_yearly
                 : plan.price_monthly;
+            // Brand-new signups (no subscription yet) get the zero-friction
+            // free trial via `subscribe`; anyone who already has some
+            // subscription (even just a trial) pays for real via Razorpay
+            // to activate/renew/switch plans.
+            const isPaidAction = !!current && !plan.is_free;
             const accentColor = planColors[i % planColors.length];
             const features = Array.isArray(plan.features)
               ? plan.features
@@ -590,7 +660,7 @@ export default function PlansPage() {
 
                 <div style={{ padding: "0 22px 22px" }}>
                   <button
-                    onClick={() => subscribe(plan)}
+                    onClick={() => (isPaidAction ? payNow(plan) : subscribe(plan))}
                     disabled={subscribing === plan.id || isCurrentPlan}
                     style={{
                       width: "100%",
@@ -615,9 +685,11 @@ export default function PlansPage() {
                       ? "Processing..."
                       : isCurrentPlan
                         ? "Current Plan"
-                        : plan.is_free
-                          ? `Start ${plan.trial_days}-Day Free Trial`
-                          : "Subscribe Now"}
+                        : isPaidAction
+                          ? `Pay ₹${Math.round(price).toLocaleString("en-IN")} — Activate`
+                          : plan.is_free
+                            ? `Start ${plan.trial_days}-Day Free Trial`
+                            : "Subscribe Now"}
                   </button>
                 </div>
               </div>
