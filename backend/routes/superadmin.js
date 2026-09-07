@@ -359,4 +359,32 @@ router.delete('/users/:id', superadminAuth, async (req, res) => {
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
+// ── GET platform-wide pricing config (currently just the employee
+// seat add-on price) — a tiny key/value store so this changes without a
+// code deploy.
+router.get('/config', superadminAuth, async (req, res) => {
+  try {
+    const result = await pool.query('SELECT key, value FROM platform_config');
+    const config = {};
+    result.rows.forEach((r) => { config[r.key] = r.value; });
+    res.json(config);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUT update one platform config value
+router.put('/config/:key', superadminAuth, async (req, res) => {
+  const { value } = req.body;
+  if (value === undefined || value === null || value === '') {
+    return res.status(400).json({ error: 'value required' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO platform_config (key, value) VALUES ($1,$2)
+       ON CONFLICT (key) DO UPDATE SET value=$2`,
+      [req.params.key, String(value)],
+    );
+    res.json({ success: true, key: req.params.key, value: String(value) });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
 module.exports = router;

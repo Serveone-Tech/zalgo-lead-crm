@@ -15,12 +15,15 @@ export default function SuperAdminPlansPage() {
   const [form, setForm]       = useState(EMPTY);
   const [saving, setSaving]   = useState(false);
   const [toast, setToast]     = useState(null);
+  const [addonPrice, setAddonPrice] = useState("");
+  const [savingAddonPrice, setSavingAddonPrice] = useState(false);
 
   useEffect(() => {
     const user = localStorage.getItem("crm_user");
     if (!user) { router.push("/login"); return; }
     if (JSON.parse(user).role !== "superadmin") { router.push("/dashboard"); return; }
     load();
+    api.get("/superadmin/config").then(({data}) => setAddonPrice(data.employee_addon_price || "499")).catch(() => {});
   }, []);
 
   const showToast = (msg,type="success")=>{ setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
@@ -29,6 +32,15 @@ export default function SuperAdminPlansPage() {
     setLoading(true);
     try { const {data}=await api.get("/superadmin/plans"); setPlans(data); }
     catch {} finally { setLoading(false); }
+  };
+
+  const saveAddonPrice = async () => {
+    setSavingAddonPrice(true);
+    try {
+      await api.put("/superadmin/config/employee_addon_price", { value: addonPrice });
+      showToast("Add-on price updated!");
+    } catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
+    setSavingAddonPrice(false);
   };
 
   const openAdd = () => { setEditPlan(null); setForm(EMPTY); setShowForm(true); };
@@ -99,6 +111,29 @@ export default function SuperAdminPlansPage() {
           <button onClick={openAdd} style={{ background:"var(--teal)", color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontFamily:"var(--font-main)", fontWeight:600, fontSize:13, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
             <span style={{ fontSize:16 }}>+</span> New Plan
           </button>
+        </div>
+
+        <div style={{ background:"var(--bg-card)", border:"1px solid var(--border)", borderRadius:12, padding:"18px 20px", marginBottom:24, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:14 }}>
+          <div>
+            <div style={{ fontFamily:"var(--font-main)", fontWeight:700, fontSize:14, color:"var(--text-primary)", marginBottom:3 }}>Employee Seat Add-on Price</div>
+            <div style={{ fontSize:12, color:"var(--text-muted)" }}>What tenants pay per 5-seat bundle in Settings → Team &amp; Billing.</div>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:13, color:"var(--text-muted)" }}>₹</span>
+            <input
+              type="number" min="0" value={addonPrice}
+              onChange={e=>setAddonPrice(e.target.value)}
+              style={{ ...inp, width:100 }}
+            />
+            <span style={{ fontSize:12, color:"var(--text-muted)" }}>/ 5 seats</span>
+            <button
+              onClick={saveAddonPrice}
+              disabled={savingAddonPrice}
+              style={{ padding:"9px 16px", borderRadius:8, background:savingAddonPrice?"var(--bg-hover)":"var(--teal)", border:"none", color:"#fff", fontFamily:"var(--font-main)", fontWeight:600, fontSize:12, cursor:"pointer" }}
+            >
+              {savingAddonPrice?"Saving...":"Save"}
+            </button>
+          </div>
         </div>
 
         {loading ? <div style={{ padding:48, textAlign:"center", color:"var(--text-muted)" }}>Loading...</div> : (
