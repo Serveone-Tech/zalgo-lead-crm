@@ -7,10 +7,22 @@ const mailer = require("../utils/mailer");
 
 const router = express.Router();
 
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+// Built lazily, not at module load — the Razorpay SDK throws immediately if
+// key_id is missing, and this file is require()'d unconditionally from
+// server.js, so constructing it eagerly here would crash the *entire*
+// backend (every route, every tenant) on any deploy where the env vars
+// haven't been set yet, not just fail the payment routes.
+let razorpay = null;
+function getRazorpay() {
+  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) return null;
+  if (!razorpay) {
+    razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+  }
+  return razorpay;
+}
 
 // Only the account owner manages billing — same rule as /auth/subscribe.
 function requireOwner(req, res, next) {
@@ -26,6 +38,8 @@ function requireOwner(req, res, next) {
 // it. The plan/amount are looked up server-side from the DB, never trusted
 // from the client, so nothing about the price can be tampered with.
 router.post("/create-order", auth, requireOwner, async (req, res) => {
+  const razorpay = getRazorpay();
+  if (!razorpay) return res.status(503).json({ error: "Online payment isn't set up yet — contact support." });
   const { plan_id, billing_cycle } = req.body;
   if (!plan_id) return res.status(400).json({ error: "plan_id required" });
   try {
