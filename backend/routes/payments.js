@@ -137,4 +137,105 @@ router.post("/verify", auth, requireOwner, async (req, res) => {
   }
 });
 
+// ── GET the current per-bundle add-on price (5 seats) — Super Admin can
+// change this in platform_config without a code deploy.
+router.get("/addon/price", auth, requireOwner, async (req, res) => {
+  try {
+    const row = await pool.query("SELECT value FROM platform_config WHERE key='employee_addon_price'");
+    res.json({ price: parseFloat(row.rows[0]?.value) || 499, seats_per_bundle: 5 });
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── POST create an order for extra employee seats (5 per bundle) ──────
+router.post("/addon/create-order", auth, requireOwner, async (req, res) => {
+  const razorpay = getRazorpay();
+  if (!razorpay) return res.status(503).json({ error: "Online payment isn't set up yet — contact support." });
+  const bundles = parseInt(req.body.bundles);
+  if (!bundles || bundles < 1) return res.status(400).json({ error: "bundles must be at least 1" });
+  try {
+    const priceRow = await pool.query("SELECT value FROM platform_config WHERE key='employee_addon_price'");
+    const pricePerBundle = parseFloat(priceRow.rows[0]?.value) || 499;
+    const amount = pricePerBundle * bundles;
+    const seats = bundles * 5;
+
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100),
+      currency: "INR",
+      receipt: `addon_${req.userId}_${Date.now()}`,
+      notes: { user_id: String(req.userId), bundles: String(bundles), seats: String(seats) },
+    });
+
+    await pool.query(
+      `INSERT INTO employee_addon_purchases (user_id, bundles, seats_added, amount, razorpay_order_id, status)
+       VALUES ($1,$2,$3,$4,$5,'created')`,
+      [req.userId, bundles, seats, amount, order.id],
+    );
+
+    res.json({
+      order_id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      key_id: process.env.RAZORPAY_KEY_ID,
+      seats,
+    });
+  } catch (e) {
+    console.error("Razorpay addon create-order failed:", e.message);
+    res.status(500).json({ error: "Could not start payment. Please try again." });
+  }
+});
+
+// ── POST verify an add-on payment and add the seats ────────────────────
+router.post("/addon/verify", auth, requireOwner, async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    return res.status(400).json({ error: "Missing payment details" });
+  }
+  try {
+    const purchaseRes = await pool.query(
+      "SELECT * FROM employee_addon_purchases WHERE razorpay_order_id=$1 AND user_id=$2",
+      [razorpay_order_id, req.userId],
+    );
+    const purchase = purchaseRes.rows[0];
+    if (!purchase) return res.status(404).json({ error: "Order not found" });
+    if (purchase.status === "paid") return res.json({ success: true, alreadyProcessed: true });
+
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+    if (expectedSignature !== razorpay_signature) {
+      await pool.query("UPDATE employee_addon_purchases SET status='failed' WHERE id=$1", [purchase.id]);
+      return res.status(400).json({ error: "Payment verification failed" });
+    }
+
+    await pool.query(
+      "UPDATE employee_addon_purchases SET status='paid', razorpay_payment_id=$1, paid_at=NOW() WHERE id=$2",
+      [razorpay_payment_id, purchase.id],
+    );
+
+    // Base seat count is the plan's own default the first time this runs;
+    // after that, every paid bundle stacks on top of whatever the tenant's
+    // effective limit already was (including any Super Admin-granted seats).
+    const subRes = await pool.query(
+      `SELECT s.id, s.employee_limit_override, p.max_employees
+       FROM subscriptions s JOIN plans p ON p.id=s.plan_id
+       WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 1`,
+      [req.userId],
+    );
+    const sub = subRes.rows[0];
+    if (!sub) return res.status(400).json({ error: "No active subscription to add seats to" });
+
+    const currentLimit = sub.employee_limit_override ?? sub.max_employees ?? 0;
+    const newLimit = currentLimit === -1 ? -1 : currentLimit + purchase.seats_added;
+    await pool.query("UPDATE subscriptions SET employee_limit_override=$1 WHERE id=$2", [newLimit, sub.id]);
+
+    res.json({ success: true, seats_added: purchase.seats_added, new_limit: newLimit });
+  } catch (e) {
+    console.error("Razorpay addon verify failed:", e.message);
+    res.status(500).json({ error: "Could not verify payment" });
+  }
+});
+
 module.exports = router;

@@ -506,6 +506,30 @@ const initDB = async () => {
         paid_at TIMESTAMP
       );
 
+      -- A tenant's self-purchased extra employee seats (5 per bundle) — each
+      -- paid bundle bumps their subscription's employee_limit_override, on
+      -- top of whatever a Super Admin has separately granted them by hand.
+      CREATE TABLE IF NOT EXISTS employee_addon_purchases (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        bundles INTEGER NOT NULL,
+        seats_added INTEGER NOT NULL,
+        amount DECIMAL(12,2) NOT NULL,
+        razorpay_order_id VARCHAR(64) NOT NULL UNIQUE,
+        razorpay_payment_id VARCHAR(64),
+        status VARCHAR(20) DEFAULT 'created',
+        created_at TIMESTAMP DEFAULT NOW(),
+        paid_at TIMESTAMP
+      );
+
+      -- Small key/value store for platform-wide pricing knobs that aren't
+      -- tied to a specific plan (e.g. the per-bundle price of extra
+      -- employee seats) — editable by Super Admin without a code deploy.
+      CREATE TABLE IF NOT EXISTS platform_config (
+        key VARCHAR(50) PRIMARY KEY,
+        value TEXT
+      );
+
       CREATE TABLE IF NOT EXISTS broadcast_campaigns (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -602,6 +626,10 @@ const initDB = async () => {
       `);
       console.log("✅ Default plans seeded");
     }
+
+    await client
+      .query(`INSERT INTO platform_config (key, value) VALUES ('employee_addon_price', '499') ON CONFLICT (key) DO NOTHING`)
+      .catch((e) => console.log("config seed skip:", e.message));
 
     // ── STEP 5: Migrate plan features to machine-readable keys ──
     // Only updates plans that still have old human-readable feature strings

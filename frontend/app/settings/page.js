@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../lib/api';
-import { hasPerm } from '../../lib/permissions';
+import { hasPerm, isOwnerUser } from '../../lib/permissions';
+import { loadRazorpayScript } from '../../lib/razorpay';
 import { Pencil, Trash2, Plus, GripVertical, Check, X } from 'lucide-react';
 
 const COLOR_PALETTE = [
@@ -15,6 +16,7 @@ const TABS = [
   { key: 'general',  label: 'General' },
   { key: 'pipeline', label: 'Pipeline' },
   { key: 'currency', label: 'Currency' },
+  { key: 'billing',  label: 'Team & Billing' },
   { key: 'security', label: 'Security' },
 ];
 
@@ -52,6 +54,15 @@ export default function SettingsPage() {
   const [pwError, setPwError]   = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
 
+  // Team & Billing — seat usage + self-serve add-on purchase
+  const [sub, setSub]                 = useState(null);
+  const [employeeCount, setEmployeeCount] = useState(0);
+  const [addonPrice, setAddonPrice]   = useState(499);
+  const [bundles, setBundles]         = useState(1);
+  const [buyingAddon, setBuyingAddon] = useState(false);
+  const [billingLoaded, setBillingLoaded] = useState(false);
+  const [addonMsg, setAddonMsg]       = useState('');
+
   useEffect(() => {
     if (!localStorage.getItem('crm_token')) { router.push('/login'); return; }
     const u = localStorage.getItem('crm_user');
@@ -62,6 +73,61 @@ export default function SettingsPage() {
     loadStages();
     loadOrderStages();
   }, []);
+
+  // Lazily loaded — only once the Team & Billing tab is opened, and only
+  // matters for the owner (the one who actually manages the subscription).
+  useEffect(() => {
+    if (activeTab !== 'billing' || billingLoaded || !user) return;
+    if (!isOwnerUser(user)) { setBillingLoaded(true); return; }
+    setBillingLoaded(true);
+    Promise.all([
+      api.get('/auth/subscription').catch(() => ({ data: null })),
+      api.get('/employees').catch(() => ({ data: [] })),
+      api.get('/payments/addon/price').catch(() => ({ data: { price: 499 } })),
+    ]).then(([subRes, empRes, priceRes]) => {
+      setSub(subRes.data);
+      setEmployeeCount(empRes.data.length);
+      setAddonPrice(priceRes.data.price || 499);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, user]);
+
+  const buyAddon = async () => {
+    setBuyingAddon(true);
+    try {
+      const ok = await loadRazorpayScript();
+      if (!ok) throw new Error('Could not load payment gateway');
+      const { data: order } = await api.post('/payments/addon/create-order', { bundles });
+
+      const rzp = new window.Razorpay({
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency,
+        order_id: order.order_id,
+        name: 'Zalgo CRM',
+        description: `+${order.seats} employee seats`,
+        theme: { color: '#00868a' },
+        handler: async (response) => {
+          try {
+            const { data } = await api.post('/payments/addon/verify', response);
+            setSub((s) => ({ ...s, employee_limit_override: data.new_limit }));
+            setAddonMsg(`✓ ${data.seats_added} seats added — you now have ${data.new_limit} total.`);
+            setTimeout(() => setAddonMsg(''), 6000);
+          } catch {
+            alert('Payment succeeded but activation failed — contact support.');
+          } finally {
+            setBuyingAddon(false);
+          }
+        },
+        modal: { ondismiss: () => setBuyingAddon(false) },
+      });
+      rzp.on('payment.failed', () => setBuyingAddon(false));
+      rzp.open();
+    } catch (err) {
+      alert(err?.response?.data?.error || err.message || 'Could not start payment');
+      setBuyingAddon(false);
+    }
+  };
 
   const loadAll = async () => {
     setLoading(true);
@@ -776,6 +842,102 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
             <SaveBtn saving={saving} saved={saved} onClick={save} />
           </div>
+        </div>
+      )}
+
+      {/* ── TAB: Team & Billing ──────────────────────────────────── */}
+      {activeTab === 'billing' && (
+        <div>
+          {!isOwnerUser(user) ? (
+            <Card title="Team & Billing">
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Only the account owner can manage team seats and billing. Ask your admin if you need more seats.
+              </p>
+            </Card>
+          ) : !sub ? (
+            <Card title="Team & Billing">
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading...</p>
+            </Card>
+          ) : (
+            <Card title="Team Seats">
+              {(() => {
+                const base = sub.max_employees;
+                const limit = sub.employee_limit_override ?? base;
+                const unlimited = limit === -1;
+                const atLimit = !unlimited && employeeCount >= limit;
+                return (
+                  <>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                      Your <strong>{sub.plan_name}</strong> plan includes {base === -1 ? 'unlimited' : base} employee seats.
+                      {sub.employee_limit_override != null && sub.employee_limit_override !== base && (
+                        <> Super Admin has adjusted your limit to {unlimited ? 'unlimited' : limit}.</>
+                      )}
+                    </p>
+
+                    <div style={{
+                      marginBottom: 20, padding: '12px 16px',
+                      background: atLimit ? 'rgba(224,160,80,0.1)' : 'rgba(0,134,138,0.08)',
+                      border: `1px solid ${atLimit ? 'rgba(224,160,80,0.3)' : 'rgba(0,134,138,0.25)'}`,
+                      borderRadius: 10,
+                    }}>
+                      <div style={{ fontFamily: 'var(--font-main)', fontWeight: 700, fontSize: 18, color: atLimit ? 'var(--warn)' : 'var(--teal-light)' }}>
+                        {employeeCount} / {unlimited ? '∞' : limit} seats used
+                      </div>
+                      {atLimit && (
+                        <div style={{ fontSize: 12, color: 'var(--warn)', marginTop: 4 }}>
+                          You're at your limit — buy more seats below to add employees.
+                        </div>
+                      )}
+                    </div>
+
+                    {!unlimited && (
+                      <>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10, fontFamily: 'var(--font-main)' }}>
+                          Buy More Seats
+                        </div>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+                          Each bundle adds 5 employee seats to your plan for ₹{addonPrice}/bundle. Seats stay on your
+                          account until you or a Super Admin change them.
+                        </p>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+                          <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Bundles:</label>
+                          <input
+                            type="number" min="1" value={bundles}
+                            onChange={e => setBundles(Math.max(1, parseInt(e.target.value) || 1))}
+                            style={{ ...inp, width: 70 }}
+                          />
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                            = +{bundles * 5} seats for ₹{(bundles * addonPrice).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <button
+                          onClick={buyAddon}
+                          disabled={buyingAddon}
+                          style={{
+                            padding: '10px 22px', borderRadius: 8, border: 'none',
+                            background: buyingAddon ? 'var(--bg-hover)' : 'var(--teal)',
+                            color: '#fff', fontFamily: 'var(--font-main)', fontWeight: 600, fontSize: 13,
+                            cursor: buyingAddon ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {buyingAddon ? 'Processing...' : `Pay ₹${(bundles * addonPrice).toLocaleString('en-IN')} — Add ${bundles * 5} Seats`}
+                        </button>
+                        {addonMsg && (
+                          <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--success)', fontWeight: 600 }}>{addonMsg}</div>
+                        )}
+                      </>
+                    )}
+
+                    <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', fontSize: 11.5, color: 'var(--text-muted)' }}>
+                      Prefer not to pay online? Contact Super Admin (
+                      <a href="mailto:zalgoinfotec@gmail.com" style={{ color: 'var(--teal)' }}>zalgoinfotec@gmail.com</a>
+                      ) to have extra seats added to your account directly.
+                    </div>
+                  </>
+                );
+              })()}
+            </Card>
+          )}
         </div>
       )}
 

@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { FEATURE_LABELS } from "../../lib/plan-features";
+import { loadRazorpayScript } from "../../lib/razorpay";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -96,18 +97,6 @@ export default function PlansPage() {
       setSubscribing(null);
     }
   };
-
-  // Loads Razorpay's Checkout script once, lazily — only owners who might
-  // actually pay ever hit this page, so there's no reason to load it site-wide.
-  const loadRazorpayScript = () =>
-    new Promise((resolve) => {
-      if (window.Razorpay) return resolve(true);
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
 
   // Real payment, via Razorpay Checkout — used once an owner already has
   // some subscription (even just a trial) and wants to actually pay to
