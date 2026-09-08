@@ -4,6 +4,13 @@ const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { sendWhatsAppViaMeta } = require("../utils/whatsapp-meta");
 const { replaceVars, sendEmail, sendSMS, sendWhatsApp } = require("../utils/automation-trigger");
+const {
+  slugifyTemplateName,
+  createTemplate,
+  fetchTemplateStatus,
+  deleteTemplate,
+  sendTemplateMessage,
+} = require("../utils/whatsapp-templates");
 
 const router = express.Router();
 
@@ -110,15 +117,17 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
         sms_from: fields.sms_from || cur.sms_from || "",
       };
     } else if (channel === "whatsapp") {
-      // wa_account_sid/wa_auth_token now hold Meta's Phone Number ID /
-      // Access Token (repurposed from the old Twilio-shaped columns —
-      // Meta needs no separate "from" number, so wa_from is unused).
+      // wa_account_sid/wa_auth_token hold Meta's Phone Number ID / Access
+      // Token (repurposed from the old Twilio-shaped columns). wa_from —
+      // Twilio's unused "from number" — now holds the WhatsApp Business
+      // Account (WABA) id, needed only for creating/managing templates.
       cols = {
         whatsapp_enabled: !!fields.whatsapp_enabled,
         wa_account_sid: fields.wa_account_sid || cur.wa_account_sid || "",
         wa_auth_token: fields.wa_auth_token?.includes("****")
           ? cur.wa_auth_token || ""
           : fields.wa_auth_token || "",
+        wa_from: fields.wa_from || cur.wa_from || "",
       };
     } else return res.status(400).json({ error: "Invalid channel" });
 
@@ -129,6 +138,121 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
        ON CONFLICT (user_id) DO UPDATE SET ${keys.map((k, i) => `${k}=$${i + 2}`).join(",")}, updated_at=NOW()`,
       [req.tenantId, ...Object.values(cols)],
     );
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── GET a rough per-message WhatsApp marketing cost estimate — shown
+// before a broadcast so the admin knows roughly what Meta will bill, not
+// an exact quote (Meta's real rate varies and can change).
+router.get("/whatsapp-rate", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const row = await pool.query("SELECT value FROM platform_config WHERE key='whatsapp_marketing_rate'");
+    res.json({ rate: parseFloat(row.rows[0]?.value) || 0.85 });
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── GET this tenant's WhatsApp templates
+router.get("/whatsapp-templates", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM whatsapp_templates WHERE user_id=$1 ORDER BY created_at DESC",
+      [req.tenantId],
+    );
+    res.json(result.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── POST create a template — submits it to Meta for review. Never sends
+// anything by itself; a template only becomes usable once Meta approves it
+// (checked via the /refresh route below).
+router.post("/whatsapp-templates", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  const { name, language, category, header_text, body_text, footer_text } = req.body;
+  if (!name?.trim() || !body_text?.trim()) {
+    return res.status(400).json({ error: "Name and body text are required" });
+  }
+  const cat = ["MARKETING", "UTILITY", "AUTHENTICATION"].includes(category) ? category : "MARKETING";
+  const lang = language || "en_US";
+  const slug = slugifyTemplateName(name);
+  if (!slug) return res.status(400).json({ error: "Template name must contain letters or numbers" });
+
+  // {{1}} is reserved for the recipient's name — see whatsapp-templates.js.
+  const variableCount = new Set((body_text.match(/\{\{(\d+)\}\}/g) || []).map((m) => m)).size;
+
+  try {
+    const credRes = await pool.query("SELECT wa_from, wa_auth_token FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
+    const creds = credRes.rows[0];
+    if (!creds?.wa_from || !creds?.wa_auth_token) {
+      return res.status(400).json({ error: "Add your WhatsApp Business Account ID under Channel Setup first" });
+    }
+
+    const metaResult = await createTemplate(creds.wa_from, creds.wa_auth_token, {
+      name: slug,
+      language: lang,
+      category: cat,
+      header_text,
+      body_text,
+      footer_text,
+    });
+
+    const result = await pool.query(
+      `INSERT INTO whatsapp_templates (user_id, name, language, category, header_text, body_text, footer_text, variable_count, meta_template_id, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [req.tenantId, slug, lang, cat, header_text || "", body_text, footer_text || "", variableCount, metaResult.id, (metaResult.status || "PENDING").toLowerCase()],
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    console.error("Template create failed:", e.message);
+    res.status(400).json({ error: e.message || "Could not create template" });
+  }
+});
+
+// ── POST refresh a template's approval status from Meta
+router.post("/whatsapp-templates/:id/refresh", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const tplRes = await pool.query("SELECT * FROM whatsapp_templates WHERE id=$1 AND user_id=$2", [req.params.id, req.tenantId]);
+    const tpl = tplRes.rows[0];
+    if (!tpl) return res.status(404).json({ error: "Template not found" });
+
+    const credRes = await pool.query("SELECT wa_from, wa_auth_token FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
+    const creds = credRes.rows[0];
+    if (!creds?.wa_from || !creds?.wa_auth_token) return res.status(400).json({ error: "WhatsApp credentials not configured" });
+
+    const meta = await fetchTemplateStatus(creds.wa_from, creds.wa_auth_token, tpl.name);
+    if (!meta) return res.status(404).json({ error: "Template not found on Meta anymore" });
+
+    const result = await pool.query(
+      `UPDATE whatsapp_templates SET status=$1, rejection_reason=$2, updated_at=NOW() WHERE id=$3 RETURNING *`,
+      [(meta.status || "PENDING").toLowerCase(), meta.rejected_reason || "", tpl.id],
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    console.error("Template refresh failed:", e.message);
+    res.status(400).json({ error: e.message || "Could not check template status" });
+  }
+});
+
+// ── DELETE a template (both locally and on Meta)
+router.delete("/whatsapp-templates/:id", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const tplRes = await pool.query("SELECT * FROM whatsapp_templates WHERE id=$1 AND user_id=$2", [req.params.id, req.tenantId]);
+    const tpl = tplRes.rows[0];
+    if (!tpl) return res.status(404).json({ error: "Template not found" });
+
+    const credRes = await pool.query("SELECT wa_from, wa_auth_token FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
+    const creds = credRes.rows[0];
+    if (creds?.wa_from && creds?.wa_auth_token) {
+      await deleteTemplate(creds.wa_from, creds.wa_auth_token, tpl.name).catch((e) => console.error("Meta delete failed:", e.message));
+    }
+    await pool.query("DELETE FROM whatsapp_templates WHERE id=$1", [tpl.id]);
     res.json({ success: true });
   } catch (e) {
     console.error(e);
@@ -334,22 +458,32 @@ router.post("/send", auth, requireSubscription, requirePlanFeature("automation")
   }
 });
 
-// Resolves an audience name into the actual customer rows a broadcast will
-// go to. "new" and "inactive" both take a day window; "all" ignores it;
-// "selected" takes an explicit list of customer ids (hand-picked from the
-// Customers list's own checkboxes) instead of a segment rule.
-async function resolveAudience(tenantId, audience, days, customerIds) {
+// Resolves an audience name into the actual recipient rows a broadcast
+// will go to, from either the customers or leads table. "new" and
+// "inactive" both take a day window and only apply to customers (leads
+// have no order history to be "inactive" against); "all" ignores it;
+// "selected" takes an explicit list of ids (hand-picked from that list's
+// own checkboxes) instead of a segment rule.
+async function resolveAudience(tenantId, audience, days, ids, target) {
+  const table = target === "leads" ? "leads" : "customers";
+
   if (audience === "selected") {
-    const ids = (Array.isArray(customerIds) ? customerIds : [])
+    const cleanIds = (Array.isArray(ids) ? ids : [])
       .map((id) => parseInt(id))
       .filter((id) => Number.isInteger(id));
-    if (ids.length === 0) return [];
+    if (cleanIds.length === 0) return [];
     const { rows } = await pool.query(
-      "SELECT id, name, phone, email FROM customers WHERE user_id=$1 AND id = ANY($2::int[])",
-      [tenantId, ids],
+      `SELECT id, name, phone, email FROM ${table} WHERE user_id=$1 AND id = ANY($2::int[])`,
+      [tenantId, cleanIds],
     );
     return rows;
   }
+
+  if (target === "leads") {
+    const { rows } = await pool.query("SELECT id, name, phone, email FROM leads WHERE user_id=$1", [tenantId]);
+    return rows;
+  }
+
   const d = Math.max(1, parseInt(days) || 30);
   if (audience === "new") {
     const { rows } = await pool.query(
@@ -379,8 +513,8 @@ async function resolveAudience(tenantId, audience, days, customerIds) {
 // lets the admin see the reach before actually sending anything.
 router.get("/broadcast/audience-count", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
   try {
-    const customerIds = req.query.customer_ids ? String(req.query.customer_ids).split(",") : undefined;
-    const rows = await resolveAudience(req.tenantId, req.query.audience, req.query.days, customerIds);
+    const ids = req.query.customer_ids ? String(req.query.customer_ids).split(",") : undefined;
+    const rows = await resolveAudience(req.tenantId, req.query.audience, req.query.days, ids, req.query.target);
     res.json({ count: rows.length });
   } catch (e) {
     console.error(e);
@@ -407,21 +541,36 @@ router.get("/broadcast/history", auth, requireSubscription, requirePlanFeature("
 // per-channel senders automation triggers use, just looped over an
 // audience instead of firing off one event.
 router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
-  const { audience, days, channels, message, customer_ids } = req.body;
-  if (!message?.trim()) return res.status(400).json({ error: "Message required" });
+  const { audience, days, channels, message, customer_ids, target, template_id, template_params } = req.body;
+  const usingTemplate = !!template_id;
+  if (!usingTemplate && !message?.trim()) return res.status(400).json({ error: "Message required" });
   if (!Array.isArray(channels) || channels.length === 0) {
     return res.status(400).json({ error: "Select at least one channel" });
   }
   try {
-    const recipients = await resolveAudience(req.tenantId, audience, days, customer_ids);
+    const recipients = await resolveAudience(req.tenantId, audience, days, customer_ids, target);
     if (recipients.length === 0) {
-      return res.status(400).json({ error: audience === "selected" ? "No customers selected" : "No customers match this audience" });
+      return res.status(400).json({ error: audience === "selected" ? "No recipients selected" : "No recipients match this audience" });
     }
 
     const credRes = await pool.query("SELECT * FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
     const creds = credRes.rows[0];
     if (!creds) {
       return res.status(400).json({ error: "No channel credentials configured yet — set them up under Channel Setup first" });
+    }
+
+    // A template is the only way to reach WhatsApp recipients outside the
+    // free 24h customer-service window — resolved once up front, then
+    // {{1}} gets each recipient's name while any further {{2}}, {{3}}...
+    // use the same fixed values for everyone in this broadcast.
+    let template = null;
+    if (usingTemplate) {
+      const tplRes = await pool.query(
+        "SELECT * FROM whatsapp_templates WHERE id=$1 AND user_id=$2 AND status='approved'",
+        [template_id, req.tenantId],
+      );
+      template = tplRes.rows[0];
+      if (!template) return res.status(400).json({ error: "Template not found or not yet approved" });
     }
 
     const settRes = await pool.query("SELECT institute_name FROM user_settings WHERE user_id=$1", [req.tenantId]);
@@ -431,15 +580,27 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
     let sent = 0, failed = 0;
     const jobs = [];
     for (const r of recipients) {
-      const personalized = replaceVars(message, { name: r.name, phone: r.phone, email: r.email, institute_name: businessName });
-      if (channels.includes("email") && r.email) {
-        jobs.push(sendEmail(creds, r.email, personalized, subject).then(() => sent++).catch(() => failed++));
-      }
-      if (channels.includes("sms") && r.phone) {
-        jobs.push(sendSMS(creds, r.phone, personalized).then(() => sent++).catch(() => failed++));
-      }
       if (channels.includes("whatsapp") && r.phone) {
-        jobs.push(sendWhatsApp(creds, r.phone, personalized).then(() => sent++).catch(() => failed++));
+        if (template) {
+          const bodyParams = [r.name || "", ...(Array.isArray(template_params) ? template_params : [])];
+          jobs.push(
+            sendTemplateMessage(creds, r.phone, { name: template.name, language: template.language, bodyParams })
+              .then(() => sent++)
+              .catch(() => failed++),
+          );
+        } else {
+          const personalized = replaceVars(message, { name: r.name, phone: r.phone, email: r.email, institute_name: businessName });
+          jobs.push(sendWhatsApp(creds, r.phone, personalized).then(() => sent++).catch(() => failed++));
+        }
+      }
+      if (!usingTemplate) {
+        const personalized = replaceVars(message, { name: r.name, phone: r.phone, email: r.email, institute_name: businessName });
+        if (channels.includes("email") && r.email) {
+          jobs.push(sendEmail(creds, r.email, personalized, subject).then(() => sent++).catch(() => failed++));
+        }
+        if (channels.includes("sms") && r.phone) {
+          jobs.push(sendSMS(creds, r.phone, personalized).then(() => sent++).catch(() => failed++));
+        }
       }
     }
     await Promise.allSettled(jobs);
@@ -447,7 +608,7 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
     const campaign = await pool.query(
       `INSERT INTO broadcast_campaigns (user_id, audience, audience_days, channels, message, recipient_count, sent_count, failed_count, created_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [req.tenantId, audience, days || null, channels, message, recipients.length, sent, failed, req.user.id],
+      [req.tenantId, audience, days || null, channels, usingTemplate ? `[template: ${template.name}]` : message, recipients.length, sent, failed, req.user.id],
     );
     res.json(campaign.rows[0]);
   } catch (e) {

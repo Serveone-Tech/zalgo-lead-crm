@@ -530,6 +530,28 @@ const initDB = async () => {
         value TEXT
       );
 
+      -- WhatsApp message templates a tenant has submitted to Meta for
+      -- approval. A template is required to message anyone outside the
+      -- free 24-hour customer-service window (which plain text can't do),
+      -- so this is what makes a real broadcast to a cold audience possible.
+      CREATE TABLE IF NOT EXISTS whatsapp_templates (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(100) NOT NULL,
+        language VARCHAR(10) DEFAULT 'en',
+        category VARCHAR(20) NOT NULL,
+        body_text TEXT NOT NULL,
+        header_text TEXT DEFAULT '',
+        footer_text TEXT DEFAULT '',
+        variable_count INTEGER DEFAULT 0,
+        meta_template_id VARCHAR(64),
+        status VARCHAR(20) DEFAULT 'pending',
+        rejection_reason TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW(),
+        UNIQUE(user_id, name, language)
+      );
+
       CREATE TABLE IF NOT EXISTS broadcast_campaigns (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -629,6 +651,11 @@ const initDB = async () => {
 
     await client
       .query(`INSERT INTO platform_config (key, value) VALUES ('employee_addon_price', '499') ON CONFLICT (key) DO NOTHING`)
+      .catch((e) => console.log("config seed skip:", e.message));
+    // Rough estimate only, shown to tenants before a broadcast — Meta's
+    // real per-message rate varies and Super Admin can adjust this here.
+    await client
+      .query(`INSERT INTO platform_config (key, value) VALUES ('whatsapp_marketing_rate', '0.85') ON CONFLICT (key) DO NOTHING`)
       .catch((e) => console.log("config seed skip:", e.message));
 
     // ── STEP 5: Migrate plan features to machine-readable keys ──

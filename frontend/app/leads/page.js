@@ -7,6 +7,7 @@ import KanbanBoard from "../../components/KanbanBoard";
 import BulkUploadModal from "../../components/BulkUploadModal";
 import OrderFulfillmentModal from "../../components/OrderFulfillmentModal";
 import WhatsAppChatModal from "../../components/WhatsAppChatModal";
+import SendToSelectedModal from "../../components/SendToSelectedModal";
 import { Upload, Plus, Calendar } from "lucide-react";
 import {
   STAGE_COLORS,
@@ -73,6 +74,7 @@ function LeadsContent() {
   const [fulfillmentStage, setFulfillmentStage] = useState("");
   const [fulfillLead, setFulfillLead] = useState(null);
   const [chatLead, setChatLead] = useState(null);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
   const [sub, setSub] = useState(null);
 
   // Bulk action state
@@ -735,6 +737,24 @@ function LeadsContent() {
             {bulkApplying ? "Applying…" : "Submit"}
           </button>
           <div style={{ width: 1, height: 20, background: "var(--border)" }} />
+          {hasPlanFeature("automation") && (
+            <button
+              onClick={() => setSendModalOpen(true)}
+              style={{
+                background: "transparent",
+                border: "1px solid var(--teal)",
+                borderRadius: 7,
+                padding: "8px 16px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--teal)",
+                cursor: "pointer",
+                fontFamily: "var(--font-main)",
+              }}
+            >
+              📣 Message Selected
+            </button>
+          )}
           <button
             onClick={bulkDelete}
             disabled={bulkDeleting}
@@ -1351,6 +1371,17 @@ function LeadsContent() {
       )}
       {chatLead && (
         <WhatsAppChatModal lead={chatLead} onClose={() => setChatLead(null)} />
+      )}
+      {sendModalOpen && (
+        <SendToSelectedModal
+          customerIds={Array.from(selected)}
+          target="leads"
+          onClose={() => setSendModalOpen(false)}
+          onSent={(campaign) => {
+            alert(`Sent! ${campaign.sent_count} delivered, ${campaign.failed_count} failed, out of ${campaign.recipient_count} recipients.`);
+            clearSelection();
+          }}
+        />
       )}
     </div>
   );

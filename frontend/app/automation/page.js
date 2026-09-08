@@ -206,6 +206,7 @@ export default function AutomationPage() {
     whatsapp_enabled: false,
     wa_account_sid: "",
     wa_auth_token: "",
+    wa_from: "",
   });
   const [triggers, setTriggers] = useState({});
   const [deliveryProviders, setDeliveryProviders] = useState([]);
@@ -226,11 +227,20 @@ export default function AutomationPage() {
   const [webhooks, setWebhooks] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [sub, setSub] = useState(null);
-  const [broadcast, setBroadcast] = useState({ audience: "all", days: 30, channels: [], message: "" });
+  const [broadcast, setBroadcast] = useState({ audience: "all", days: 30, channels: [], message: "", template_id: "", template_params: [] });
   const [audienceCount, setAudienceCount] = useState(null);
   const [countingAudience, setCountingAudience] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastHistory, setBroadcastHistory] = useState([]);
+  const [whatsappRate, setWhatsappRate] = useState(0.85);
+
+  // WhatsApp Templates
+  const [templates, setTemplates] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templateForm, setTemplateForm] = useState({ name: "", category: "MARKETING", language: "en_US", header_text: "", body_text: "", footer_text: "" });
+  const [templateSaving, setTemplateSaving] = useState(false);
+  const [templateError, setTemplateError] = useState("");
+  const [refreshingTemplate, setRefreshingTemplate] = useState(null);
 
   useEffect(() => {
     const raw = localStorage.getItem("crm_token");
@@ -260,6 +270,8 @@ export default function AutomationPage() {
     return planFeatures.includes(feat);
   };
 
+  const approvedTemplates = templates.filter((t) => t.status === "approved");
+
   // A Pro-tier owner (lead_sources but not automation) would otherwise land
   // on the now-hidden "Channel Setup" tab by default — bump them to
   // whichever tab their plan actually shows once we know what that is.
@@ -276,9 +288,64 @@ export default function AutomationPage() {
   useEffect(() => {
     if (tab !== "broadcast") return;
     api.get("/automation/broadcast/history").then((r) => setBroadcastHistory(r.data)).catch(() => {});
+    api.get("/automation/whatsapp-rate").then((r) => setWhatsappRate(r.data.rate)).catch(() => {});
+    if (templates.length === 0) loadTemplates();
     checkAudienceCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "templates") return;
+    loadTemplates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  const loadTemplates = async () => {
+    setTemplatesLoading(true);
+    try {
+      const { data } = await api.get("/automation/whatsapp-templates");
+      setTemplates(data);
+    } catch {}
+    setTemplatesLoading(false);
+  };
+
+  const createTemplateSubmit = async (e) => {
+    e.preventDefault();
+    setTemplateError("");
+    setTemplateSaving(true);
+    try {
+      await api.post("/automation/whatsapp-templates", templateForm);
+      setTemplateForm({ name: "", category: "MARKETING", language: "en_US", header_text: "", body_text: "", footer_text: "" });
+      showToast("Template submitted to Meta for review!");
+      loadTemplates();
+    } catch (err) {
+      setTemplateError(err?.response?.data?.error || "Could not create template");
+    } finally {
+      setTemplateSaving(false);
+    }
+  };
+
+  const refreshTemplate = async (id) => {
+    setRefreshingTemplate(id);
+    try {
+      await api.post(`/automation/whatsapp-templates/${id}/refresh`);
+      loadTemplates();
+    } catch (err) {
+      showToast(err?.response?.data?.error || "Could not check status", "error");
+    } finally {
+      setRefreshingTemplate(null);
+    }
+  };
+
+  const deleteTemplateHandler = async (id) => {
+    if (!confirm("Delete this template? This removes it from Meta too.")) return;
+    try {
+      await api.delete(`/automation/whatsapp-templates/${id}`);
+      loadTemplates();
+    } catch (err) {
+      showToast(err?.response?.data?.error || "Could not delete template", "error");
+    }
+  };
 
   const checkAudienceCount = async () => {
     setCountingAudience(true);
@@ -302,14 +369,19 @@ export default function AutomationPage() {
   };
 
   const sendBroadcast = async () => {
-    if (!broadcast.message.trim() || broadcast.channels.length === 0) return;
+    const usingTemplate = !!broadcast.template_id;
+    if ((!usingTemplate && !broadcast.message.trim()) || broadcast.channels.length === 0) return;
     const reach = audienceCount ?? "an unknown number of";
-    if (!confirm(`Send this to ${reach} customer(s)? This can't be undone.`)) return;
+    const costNote =
+      usingTemplate && broadcast.channels.includes("whatsapp") && audienceCount
+        ? ` (~₹${(audienceCount * whatsappRate).toFixed(2)} estimated WhatsApp cost)`
+        : "";
+    if (!confirm(`Send this to ${reach} customer(s)?${costNote} This can't be undone.`)) return;
     setBroadcasting(true);
     try {
       const { data } = await api.post("/automation/broadcast", broadcast);
       showToast(`Sent! ${data.sent_count} delivered, ${data.failed_count} failed, out of ${data.recipient_count} recipients.`);
-      setBroadcast((b) => ({ ...b, message: "" }));
+      setBroadcast((b) => ({ ...b, message: "", template_id: "", template_params: [] }));
       setBroadcastHistory((h) => [data, ...h]);
     } catch (err) {
       showToast(err?.response?.data?.error || "Broadcast failed", "error");
@@ -555,6 +627,7 @@ export default function AutomationPage() {
           ...(hasPlanFeature("automation") ? [{ k: "triggers", l: "🔔 Triggers" }] : []),
           ...(hasPlanFeature("automation") ? [{ k: "manual", l: "✉ Manual Send" }] : []),
           ...(hasPlanFeature("automation") ? [{ k: "broadcast", l: "📣 Broadcast" }] : []),
+          ...(hasPlanFeature("automation") ? [{ k: "templates", l: "📄 WhatsApp Templates" }] : []),
           ...(hasPlanFeature("lead_sources") ? [{ k: "sources", l: "🔗 Lead Sources" }] : []),
         ].map((t) => (
           <button
@@ -633,6 +706,7 @@ export default function AutomationPage() {
                   ph: "Your Meta access token",
                   type: "password",
                 },
+                { k: "wa_from", l: "WhatsApp Business Account ID", ph: "Needed only for message templates" },
               ],
             },
           ].map(({ key, title, icon, fields, helpText }) => {
@@ -1524,57 +1598,118 @@ export default function AutomationPage() {
               </div>
             </div>
 
-            {/* Message */}
-            <div style={{ marginBottom: 8 }}>
-              <label style={lbl}>Message</label>
-              <textarea
-                value={broadcast.message}
-                onChange={(e) => setBroadcast((b) => ({ ...b, message: e.target.value }))}
-                rows={5}
-                placeholder="Hi {name}, we're running a festival offer just for you..."
-                style={{ ...inp, resize: "vertical", marginTop: 6, minHeight: 110 }}
-              />
-            </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
-              {["{name}", "{phone}", "{email}", "{business_name}"].map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setBroadcast((b) => ({ ...b, message: b.message + v }))}
-                  style={{
-                    padding: "3px 10px",
-                    borderRadius: 20,
-                    background: "var(--bg-surface)",
-                    border: "1px solid var(--border)",
-                    color: "var(--text-muted)",
-                    fontSize: 11,
-                    cursor: "pointer",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
+            {/* WhatsApp template option — the only reliable way to reach
+                anyone who hasn't messaged in the last 24h */}
+            {broadcast.channels.includes("whatsapp") && (
+              <div style={{ marginBottom: 16, padding: "12px 14px", background: "var(--bg-surface)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                <label style={lbl}>WhatsApp Delivery</label>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6, marginBottom: 10, lineHeight: 1.5 }}>
+                  Plain text only reaches customers who messaged you in the last 24 hours — everyone else needs an
+                  approved template. {approvedTemplates.length === 0 && (
+                    <>No approved templates yet — create one under the <strong>WhatsApp Templates</strong> tab.</>
+                  )}
+                </div>
+                {approvedTemplates.length > 0 && (
+                  <select
+                    value={broadcast.template_id}
+                    onChange={(e) => setBroadcast((b) => ({ ...b, template_id: e.target.value, template_params: [] }))}
+                    style={inp}
+                  >
+                    <option value="">— Plain text (24h window only) —</option>
+                    {approvedTemplates.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                )}
+                {broadcast.template_id && (() => {
+                  const tpl = approvedTemplates.find((t) => String(t.id) === String(broadcast.template_id));
+                  const extraVars = Math.max(0, (tpl?.variable_count || 1) - 1);
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+                        {"{{1}}"} is auto-filled with each customer's name.
+                        {extraVars > 0 && " Fill in the rest below — same value for everyone in this broadcast:"}
+                      </div>
+                      {Array.from({ length: extraVars }).map((_, i) => (
+                        <input
+                          key={i}
+                          value={broadcast.template_params[i] || ""}
+                          onChange={(e) => {
+                            const next = [...broadcast.template_params];
+                            next[i] = e.target.value;
+                            setBroadcast((b) => ({ ...b, template_params: next }));
+                          }}
+                          placeholder={`{{${i + 2}}} value`}
+                          style={{ ...inp, marginBottom: 6 }}
+                        />
+                      ))}
+                      {audienceCount != null && (
+                        <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 4 }}>
+                          Estimated WhatsApp cost: ~₹{(audienceCount * whatsappRate).toFixed(2)} ({audienceCount} × ₹{whatsappRate}/msg)
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+
+            {/* Message — hidden once a template is picked, since the
+                template's own approved text is what actually gets sent */}
+            {!broadcast.template_id && (
+              <>
+                <div style={{ marginBottom: 8 }}>
+                  <label style={lbl}>Message</label>
+                  <textarea
+                    value={broadcast.message}
+                    onChange={(e) => setBroadcast((b) => ({ ...b, message: e.target.value }))}
+                    rows={5}
+                    placeholder="Hi {name}, we're running a festival offer just for you..."
+                    style={{ ...inp, resize: "vertical", marginTop: 6, minHeight: 110 }}
+                  />
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+                  {["{name}", "{phone}", "{email}", "{business_name}"].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setBroadcast((b) => ({ ...b, message: b.message + v }))}
+                      style={{
+                        padding: "3px 10px",
+                        borderRadius: 20,
+                        background: "var(--bg-surface)",
+                        border: "1px solid var(--border)",
+                        color: "var(--text-muted)",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button
                 onClick={sendBroadcast}
-                disabled={broadcasting || !broadcast.message.trim() || broadcast.channels.length === 0}
+                disabled={broadcasting || (!broadcast.template_id && !broadcast.message.trim()) || broadcast.channels.length === 0}
                 style={{
                   padding: "10px 24px",
                   borderRadius: 8,
                   border: "none",
                   background:
-                    broadcasting || !broadcast.message.trim() || broadcast.channels.length === 0
+                    broadcasting || (!broadcast.template_id && !broadcast.message.trim()) || broadcast.channels.length === 0
                       ? "var(--bg-surface)"
                       : "var(--teal)",
                   color: "#fff",
                   fontFamily: "var(--font-main)",
                   fontWeight: 600,
                   fontSize: 13,
-                  cursor: broadcasting || !broadcast.message.trim() || broadcast.channels.length === 0 ? "not-allowed" : "pointer",
-                  opacity: broadcasting || !broadcast.message.trim() || broadcast.channels.length === 0 ? 0.6 : 1,
+                  cursor: broadcasting || (!broadcast.template_id && !broadcast.message.trim()) || broadcast.channels.length === 0 ? "not-allowed" : "pointer",
+                  opacity: broadcasting || (!broadcast.template_id && !broadcast.message.trim()) || broadcast.channels.length === 0 ? 0.6 : 1,
                 }}
               >
                 {broadcasting ? "Sending..." : "📣 Send Broadcast"}
@@ -1608,6 +1743,157 @@ export default function AutomationPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB — WHATSAPP TEMPLATES */}
+      {tab === "templates" && (
+        <div style={{ maxWidth: 620 }}>
+          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontFamily: "var(--font-main)", fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>
+              Create a WhatsApp Template
+            </h3>
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
+              Templates are the only way to message a customer outside the free 24-hour reply window. Submitting one
+              here sends it to Meta for review — nothing gets sent to any customer until it's approved. Needs a
+              WhatsApp Business Account ID set under Channel Setup first.
+            </p>
+
+            {templateError && (
+              <div style={{ marginBottom: 14, padding: "9px 13px", background: "var(--danger-dim)", border: "1px solid var(--danger)", borderRadius: 8, fontSize: 12, color: "var(--danger)" }}>
+                ⚠ {templateError}
+              </div>
+            )}
+
+            <form onSubmit={createTemplateSubmit}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+                <div>
+                  <label style={lbl}>Template Name</label>
+                  <input
+                    value={templateForm.name}
+                    onChange={(e) => setTemplateForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="festival_offer"
+                    required
+                    style={{ ...inp, marginTop: 6 }}
+                  />
+                </div>
+                <div>
+                  <label style={lbl}>Category</label>
+                  <select
+                    value={templateForm.category}
+                    onChange={(e) => setTemplateForm((f) => ({ ...f, category: e.target.value }))}
+                    style={{ ...inp, marginTop: 6 }}
+                  >
+                    <option value="MARKETING">Marketing</option>
+                    <option value="UTILITY">Utility</option>
+                    <option value="AUTHENTICATION">Authentication</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={lbl}>Header (optional)</label>
+                <input
+                  value={templateForm.header_text}
+                  onChange={(e) => setTemplateForm((f) => ({ ...f, header_text: e.target.value }))}
+                  placeholder="Big Diwali Sale!"
+                  style={{ ...inp, marginTop: 6 }}
+                />
+              </div>
+
+              <div style={{ marginBottom: 6 }}>
+                <label style={lbl}>Body</label>
+                <textarea
+                  value={templateForm.body_text}
+                  onChange={(e) => setTemplateForm((f) => ({ ...f, body_text: e.target.value }))}
+                  rows={4}
+                  required
+                  placeholder="Hi {{1}}, get 20% off on {{2}} this week only!"
+                  style={{ ...inp, resize: "vertical", marginTop: 6, minHeight: 90 }}
+                />
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 14 }}>
+                Use {"{{1}}"}, {"{{2}}"}... as placeholders — {"{{1}}"} is always auto-filled with the customer's name
+                when you send a broadcast with this template.
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={lbl}>Footer (optional)</label>
+                <input
+                  value={templateForm.footer_text}
+                  onChange={(e) => setTemplateForm((f) => ({ ...f, footer_text: e.target.value }))}
+                  placeholder="Reply STOP to opt out"
+                  style={{ ...inp, marginTop: 6 }}
+                />
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  type="submit"
+                  disabled={templateSaving}
+                  style={{
+                    padding: "10px 24px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: templateSaving ? "var(--bg-hover)" : "var(--teal)",
+                    color: "#fff",
+                    fontFamily: "var(--font-main)",
+                    fontWeight: 600,
+                    fontSize: 13,
+                    cursor: templateSaving ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {templateSaving ? "Submitting..." : "Submit for Review"}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: "20px 24px" }}>
+            <h3 style={{ fontFamily: "var(--font-main)", fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
+              Your Templates
+            </h3>
+            {templatesLoading ? (
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading...</div>
+            ) : templates.length === 0 ? (
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No templates yet.</div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {templates.map((t) => {
+                  const statusColor = t.status === "approved" ? "var(--success)" : t.status === "rejected" ? "var(--danger)" : "var(--warn)";
+                  return (
+                    <div key={t.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>{t.name}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: statusColor, background: `${statusColor}18`, borderRadius: 20, padding: "2px 10px", textTransform: "uppercase" }}>
+                          {t.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>{t.body_text}</div>
+                      {t.status === "rejected" && t.rejection_reason && (
+                        <div style={{ fontSize: 11, color: "var(--danger)", marginBottom: 6 }}>Reason: {t.rejection_reason}</div>
+                      )}
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => refreshTemplate(t.id)}
+                          disabled={refreshingTemplate === t.id}
+                          style={{ padding: "4px 10px", borderRadius: 6, background: "transparent", border: "1px solid var(--border)", color: "var(--teal)", fontSize: 11, cursor: "pointer", fontFamily: "var(--font-main)" }}
+                        >
+                          {refreshingTemplate === t.id ? "Checking..." : "Refresh Status"}
+                        </button>
+                        <button
+                          onClick={() => deleteTemplateHandler(t.id)}
+                          style={{ padding: "4px 10px", borderRadius: 6, background: "transparent", border: "1px solid var(--border)", color: "var(--danger)", fontSize: 11, cursor: "pointer", fontFamily: "var(--font-main)" }}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
