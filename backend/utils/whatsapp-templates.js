@@ -7,11 +7,34 @@
 
 const GRAPH = "https://graph.facebook.com/v20.0";
 
-function buildComponents({ header_text, body_text, footer_text }) {
+// Meta's BUTTONS component takes an array of up to 3 buttons: QUICK_REPLY
+// (just a text label, tapping it sends that text back to you), URL (opens
+// a link — Meta requires the destination be visible/plausible, no raw IP
+// links etc.), or PHONE_NUMBER (opens the dialer). Mixing URL/PHONE_NUMBER
+// buttons with QUICK_REPLY in the same template isn't allowed by Meta, but
+// that's enforced on their side — we just pass through whatever was built.
+function buildButtonsComponent(buttons) {
+  if (!Array.isArray(buttons) || buttons.length === 0) return null;
+  const cleaned = buttons
+    .filter((b) => b?.text?.trim())
+    .slice(0, 3)
+    .map((b) => {
+      const text = b.text.trim();
+      if (b.type === "URL") return { type: "URL", text, url: (b.url || "").trim() };
+      if (b.type === "PHONE_NUMBER") return { type: "PHONE_NUMBER", text, phone_number: (b.phone_number || "").trim() };
+      return { type: "QUICK_REPLY", text };
+    });
+  if (cleaned.length === 0) return null;
+  return { type: "BUTTONS", buttons: cleaned };
+}
+
+function buildComponents({ header_text, body_text, footer_text, buttons }) {
   const components = [];
   if (header_text?.trim()) components.push({ type: "HEADER", format: "TEXT", text: header_text.trim() });
   components.push({ type: "BODY", text: body_text });
   if (footer_text?.trim()) components.push({ type: "FOOTER", text: footer_text.trim() });
+  const buttonsComponent = buildButtonsComponent(buttons);
+  if (buttonsComponent) components.push(buttonsComponent);
   return components;
 }
 
@@ -25,7 +48,7 @@ function slugifyTemplateName(name) {
     .slice(0, 64);
 }
 
-async function createTemplate(wabaId, accessToken, { name, language, category, header_text, body_text, footer_text }) {
+async function createTemplate(wabaId, accessToken, { name, language, category, header_text, body_text, footer_text, buttons }) {
   const res = await fetch(`${GRAPH}/${wabaId}/message_templates`, {
     method: "POST",
     headers: {
@@ -36,7 +59,7 @@ async function createTemplate(wabaId, accessToken, { name, language, category, h
       name,
       language,
       category,
-      components: buildComponents({ header_text, body_text, footer_text }),
+      components: buildComponents({ header_text, body_text, footer_text, buttons }),
     }),
   });
   const data = await res.json().catch(() => null);

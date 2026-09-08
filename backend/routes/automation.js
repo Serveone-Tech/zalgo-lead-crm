@@ -175,10 +175,13 @@ router.get("/whatsapp-templates", auth, requireSubscription, requirePlanFeature(
 // anything by itself; a template only becomes usable once Meta approves it
 // (checked via the /refresh route below).
 router.post("/whatsapp-templates", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
-  const { name, language, category, header_text, body_text, footer_text } = req.body;
+  const { name, language, category, header_text, body_text, footer_text, buttons } = req.body;
   if (!name?.trim() || !body_text?.trim()) {
     return res.status(400).json({ error: "Name and body text are required" });
   }
+  const cleanButtons = Array.isArray(buttons)
+    ? buttons.filter((b) => b?.text?.trim()).slice(0, 3)
+    : [];
   const cat = ["MARKETING", "UTILITY", "AUTHENTICATION"].includes(category) ? category : "MARKETING";
   const lang = language || "en_US";
   const slug = slugifyTemplateName(name);
@@ -201,12 +204,13 @@ router.post("/whatsapp-templates", auth, requireSubscription, requirePlanFeature
       header_text,
       body_text,
       footer_text,
+      buttons: cleanButtons,
     });
 
     const result = await pool.query(
-      `INSERT INTO whatsapp_templates (user_id, name, language, category, header_text, body_text, footer_text, variable_count, meta_template_id, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [req.tenantId, slug, lang, cat, header_text || "", body_text, footer_text || "", variableCount, metaResult.id, (metaResult.status || "PENDING").toLowerCase()],
+      `INSERT INTO whatsapp_templates (user_id, name, language, category, header_text, body_text, footer_text, buttons, variable_count, meta_template_id, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [req.tenantId, slug, lang, cat, header_text || "", body_text, footer_text || "", JSON.stringify(cleanButtons), variableCount, metaResult.id, (metaResult.status || "PENDING").toLowerCase()],
     );
     res.json(result.rows[0]);
   } catch (e) {

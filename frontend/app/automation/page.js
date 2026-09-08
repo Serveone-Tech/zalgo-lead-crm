@@ -265,7 +265,7 @@ export default function AutomationPage() {
   // WhatsApp Templates
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
-  const [templateForm, setTemplateForm] = useState({ name: "", category: "MARKETING", language: "en_US", header_text: "", body_text: "", footer_text: "" });
+  const [templateForm, setTemplateForm] = useState({ name: "", category: "MARKETING", language: "en_US", header_text: "", body_text: "", footer_text: "", buttons: [] });
   const [templateSaving, setTemplateSaving] = useState(false);
   const [templateError, setTemplateError] = useState("");
   const [refreshingTemplate, setRefreshingTemplate] = useState(null);
@@ -343,7 +343,7 @@ export default function AutomationPage() {
     setTemplateSaving(true);
     try {
       await api.post("/automation/whatsapp-templates", templateForm);
-      setTemplateForm({ name: "", category: "MARKETING", language: "en_US", header_text: "", body_text: "", footer_text: "" });
+      setTemplateForm({ name: "", category: "MARKETING", language: "en_US", header_text: "", body_text: "", footer_text: "", buttons: [] });
       showToast("Template submitted to Meta for review!");
       loadTemplates();
     } catch (err) {
@@ -1883,6 +1883,80 @@ export default function AutomationPage() {
                   placeholder="Reply STOP to opt out"
                   style={{ ...inp, marginTop: 6 }}
                 />
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={lbl}>Buttons (optional, up to 3)</label>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "6px 0 10px" }}>
+                  Shown below the message. "Visit Website" opens a link, "Call Us" opens the dialer, "Quick Reply" sends a fixed text back to you when tapped.
+                </div>
+                {templateForm.buttons.map((b, i) => (
+                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                    <select
+                      value={b.type}
+                      onChange={(e) => {
+                        const next = [...templateForm.buttons];
+                        next[i] = { type: e.target.value, text: b.text, url: "", phone_number: "" };
+                        setTemplateForm((f) => ({ ...f, buttons: next }));
+                      }}
+                      style={{ ...inp, width: 140, flexShrink: 0 }}
+                    >
+                      <option value="QUICK_REPLY">Quick Reply</option>
+                      <option value="URL">Visit Website</option>
+                      <option value="PHONE_NUMBER">Call Us</option>
+                    </select>
+                    <input
+                      value={b.text}
+                      onChange={(e) => {
+                        const next = [...templateForm.buttons];
+                        next[i] = { ...b, text: e.target.value };
+                        setTemplateForm((f) => ({ ...f, buttons: next }));
+                      }}
+                      placeholder="Button label, e.g. Shop Now"
+                      style={{ ...inp, flex: 1 }}
+                    />
+                    {b.type === "URL" && (
+                      <input
+                        value={b.url}
+                        onChange={(e) => {
+                          const next = [...templateForm.buttons];
+                          next[i] = { ...b, url: e.target.value };
+                          setTemplateForm((f) => ({ ...f, buttons: next }));
+                        }}
+                        placeholder="https://yoursite.com"
+                        style={{ ...inp, flex: 1 }}
+                      />
+                    )}
+                    {b.type === "PHONE_NUMBER" && (
+                      <input
+                        value={b.phone_number}
+                        onChange={(e) => {
+                          const next = [...templateForm.buttons];
+                          next[i] = { ...b, phone_number: e.target.value };
+                          setTemplateForm((f) => ({ ...f, buttons: next }));
+                        }}
+                        placeholder="+919876543210"
+                        style={{ ...inp, flex: 1 }}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setTemplateForm((f) => ({ ...f, buttons: f.buttons.filter((_, x) => x !== i) }))}
+                      style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: 16, padding: "4px 8px", flexShrink: 0 }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                {templateForm.buttons.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={() => setTemplateForm((f) => ({ ...f, buttons: [...f.buttons, { type: "QUICK_REPLY", text: "", url: "", phone_number: "" }] }))}
+                    style={{ background: "none", border: "1px dashed var(--border-strong)", borderRadius: 8, color: "var(--teal)", cursor: "pointer", fontSize: 12, padding: "7px 14px" }}
+                  >
+                    + Add Button
+                  </button>
+                )}
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end" }}>

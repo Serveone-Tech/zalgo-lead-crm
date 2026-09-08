@@ -621,6 +621,14 @@ const initDB = async () => {
       .query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS inventory_item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL`)
       .catch((e) => console.log("alter skip:", e.message));
 
+    // Up to 3 CTA buttons (URL/PHONE_NUMBER/QUICK_REPLY) on a WhatsApp
+    // template — stored as the same JSON array shape Meta's Template API
+    // expects for the BUTTONS component, so it can be passed straight
+    // through on create and re-shown as-is when editing.
+    await client
+      .query(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS buttons JSONB DEFAULT '[]'`)
+      .catch((e) => console.log("alter skip:", e.message));
+
     // ── STEP 3.6: Indexes ─────────────────────────────────────
     // Every query in this app filters by tenant (user_id) first — without an
     // index on it, Postgres was doing a full sequential scan of these tables
