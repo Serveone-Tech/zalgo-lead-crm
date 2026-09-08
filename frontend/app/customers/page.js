@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar, Download } from "lucide-react";
+import SendToSelectedModal from "../../components/SendToSelectedModal";
 
 function today() {
   return new Date().toISOString().split("T")[0];
@@ -55,6 +56,8 @@ export default function CustomersPage() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [sub, setSub] = useState(null);
 
   useEffect(() => {
     setMounted(true);
@@ -63,7 +66,13 @@ export default function CustomersPage() {
       return;
     }
     const cached = localStorage.getItem("crm_user");
-    if (cached) setUser(JSON.parse(cached));
+    const cachedUser = cached ? JSON.parse(cached) : null;
+    if (cachedUser) setUser(cachedUser);
+    // Bulk messaging is a Pro Max ("automation") feature — only owners
+    // carry a subscription; employees defer to the backend's own gate.
+    if (cachedUser && cachedUser.role !== "superadmin" && !cachedUser.parent_id) {
+      api.get("/auth/subscription").then(({ data: s }) => setSub(s)).catch(() => {});
+    }
     refreshUser().then((fresh) => {
       if (fresh) setUser(fresh);
     });
@@ -73,6 +82,15 @@ export default function CustomersPage() {
       .then((r) => setOrderStages(r.data))
       .catch(() => {});
   }, []);
+
+  const planFeatures = sub?.features
+    ? typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features
+    : null;
+  const hasPlanFeature = (feat) => {
+    if (!user || user.parent_id) return true; // employees — backend guards anyway
+    if (!planFeatures) return true; // owner but sub not loaded yet
+    return planFeatures.includes(feat);
+  };
 
   const changeOrderStage = async (c, stage) => {
     if (!c.latest_order_id) return;
@@ -517,6 +535,24 @@ export default function CustomersPage() {
             >
               Clear
             </button>
+            {hasPlanFeature("automation") && (
+              <button
+                onClick={() => setSendModalOpen(true)}
+                style={{
+                  padding: "7px 14px",
+                  borderRadius: 7,
+                  background: "transparent",
+                  border: "1px solid var(--teal)",
+                  color: "var(--teal)",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-main)",
+                }}
+              >
+                📣 Message Selected
+              </button>
+            )}
             <button
               onClick={() => setConfirmBulkDelete(true)}
               style={{
@@ -1539,6 +1575,17 @@ export default function CustomersPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {sendModalOpen && (
+        <SendToSelectedModal
+          customerIds={Array.from(selectedIds)}
+          onClose={() => setSendModalOpen(false)}
+          onSent={(campaign) => {
+            alert(`Sent! ${campaign.sent_count} delivered, ${campaign.failed_count} failed, out of ${campaign.recipient_count} recipients.`);
+            setSelectedIds(new Set());
+          }}
+        />
       )}
     </div>
   );

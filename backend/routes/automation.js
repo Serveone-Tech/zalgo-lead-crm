@@ -335,8 +335,21 @@ router.post("/send", auth, requireSubscription, requirePlanFeature("automation")
 });
 
 // Resolves an audience name into the actual customer rows a broadcast will
-// go to. "new" and "inactive" both take a day window; "all" ignores it.
-async function resolveAudience(tenantId, audience, days) {
+// go to. "new" and "inactive" both take a day window; "all" ignores it;
+// "selected" takes an explicit list of customer ids (hand-picked from the
+// Customers list's own checkboxes) instead of a segment rule.
+async function resolveAudience(tenantId, audience, days, customerIds) {
+  if (audience === "selected") {
+    const ids = (Array.isArray(customerIds) ? customerIds : [])
+      .map((id) => parseInt(id))
+      .filter((id) => Number.isInteger(id));
+    if (ids.length === 0) return [];
+    const { rows } = await pool.query(
+      "SELECT id, name, phone, email FROM customers WHERE user_id=$1 AND id = ANY($2::int[])",
+      [tenantId, ids],
+    );
+    return rows;
+  }
   const d = Math.max(1, parseInt(days) || 30);
   if (audience === "new") {
     const { rows } = await pool.query(
@@ -366,7 +379,8 @@ async function resolveAudience(tenantId, audience, days) {
 // lets the admin see the reach before actually sending anything.
 router.get("/broadcast/audience-count", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
   try {
-    const rows = await resolveAudience(req.tenantId, req.query.audience, req.query.days);
+    const customerIds = req.query.customer_ids ? String(req.query.customer_ids).split(",") : undefined;
+    const rows = await resolveAudience(req.tenantId, req.query.audience, req.query.days, customerIds);
     res.json({ count: rows.length });
   } catch (e) {
     console.error(e);
@@ -393,15 +407,15 @@ router.get("/broadcast/history", auth, requireSubscription, requirePlanFeature("
 // per-channel senders automation triggers use, just looped over an
 // audience instead of firing off one event.
 router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
-  const { audience, days, channels, message } = req.body;
+  const { audience, days, channels, message, customer_ids } = req.body;
   if (!message?.trim()) return res.status(400).json({ error: "Message required" });
   if (!Array.isArray(channels) || channels.length === 0) {
     return res.status(400).json({ error: "Select at least one channel" });
   }
   try {
-    const recipients = await resolveAudience(req.tenantId, audience, days);
+    const recipients = await resolveAudience(req.tenantId, audience, days, customer_ids);
     if (recipients.length === 0) {
-      return res.status(400).json({ error: "No customers match this audience" });
+      return res.status(400).json({ error: audience === "selected" ? "No customers selected" : "No customers match this audience" });
     }
 
     const credRes = await pool.query("SELECT * FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
