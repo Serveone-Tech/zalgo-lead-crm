@@ -233,6 +233,34 @@ export default function AutomationPage() {
   const [broadcasting, setBroadcasting] = useState(false);
   const [broadcastHistory, setBroadcastHistory] = useState([]);
   const [whatsappRate, setWhatsappRate] = useState(0.85);
+  const [expandedCampaign, setExpandedCampaign] = useState(null);
+  const [campaignRecipients, setCampaignRecipients] = useState([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+
+  const toggleRecipients = async (campaignId) => {
+    if (expandedCampaign === campaignId) {
+      setExpandedCampaign(null);
+      return;
+    }
+    setExpandedCampaign(campaignId);
+    setRecipientsLoading(true);
+    try {
+      const { data } = await api.get(`/automation/broadcast/${campaignId}/recipients`);
+      setCampaignRecipients(data);
+    } catch {
+      setCampaignRecipients([]);
+    } finally {
+      setRecipientsLoading(false);
+    }
+  };
+
+  const STATUS_COLORS = {
+    accepted: "var(--text-muted)",
+    sent: "var(--text-muted)",
+    delivered: "var(--teal)",
+    read: "var(--teal)",
+    failed: "var(--danger)",
+  };
 
   // WhatsApp Templates
   const [templates, setTemplates] = useState([]);
@@ -1735,9 +1763,39 @@ export default function AutomationPage() {
                       <span>{new Date(c.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}</span>
                     </div>
                     <div style={{ fontSize: 12.5, color: "var(--text-primary)", marginBottom: 4 }}>{c.message}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
-                      {c.recipient_count} recipients · {c.sent_count} sent · {c.failed_count} failed
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+                        {c.recipient_count} recipients · {c.sent_count} sent · {c.failed_count} failed
+                      </div>
+                      {(c.channels || []).includes("whatsapp") && (
+                        <button
+                          onClick={() => toggleRecipients(c.id)}
+                          style={{ background: "none", border: "none", color: "var(--teal)", fontSize: 11, cursor: "pointer", padding: 0 }}
+                        >
+                          {expandedCampaign === c.id ? "Hide details ▲" : "View recipients ▼"}
+                        </button>
+                      )}
                     </div>
+                    {expandedCampaign === c.id && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border)" }}>
+                        {recipientsLoading ? (
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Loading...</div>
+                        ) : campaignRecipients.length === 0 ? (
+                          <div style={{ fontSize: 11, color: "var(--text-muted)" }}>No WhatsApp recipient records for this broadcast.</div>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+                            {campaignRecipients.map((rec) => (
+                              <div key={rec.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5 }}>
+                                <span style={{ color: "var(--text-secondary)" }}>{rec.recipient_name || rec.phone} <span style={{ color: "var(--text-muted)" }}>({rec.phone})</span></span>
+                                <span style={{ color: STATUS_COLORS[rec.status] || "var(--text-muted)", fontWeight: 600, textTransform: "capitalize" }} title={rec.error || ""}>
+                                  {rec.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

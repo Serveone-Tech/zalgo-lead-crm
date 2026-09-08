@@ -161,10 +161,31 @@ router.get("/whatsapp/:token", async (req, res) => {
   res.sendStatus(403);
 });
 
+// Delivery/read/failed status callbacks for messages we sent (broadcasts,
+// automation triggers) — this is Meta's ONLY way of telling us a freeform
+// message accepted by /messages later failed to actually deliver (e.g. the
+// recipient was outside the 24h customer-service window). Updates the
+// matching broadcast_recipients row by wa_message_id if one exists.
+async function processStatuses(statuses) {
+  for (const s of statuses || []) {
+    const waMessageId = s.id;
+    const status = s.status; // sent | delivered | read | failed
+    if (!waMessageId || !status) continue;
+    const errMsg = status === "failed" ? (s.errors?.[0]?.title || s.errors?.[0]?.message || "Delivery failed") : "";
+    try {
+      await pool.query(
+        `UPDATE broadcast_recipients SET status=$1, error=$2, updated_at=NOW() WHERE wa_message_id=$3`,
+        [status, errMsg, waMessageId],
+      );
+    } catch (e) {
+      console.error("processStatuses failed:", e.message);
+    }
+  }
+}
+
 // ── POST /api/webhooks/whatsapp/:token ───────────────────────────
-// Meta WhatsApp Cloud API webhook — fires for every inbound message (and
-// delivery/read status updates, which we ignore since they carry no
-// `messages` array).
+// Meta WhatsApp Cloud API webhook — fires for every inbound message and
+// for delivery/read/failed status updates on messages we sent.
 router.post("/whatsapp/:token", express.json(), async (req, res) => {
   res.sendStatus(200); // Meta requires a fast ack; retries aggressively otherwise
   try {
@@ -172,8 +193,11 @@ router.post("/whatsapp/:token", express.json(), async (req, res) => {
     if (!tenantId) return;
 
     const value = req.body?.entry?.[0]?.changes?.[0]?.value;
+    if (Array.isArray(value?.statuses) && value.statuses.length) {
+      await processStatuses(value.statuses);
+    }
     const message = value?.messages?.[0];
-    if (!message) return; // status update, not a new message — nothing to do
+    if (!message) return; // status update, not a new message — nothing else to do
 
     const from = message.from; // sender's WhatsApp ID — digits only, e.g. "919123456780"
     const profileName = value?.contacts?.[0]?.profile?.name || "";

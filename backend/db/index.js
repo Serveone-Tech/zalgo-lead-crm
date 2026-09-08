@@ -566,6 +566,26 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- Per-recipient outcome for a broadcast's WhatsApp leg — Meta's send
+      -- API returning success only means the message was *accepted for
+      -- delivery*, not that it actually reached anyone (a freeform message
+      -- to someone outside the 24h window is silently accepted, then fails
+      -- async — see the statuses handling in webhooks.js). This is what
+      -- lets a campaign's history show what really happened per customer,
+      -- not just the synchronous accept count.
+      CREATE TABLE IF NOT EXISTS broadcast_recipients (
+        id SERIAL PRIMARY KEY,
+        campaign_id INTEGER REFERENCES broadcast_campaigns(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        recipient_name VARCHAR(255) DEFAULT '',
+        phone VARCHAR(50) DEFAULT '',
+        wa_message_id VARCHAR(64),
+        status VARCHAR(20) DEFAULT 'accepted',
+        error TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS stages (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -615,6 +635,10 @@ const initDB = async () => {
       // Powers the phone-duplicate check (regexp_replace(phone,...)) used on every lead add/import.
       `CREATE INDEX IF NOT EXISTS idx_leads_phone_digits ON leads(user_id, (regexp_replace(phone, '\\D', '', 'g')))`,
       `CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`,
+      // Looked up on every inbound WhatsApp status webhook to match a
+      // delivery/failure update back to the recipient it belongs to.
+      `CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_wa_msg ON broadcast_recipients(wa_message_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_campaign ON broadcast_recipients(campaign_id)`,
       `CREATE INDEX IF NOT EXISTS idx_customer_payments_user_id ON customer_payments(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_customer_payments_customer_id ON customer_payments(customer_id)`,
       `CREATE INDEX IF NOT EXISTS idx_lead_messages_lead_id ON lead_messages(lead_id)`,

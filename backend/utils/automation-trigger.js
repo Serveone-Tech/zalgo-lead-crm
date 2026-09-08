@@ -96,8 +96,9 @@ async function sendWhatsApp(creds, phone, message) {
     return;
   }
 
-  await sendWhatsAppViaMeta(creds, toNum, message);
+  const result = await sendWhatsAppViaMeta(creds, toNum, message);
   console.log("✅ WhatsApp sent to:", toNum);
+  return result;
 }
 
 async function fireTrigger(triggerId, userId, data = {}) {

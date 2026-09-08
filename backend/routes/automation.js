@@ -458,6 +458,24 @@ router.post("/send", auth, requireSubscription, requirePlanFeature("automation")
   }
 });
 
+// Logs one WhatsApp send's outcome against the campaign — `result` is
+// Meta's raw response (has messages[0].id) on accept, `errMsg` set instead
+// if the synchronous send itself failed. A row with status='accepted' and
+// a wa_message_id is still not proof of delivery — the webhook's `statuses`
+// handling updates it to 'delivered'/'read'/'failed' once Meta reports back.
+async function logRecipient(campaignId, tenantId, recipient, result, errMsg) {
+  const waMessageId = result?.messages?.[0]?.id || null;
+  try {
+    await pool.query(
+      `INSERT INTO broadcast_recipients (campaign_id, user_id, recipient_name, phone, wa_message_id, status, error)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [campaignId, tenantId, recipient.name || "", recipient.phone || "", waMessageId, errMsg ? "failed" : "accepted", errMsg || ""],
+    );
+  } catch (e) {
+    console.error("logRecipient failed:", e.message);
+  }
+}
+
 // Resolves an audience name into the actual recipient rows a broadcast
 // will go to, from either the customers or leads table. "new" and
 // "inactive" both take a day window and only apply to customers (leads
@@ -536,6 +554,21 @@ router.get("/broadcast/history", auth, requireSubscription, requirePlanFeature("
   }
 });
 
+router.get("/broadcast/:id/recipients", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const owns = await pool.query("SELECT id FROM broadcast_campaigns WHERE id=$1 AND user_id=$2", [req.params.id, req.tenantId]);
+    if (!owns.rows[0]) return res.status(404).json({ error: "Campaign not found" });
+    const result = await pool.query(
+      "SELECT * FROM broadcast_recipients WHERE campaign_id=$1 ORDER BY id ASC",
+      [req.params.id],
+    );
+    res.json(result.rows);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ── POST send a bulk broadcast — a festival offer, a win-back message to
 // customers who haven't ordered in a while, etc. Reuses the exact same
 // per-channel senders automation triggers use, just looped over an
@@ -577,6 +610,17 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
     const businessName = settRes.rows[0]?.institute_name || "";
     const subject = `Message from ${businessName || "us"}`;
 
+    // Insert the campaign row up front so WhatsApp sends can log a
+    // per-recipient row against a real campaign_id — the webhook's async
+    // `statuses` handler later updates these rows by wa_message_id when
+    // Meta reports whether a message actually delivered or failed.
+    const campaignIns = await pool.query(
+      `INSERT INTO broadcast_campaigns (user_id, audience, audience_days, channels, message, recipient_count, sent_count, failed_count, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,0,0,$7) RETURNING *`,
+      [req.tenantId, audience, days || null, channels, usingTemplate ? `[template: ${template.name}]` : message, recipients.length, req.user.id],
+    );
+    const campaignId = campaignIns.rows[0].id;
+
     let sent = 0, failed = 0;
     const jobs = [];
     for (const r of recipients) {
@@ -585,12 +629,28 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
           const bodyParams = [r.name || "", ...(Array.isArray(template_params) ? template_params : [])];
           jobs.push(
             sendTemplateMessage(creds, r.phone, { name: template.name, language: template.language, bodyParams })
-              .then(() => sent++)
-              .catch(() => failed++),
+              .then((result) => {
+                sent++;
+                return logRecipient(campaignId, req.tenantId, r, result, null);
+              })
+              .catch((e) => {
+                failed++;
+                return logRecipient(campaignId, req.tenantId, r, null, e.message);
+              }),
           );
         } else {
           const personalized = replaceVars(message, { name: r.name, phone: r.phone, email: r.email, institute_name: businessName });
-          jobs.push(sendWhatsApp(creds, r.phone, personalized).then(() => sent++).catch(() => failed++));
+          jobs.push(
+            sendWhatsApp(creds, r.phone, personalized)
+              .then((result) => {
+                sent++;
+                return logRecipient(campaignId, req.tenantId, r, result, null);
+              })
+              .catch((e) => {
+                failed++;
+                return logRecipient(campaignId, req.tenantId, r, null, e.message);
+              }),
+          );
         }
       }
       if (!usingTemplate) {
@@ -606,9 +666,8 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
     await Promise.allSettled(jobs);
 
     const campaign = await pool.query(
-      `INSERT INTO broadcast_campaigns (user_id, audience, audience_days, channels, message, recipient_count, sent_count, failed_count, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [req.tenantId, audience, days || null, channels, usingTemplate ? `[template: ${template.name}]` : message, recipients.length, sent, failed, req.user.id],
+      `UPDATE broadcast_campaigns SET sent_count=$1, failed_count=$2 WHERE id=$3 RETURNING *`,
+      [sent, failed, campaignId],
     );
     res.json(campaign.rows[0]);
   } catch (e) {
