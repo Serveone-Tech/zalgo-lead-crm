@@ -173,10 +173,30 @@ async function processStatuses(statuses) {
     if (!waMessageId || !status) continue;
     const errMsg = status === "failed" ? (s.errors?.[0]?.title || s.errors?.[0]?.message || "Delivery failed") : "";
     try {
+      const prev = await pool.query(
+        `SELECT campaign_id, status FROM broadcast_recipients WHERE wa_message_id=$1`,
+        [waMessageId],
+      );
+      const row = prev.rows[0];
+      if (!row) continue;
+
       await pool.query(
         `UPDATE broadcast_recipients SET status=$1, error=$2, updated_at=NOW() WHERE wa_message_id=$3`,
         [status, errMsg, waMessageId],
       );
+
+      // A recipient counted as "sent" the moment Meta accepted it — if it
+      // later turns out to have failed (e.g. outside the 24h window), move
+      // it out of the campaign's sent_count into failed_count so the
+      // aggregate shown in Past Broadcasts stays accurate. Only do this on
+      // the first transition into 'failed' so a repeated webhook delivery
+      // doesn't double-decrement.
+      if (status === "failed" && row.status !== "failed" && row.campaign_id) {
+        await pool.query(
+          `UPDATE broadcast_campaigns SET sent_count = GREATEST(sent_count - 1, 0), failed_count = failed_count + 1 WHERE id=$1`,
+          [row.campaign_id],
+        );
+      }
     } catch (e) {
       console.error("processStatuses failed:", e.message);
     }
