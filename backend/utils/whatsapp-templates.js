@@ -73,7 +73,9 @@ async function createTemplate(wabaId, accessToken, { name, language, category, h
 // default, so templates are checked on demand by name instead of relying
 // on a webhook.
 async function fetchTemplateStatus(wabaId, accessToken, name) {
-  const res = await fetch(`${GRAPH}/${wabaId}/message_templates?name=${encodeURIComponent(name)}`, {
+  // rejected_reason isn't included by default — has to be asked for
+  // explicitly via `fields`, unlike status/category which always come back.
+  const res = await fetch(`${GRAPH}/${wabaId}/message_templates?name=${encodeURIComponent(name)}&fields=name,status,category,rejected_reason`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const data = await res.json().catch(() => null);
