@@ -28,10 +28,33 @@ function buildButtonsComponent(buttons) {
   return { type: "BUTTONS", buttons: cleaned };
 }
 
+// Sample values Meta shows its reviewer in place of each {{n}} — without
+// these, template review consistently comes back REJECTED with
+// rejected_reason "INVALID_FORMAT" since Meta can't render a preview.
+// {{1}} is always the recipient's name at send time, so its example says
+// so; anything past that gets a generic placeholder.
+const SAMPLE_VALUES = ["Rahul", "20%", "Order #1234", "3 days", "₹499"];
+
+function highestVarIndex(text) {
+  const matches = [...(text || "").matchAll(/\{\{(\d+)\}\}/g)];
+  return matches.reduce((max, m) => Math.max(max, parseInt(m[1], 10)), 0);
+}
+
 function buildComponents({ header_text, body_text, footer_text, buttons }) {
   const components = [];
-  if (header_text?.trim()) components.push({ type: "HEADER", format: "TEXT", text: header_text.trim() });
-  components.push({ type: "BODY", text: body_text });
+
+  const headerVarCount = highestVarIndex(header_text);
+  if (header_text?.trim()) {
+    const comp = { type: "HEADER", format: "TEXT", text: header_text.trim() };
+    if (headerVarCount > 0) comp.example = { header_text: [SAMPLE_VALUES.slice(0, headerVarCount)] };
+    components.push(comp);
+  }
+
+  const bodyVarCount = highestVarIndex(body_text);
+  const bodyComp = { type: "BODY", text: body_text };
+  if (bodyVarCount > 0) bodyComp.example = { body_text: [SAMPLE_VALUES.slice(0, bodyVarCount)] };
+  components.push(bodyComp);
+
   if (footer_text?.trim()) components.push({ type: "FOOTER", text: footer_text.trim() });
   const buttonsComponent = buildButtonsComponent(buttons);
   if (buttonsComponent) components.push(buttonsComponent);
