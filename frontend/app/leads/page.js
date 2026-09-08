@@ -901,8 +901,7 @@ function LeadsContent() {
                   {filtered.map((lead, i) => {
                     const over =
                       isOverdue(lead.follow_up_date) &&
-                      lead.stage !== "Closed" &&
-                      lead.stage !== "Converted";
+                      !["CLOSED", "LOST", "CONVERTED"].includes((lead.stage || "").toUpperCase());
                     const tod = isToday(lead.follow_up_date);
                     const sc = stageStyle(lead.stage, dynamicStages);
                     const isSelected = selected.has(lead.id);

@@ -116,7 +116,7 @@ export default function NotificationsPage() {
 
   const todayList = leads.filter((l) => isToday(l.follow_up_date));
   const overdueList = leads.filter(
-    (l) => isOverdue(l.follow_up_date) && l.stage !== "Closed",
+    (l) => isOverdue(l.follow_up_date) && !["CLOSED", "LOST", "CONVERTED"].includes((l.stage || "").toUpperCase()),
   );
 
   const allNotifs = [

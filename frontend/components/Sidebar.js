@@ -98,7 +98,7 @@ export default function Sidebar() {
       setCount(
         leads.filter(
           (l) =>
-            (isOverdue(l.follow_up_date) && l.stage !== "Closed") ||
+            (isOverdue(l.follow_up_date) && !["CLOSED", "LOST", "CONVERTED"].includes((l.stage || "").toUpperCase())) ||
             isToday(l.follow_up_date),
         ).length,
       );

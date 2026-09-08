@@ -105,9 +105,7 @@ export default function DashboardPage() {
         leads.filter(
           (x) =>
             isOverdue(x.follow_up_date) &&
-            x.stage !== "Closed" &&
-            x.stage !== "Lost" &&
-            x.stage !== "Converted",
+            !["CLOSED", "LOST", "CONVERTED"].includes((x.stage || "").toUpperCase()),
         ),
       );
       setToday(leads.filter((x) => isToday(x.follow_up_date)));
@@ -890,7 +888,8 @@ function LeadTable({ leads, onEdit }) {
         <tbody>
           {leads.map((lead, i) => {
             const over =
-              isOverdue(lead.follow_up_date) && lead.stage !== "Closed";
+              isOverdue(lead.follow_up_date) &&
+              !["CLOSED", "LOST", "CONVERTED"].includes((lead.stage || "").toUpperCase());
             const tod = isToday(lead.follow_up_date);
             const sc = STAGE_COLORS[lead.stage] || STAGE_COLORS["New"];
             return (
