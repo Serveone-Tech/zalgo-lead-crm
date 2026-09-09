@@ -273,6 +273,45 @@ router.post("/onboarding", auth, async (req, res) => {
   }
 });
 
+// ── UPDATE ORGANISATION DETAILS (from Settings, after onboarding) — only
+// the account owner can change these; name/email are deliberately excluded
+// here (name is what onboarding set, and Account Info already shows the
+// owner's login email/name read-only) so this only ever touches
+// phone/address/city/state/website/logo.
+router.put("/organisation", auth, async (req, res) => {
+  if (req.user?.parentId) {
+    return res.status(403).json({ error: "Only the account owner can update organisation details." });
+  }
+  const { phone, address, city, state, website, logo_url } = req.body;
+  try {
+    const result = await pool.query(
+      `UPDATE organisations SET
+         phone=COALESCE($1, phone),
+         address=COALESCE($2, address),
+         city=COALESCE($3, city),
+         state=COALESCE($4, state),
+         website=COALESCE($5, website),
+         logo_url=COALESCE($6, logo_url),
+         updated_at=NOW()
+       WHERE user_id=$7 RETURNING *`,
+      [
+        phone !== undefined ? phone : null,
+        address !== undefined ? address : null,
+        city !== undefined ? city : null,
+        state !== undefined ? state : null,
+        website !== undefined ? website : null,
+        logo_url !== undefined ? logo_url : null,
+        req.userId,
+      ],
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: "No organisation on file yet" });
+    res.json(result.rows[0]);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ── SUBSCRIBE
 router.post("/subscribe", auth, async (req, res) => {
   const { plan_id, billing_cycle } = req.body;

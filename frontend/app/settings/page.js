@@ -30,6 +30,14 @@ export default function SettingsPage() {
   const [saved, setSaved]              = useState(false);
   const [user, setUser]                = useState(null);
 
+  // Organisation details — set during onboarding (logo/website/address etc),
+  // editable here by the owner. Name/email are deliberately excluded (name
+  // mirrors Business Name above, email isn't shown/editable here at all).
+  const [org, setOrg]           = useState({ phone: '', address: '', city: '', state: '', website: '', logo_url: '' });
+  const [orgLoaded, setOrgLoaded] = useState(false);
+  const [orgSaving, setOrgSaving] = useState(false);
+  const [orgSaved, setOrgSaved]   = useState(false);
+
   // Stages
   const [stages, setStages]            = useState([]);
   const [stagesLoading, setStagesLoading] = useState(true);
@@ -73,6 +81,36 @@ export default function SettingsPage() {
     loadStages();
     loadOrderStages();
   }, []);
+
+  // Lazily loaded — only once General is open, and only for the owner
+  // (organisation details belong to the account, not a per-employee thing).
+  useEffect(() => {
+    if (activeTab !== 'general' || orgLoaded || !user) return;
+    if (!isOwnerUser(user)) { setOrgLoaded(true); return; }
+    setOrgLoaded(true);
+    api.get('/auth/me').then(({ data }) => {
+      const o = data.organisation || {};
+      setOrg({
+        phone: o.phone || '',
+        address: o.address || '',
+        city: o.city || '',
+        state: o.state || '',
+        website: o.website || '',
+        logo_url: o.logo_url || '',
+      });
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, user]);
+
+  const saveOrg = async () => {
+    setOrgSaving(true);
+    try {
+      await api.put('/auth/organisation', org);
+      setOrgSaved(true);
+      setTimeout(() => setOrgSaved(false), 2500);
+    } catch {}
+    setOrgSaving(false);
+  };
 
   // Lazily loaded — only once the Team & Billing tab is opened, and only
   // matters for the owner (the one who actually manages the subscription).
@@ -344,6 +382,84 @@ export default function SettingsPage() {
               </div>
             </div>
           </Card>
+
+          {user && isOwnerUser(user) && (
+            <Card title="Organisation Details">
+              <div style={{ marginBottom: 14 }}>
+                <label style={lbl}>Logo URL</label>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <input
+                    value={org.logo_url}
+                    onChange={e => setOrg(o => ({ ...o, logo_url: e.target.value }))}
+                    placeholder="https://yoursite.com/logo.png"
+                    style={{ ...inp, flex: 1 }}
+                  />
+                  {org.logo_url && (
+                    <div style={{
+                      width: 42, height: 42, borderRadius: 8, border: '1px solid var(--border)',
+                      overflow: 'hidden', flexShrink: 0, background: 'var(--bg-surface)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <img
+                        src={org.logo_url}
+                        alt="preview"
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                        onError={e => { e.target.style.display = 'none'; }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={lbl}>Website</label>
+                <input
+                  value={org.website}
+                  onChange={e => setOrg(o => ({ ...o, website: e.target.value }))}
+                  placeholder="https://yourwebsite.com"
+                  style={inp}
+                />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={lbl}>Phone</label>
+                <input
+                  value={org.phone}
+                  onChange={e => setOrg(o => ({ ...o, phone: e.target.value }))}
+                  placeholder="+91 98765 43210"
+                  style={inp}
+                />
+              </div>
+              <div style={{ marginBottom: 14 }}>
+                <label style={lbl}>Address</label>
+                <input
+                  value={org.address}
+                  onChange={e => setOrg(o => ({ ...o, address: e.target.value }))}
+                  placeholder="Street address"
+                  style={inp}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 18 }}>
+                <div>
+                  <label style={lbl}>City</label>
+                  <input
+                    value={org.city}
+                    onChange={e => setOrg(o => ({ ...o, city: e.target.value }))}
+                    style={inp}
+                  />
+                </div>
+                <div>
+                  <label style={lbl}>State</label>
+                  <input
+                    value={org.state}
+                    onChange={e => setOrg(o => ({ ...o, state: e.target.value }))}
+                    style={inp}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <SaveBtn saving={orgSaving} saved={orgSaved} onClick={saveOrg} />
+              </div>
+            </Card>
+          )}
 
           {user && (
             <Card title="Account Info">
