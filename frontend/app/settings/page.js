@@ -310,7 +310,7 @@ export default function SettingsPage() {
         marginBottom: 24, width: 'fit-content',
         border: '1px solid var(--border)',
       }}>
-        {TABS.map(t => {
+        {TABS.filter(t => t.key !== 'billing' || isOwnerUser(user)).map(t => {
           const active = activeTab === t.key;
           return (
             <button key={t.key} onClick={() => setActiveTab(t.key)} style={{

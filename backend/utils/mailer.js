@@ -50,6 +50,18 @@ async function sendOtp(email, name, otp) {
   `));
 }
 
+// ── REGISTRATION EMAIL VERIFICATION OTP ─────────────────────────
+async function sendRegisterOtp(email, name, otp) {
+  await send(email, "Verify your email — Zalgo CRM", wrap(`
+    <h2 style="color:#00c4ca;margin:0 0 8px">Verify your email</h2>
+    <p style="color:#94a3b8;margin:0 0 24px">Hi <strong style="color:#e2e8f0">${name}</strong>, use this OTP to verify your email and finish creating your account. It expires in <strong style="color:#e2e8f0">10 minutes</strong>.</p>
+    <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:28px;text-align:center;margin-bottom:24px">
+      <div style="font-size:38px;font-weight:800;letter-spacing:14px;color:#00c4ca;font-family:monospace">${otp}</div>
+    </div>
+    <p style="color:#4a6380;font-size:12px;margin:0">Do not share this OTP with anyone. If you did not request this, please ignore.</p>
+  `));
+}
+
 // ── TRIAL STARTED ────────────────────────────────────────────────
 async function sendTrialStarted(email, name, planName, trialEndsAt) {
   await send(email, `Your ${planName} trial has started — Zalgo CRM`, wrap(`
@@ -219,6 +231,7 @@ async function sendContactNotification({ name, email, phone, company, message })
 
 module.exports = {
   sendOtp,
+  sendRegisterOtp,
   sendTrialStarted,
   sendPlanActivated,
   sendPlanExtended,

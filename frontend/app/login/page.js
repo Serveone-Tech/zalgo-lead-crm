@@ -50,7 +50,12 @@ export default function LoginPage() {
       localStorage.setItem("crm_user", JSON.stringify(data.user));
       window.location.href = data.redirect || "/dashboard";
     } catch (err) {
-      setError(err.response?.data?.error || "Something went wrong");
+      const code = err.response?.data?.error;
+      if (code === "EMAIL_NOT_VERIFIED") {
+        window.location.href = `/register?verifyEmail=${encodeURIComponent(form.email)}`;
+        return;
+      }
+      setError(err.response?.data?.message || code || "Something went wrong");
       setLoading(false);
     }
   };

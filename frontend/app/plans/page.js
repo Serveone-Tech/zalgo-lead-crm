@@ -195,25 +195,47 @@ export default function PlansPage() {
             Subscription is managed by your admin
           </div>
           <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 20 }}>
-            Only the account owner can view pricing or change the plan. If something's not working, ask your admin
-            to check the organisation's subscription.
+            Only the account owner can view pricing or change the plan. If your organisation's subscription has
+            expired, ask your admin to renew it — the software will be usable again as soon as they do.
           </div>
-          <button
-            onClick={() => router.push("/dashboard")}
-            style={{
-              padding: "9px 20px",
-              borderRadius: 8,
-              background: "var(--teal)",
-              border: "none",
-              color: "#fff",
-              fontFamily: "var(--font-main)",
-              fontWeight: 600,
-              fontSize: 13,
-              cursor: "pointer",
-            }}
-          >
-            Back to Dashboard
-          </button>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            <button
+              onClick={() => router.push("/dashboard")}
+              style={{
+                padding: "9px 20px",
+                borderRadius: 8,
+                background: "var(--teal)",
+                border: "none",
+                color: "#fff",
+                fontFamily: "var(--font-main)",
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              Back to Dashboard
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem("crm_token");
+                localStorage.removeItem("crm_user");
+                router.push("/login");
+              }}
+              style={{
+                padding: "9px 20px",
+                borderRadius: 8,
+                background: "transparent",
+                border: "1px solid var(--border)",
+                color: "var(--text-secondary)",
+                fontFamily: "var(--font-main)",
+                fontWeight: 600,
+                fontSize: 13,
+                cursor: "pointer",
+              }}
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
       </div>
     );

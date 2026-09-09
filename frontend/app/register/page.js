@@ -18,9 +18,24 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState("dark");
+  const [step, setStep] = useState("form"); // 'form' | 'otp'
+  const [otp, setOtp] = useState("");
+  const [otpMsg, setOtpMsg] = useState("");
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     setTheme(localStorage.getItem("crm_theme") || "dark");
+    const params = new URLSearchParams(window.location.search);
+    const verifyEmail = params.get("verifyEmail");
+    if (verifyEmail) {
+      setForm((f) => ({ ...f, email: verifyEmail }));
+      setStep("otp");
+      setOtpMsg("Sending a new OTP...");
+      axios
+        .post(`${BASE}/auth/register/resend-otp`, { email: verifyEmail })
+        .then(() => setOtpMsg(`We sent a 6-digit OTP to ${verifyEmail}`))
+        .catch((err) => setError(err.response?.data?.error || "Failed to send OTP"));
+    }
   }, []);
 
   const handle = (e) =>
@@ -40,13 +55,48 @@ export default function RegisterPage() {
         email: form.email,
         password: form.password,
       });
-      localStorage.setItem("crm_token", data.token);
-      localStorage.setItem("crm_user", JSON.stringify(data.user));
-      router.push("/onboarding");
+      if (data.email_verification_required) {
+        setStep("otp");
+        setOtpMsg(`We sent a 6-digit OTP to ${form.email}`);
+      }
     } catch (err) {
       setError(err.response?.data?.error || "Something went wrong");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const verifyOtp = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (otp.length !== 6) return setError("Enter the 6-digit OTP");
+    setLoading(true);
+    try {
+      const { data } = await axios.post(`${BASE}/auth/register/verify-otp`, {
+        email: form.email,
+        otp,
+      });
+      localStorage.setItem("crm_token", data.token);
+      localStorage.setItem("crm_user", JSON.stringify(data.user));
+      router.push("/onboarding");
+    } catch (err) {
+      setError(err.response?.data?.error || "Invalid OTP");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendOtp = async () => {
+    setError("");
+    setOtpMsg("");
+    setResending(true);
+    try {
+      await axios.post(`${BASE}/auth/register/resend-otp`, { email: form.email });
+      setOtpMsg("A new OTP has been sent to your email.");
+    } catch (err) {
+      setError(err.response?.data?.error || "Failed to resend OTP");
+    } finally {
+      setResending(false);
     }
   };
 
@@ -130,67 +180,137 @@ export default function RegisterPage() {
             </div>
           )}
 
-          <form onSubmit={submit}>
-            {[
-              {
-                name: "name",
-                label: "Full Name",
-                type: "text",
-                ph: "Your full name",
-              },
-              {
-                name: "email",
-                label: "Email",
-                type: "email",
-                ph: "you@email.com",
-              },
-              {
-                name: "password",
-                label: "Password",
-                type: "password",
-                ph: "Min 6 characters",
-              },
-              {
-                name: "confirm",
-                label: "Confirm Password",
-                type: "password",
-                ph: "Repeat password",
-              },
-            ].map((f) => (
-              <div key={f.name} style={{ marginBottom: 14 }}>
-                <label style={lbl}>{f.label}</label>
+          {step === "form" && (
+            <form onSubmit={submit}>
+              {[
+                {
+                  name: "name",
+                  label: "Full Name",
+                  type: "text",
+                  ph: "Your full name",
+                },
+                {
+                  name: "email",
+                  label: "Email",
+                  type: "email",
+                  ph: "you@email.com",
+                },
+                {
+                  name: "password",
+                  label: "Password",
+                  type: "password",
+                  ph: "Min 6 characters",
+                },
+                {
+                  name: "confirm",
+                  label: "Confirm Password",
+                  type: "password",
+                  ph: "Repeat password",
+                },
+              ].map((f) => (
+                <div key={f.name} style={{ marginBottom: 14 }}>
+                  <label style={lbl}>{f.label}</label>
+                  <input
+                    name={f.name}
+                    type={f.type}
+                    value={form[f.name]}
+                    onChange={handle}
+                    placeholder={f.ph}
+                    required
+                    style={inp}
+                  />
+                </div>
+              ))}
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  padding: "11px",
+                  marginTop: 8,
+                  background: loading ? "var(--bg-hover)" : "var(--teal)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  fontFamily: "var(--font-main)",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                {loading ? "Creating account..." : "Create Account →"}
+              </button>
+            </form>
+          )}
+
+          {step === "otp" && (
+            <form onSubmit={verifyOtp}>
+              {otpMsg && (
+                <div
+                  style={{
+                    background: "var(--teal-dim)",
+                    border: "1px solid var(--teal)",
+                    borderRadius: 8,
+                    padding: "10px 14px",
+                    marginBottom: 16,
+                    color: "var(--teal-light)",
+                    fontSize: 12.5,
+                  }}
+                >
+                  {otpMsg}
+                </div>
+              )}
+              <div style={{ marginBottom: 14 }}>
+                <label style={lbl}>Enter OTP</label>
                 <input
-                  name={f.name}
-                  type={f.type}
-                  value={form[f.name]}
-                  onChange={handle}
-                  placeholder={f.ph}
+                  type="text"
+                  inputMode="numeric"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="6-digit code"
                   required
-                  style={inp}
+                  style={{ ...inp, letterSpacing: "0.3em", textAlign: "center", fontSize: 18 }}
                 />
               </div>
-            ))}
-
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                width: "100%",
-                padding: "11px",
-                marginTop: 8,
-                background: loading ? "var(--bg-hover)" : "var(--teal)",
-                color: "#fff",
-                border: "none",
-                borderRadius: 8,
-                fontFamily: "var(--font-main)",
-                fontWeight: 600,
-                fontSize: 14,
-                cursor: loading ? "not-allowed" : "pointer",
-              }}
-            >
-              {loading ? "Creating account..." : "Create Account →"}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  padding: "11px",
+                  marginTop: 8,
+                  background: loading ? "var(--bg-hover)" : "var(--teal)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  fontFamily: "var(--font-main)",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  cursor: loading ? "not-allowed" : "pointer",
+                }}
+              >
+                {loading ? "Verifying..." : "Verify & Continue →"}
+              </button>
+              <div style={{ textAlign: "center", marginTop: 14 }}>
+                <button
+                  type="button"
+                  onClick={resendOtp}
+                  disabled={resending}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--teal)",
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    cursor: resending ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {resending ? "Resending..." : "Resend OTP"}
+                </button>
+              </div>
+            </form>
+          )}
 
           <div
             style={{

@@ -12,25 +12,98 @@ const makeToken = (user) =>
     expiresIn: "30d",
   });
 
-// ── REGISTER
+async function sendRegisterOtp(email, name) {
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  await pool.query("DELETE FROM register_otps WHERE email=$1", [email]);
+  await pool.query(
+    "INSERT INTO register_otps (email, otp, expires_at) VALUES ($1,$2,$3)",
+    [email, otp, expiresAt],
+  );
+  await mailer.sendRegisterOtp(email, name, otp);
+}
+
+// ── REGISTER — Step 1: create the (unverified) account, email an OTP.
+// No token is issued yet — login stays blocked (see /login below) until
+// the OTP is confirmed via /register/verify-otp.
 router.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password)
     return res.status(400).json({ error: "All fields required" });
   try {
+    const existing = await pool.query("SELECT id, email_verified FROM users WHERE email=$1", [email]);
+    if (existing.rows[0]) {
+      if (existing.rows[0].email_verified) {
+        return res.status(400).json({ error: "Email already registered" });
+      }
+      // Left a previous signup unverified — let them retry with a fresh
+      // password/OTP instead of being stuck behind the unique constraint.
+      const hashed = await bcrypt.hash(password, 10);
+      await pool.query("UPDATE users SET name=$1, password=$2 WHERE id=$3", [name, hashed, existing.rows[0].id]);
+      await sendRegisterOtp(email, name);
+      return res.json({ email_verification_required: true, email });
+    }
+
     const hashed = await bcrypt.hash(password, 10);
-    const result = await pool.query(
-      `INSERT INTO users (name, email, password, role, onboarded)
-       VALUES ($1, $2, $3, 'user', false) RETURNING id, name, email, role, onboarded`,
+    await pool.query(
+      `INSERT INTO users (name, email, password, role, onboarded, email_verified)
+       VALUES ($1, $2, $3, 'user', false, false)`,
       [name, email, hashed],
     );
-    const user = result.rows[0];
-    const token = makeToken(user);
-    res.json({ token, user, redirect: "/onboarding" });
+    await sendRegisterOtp(email, name);
+    res.json({ email_verification_required: true, email });
   } catch (err) {
     if (err.code === "23505")
       return res.status(400).json({ error: "Email already registered" });
+    console.error("register error:", err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── REGISTER — Step 2: verify the OTP, activate the account, issue a token
+router.post("/register/verify-otp", async (req, res) => {
+  const { email, otp } = req.body;
+  if (!email || !otp) return res.status(400).json({ error: "Email and OTP required" });
+  try {
+    const result = await pool.query(
+      "SELECT * FROM register_otps WHERE email=$1 AND otp=$2 AND used=false ORDER BY created_at DESC LIMIT 1",
+      [email, otp],
+    );
+    const row = result.rows[0];
+    if (!row) return res.status(400).json({ error: "Invalid OTP" });
+    if (new Date(row.expires_at) < new Date()) return res.status(400).json({ error: "OTP has expired. Please request a new one." });
+
+    await pool.query("UPDATE register_otps SET used=true WHERE id=$1", [row.id]);
+    const userRes = await pool.query(
+      "UPDATE users SET email_verified=true WHERE email=$1 RETURNING id, name, email, role, onboarded",
+      [email],
+    );
+    const user = userRes.rows[0];
+    if (!user) return res.status(404).json({ error: "Account not found" });
+
+    const token = makeToken(user);
+    res.json({ token, user, redirect: "/onboarding" });
+  } catch (e) {
+    console.error("register/verify-otp error:", e);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── REGISTER — Resend the verification OTP
+router.post("/register/resend-otp", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email is required" });
+  try {
+    const result = await pool.query("SELECT name, email_verified FROM users WHERE email=$1", [email]);
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: "Account not found" });
+    if (user.email_verified) return res.status(400).json({ error: "Email is already verified" });
+
+    await sendRegisterOtp(email, user.name);
+    res.json({ success: true });
+  } catch (e) {
+    console.error("register/resend-otp error:", e);
+    res.status(500).json({ error: "Failed to resend OTP. Please try again." });
   }
 });
 
@@ -49,6 +122,12 @@ router.post("/login", async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: "Invalid credentials" });
     if (user.is_blocked) return res.status(403).json({ error: "This account has been blocked. Contact your admin." });
+    // Only self-registered owners go through OTP verification (see
+    // /register) — employees/superadmin-created accounts default to
+    // verified so this never affects them.
+    if (!user.email_verified) {
+      return res.status(403).json({ error: "EMAIL_NOT_VERIFIED", message: "Please verify your email before signing in.", email: user.email });
+    }
 
     const token = makeToken(user);
     let redirect = "/dashboard";

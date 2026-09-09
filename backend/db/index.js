@@ -43,6 +43,11 @@ const initDB = async () => {
       // Super Admin can block a specific employee login without touching the
       // tenant's own subscription or their other employees.
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN DEFAULT false`,
+      // Defaults true so every existing row (and every non-self-registration
+      // path — employees added by an owner, superadmin-created accounts)
+      // stays unaffected; only the /register route explicitly sets this
+      // false, gating login until the OTP step completes.
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT true`,
     ];
     for (const q of alterUsers) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -596,6 +601,15 @@ const initDB = async () => {
       );
 
       CREATE TABLE IF NOT EXISTS password_otps (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        otp VARCHAR(6) NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS register_otps (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) NOT NULL,
         otp VARCHAR(6) NOT NULL,
