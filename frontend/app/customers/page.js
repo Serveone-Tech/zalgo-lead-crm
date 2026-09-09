@@ -46,6 +46,7 @@ export default function CustomersPage() {
   const [user, setUser] = useState(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [stageFilter, setStageFilter] = useState("");
   const [orderStages, setOrderStages] = useState([]);
   const [stageChanging, setStageChanging] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -178,12 +179,19 @@ export default function CustomersPage() {
           !(c.latest_order_tracking_id || "").toLowerCase().includes(q)
         )
           return false;
-        const enrolledDate = c.created_at ? c.created_at.split("T")[0] : null;
-        if (dateFrom && (!enrolledDate || enrolledDate < dateFrom)) return false;
-        if (dateTo && (!enrolledDate || enrolledDate > dateTo)) return false;
+
+        if (stageFilter && c.latest_order_stage !== stageFilter) return false;
+
+        // With a stage picked, the date range means "entered that stage on
+        // this date" (latest_order_stage_changed_at) — without one, it
+        // falls back to when the customer was enrolled, same as before.
+        const dateBasis = stageFilter ? c.latest_order_stage_changed_at : c.created_at;
+        const compareDate = dateBasis ? dateBasis.split("T")[0] : null;
+        if (dateFrom && (!compareDate || compareDate < dateFrom)) return false;
+        if (dateTo && (!compareDate || compareDate > dateTo)) return false;
         return true;
       }),
-    [customers, search, dateFrom, dateTo],
+    [customers, search, dateFrom, dateTo, stageFilter],
   );
 
   const addCustomer = async (e) => {
@@ -464,6 +472,27 @@ export default function CustomersPage() {
             fontFamily: "var(--font-main)",
           }}
         />
+        <select
+          value={stageFilter}
+          onChange={(e) => setStageFilter(e.target.value)}
+          title="Filter by order stage"
+          style={{
+            padding: "10px 12px",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            color: stageFilter ? "var(--text-primary)" : "var(--text-muted)",
+            fontSize: 13,
+            outline: "none",
+            fontFamily: "var(--font-main)",
+            cursor: "pointer",
+          }}
+        >
+          <option value="">All Stages</option>
+          {orderStages.map((s) => (
+            <option key={s.id} value={s.name}>{s.name}</option>
+          ))}
+        </select>
         <div
           style={{
             display: "flex",
@@ -481,7 +510,7 @@ export default function CustomersPage() {
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
             max={dateTo || undefined}
-            title="Enrolled from"
+            title={stageFilter ? `${stageFilter} from` : "Enrolled from"}
             style={dateInputStyle}
           />
           <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
@@ -490,7 +519,7 @@ export default function CustomersPage() {
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
             min={dateFrom || undefined}
-            title="Enrolled until"
+            title={stageFilter ? `${stageFilter} until` : "Enrolled until"}
             style={dateInputStyle}
           />
           {(dateFrom || dateTo) && (
@@ -514,6 +543,11 @@ export default function CustomersPage() {
           )}
         </div>
       </div>
+      {stageFilter && (dateFrom || dateTo) && (
+        <div style={{ marginTop: -10, marginBottom: 16, fontSize: 11.5, color: "var(--text-muted)" }}>
+          Showing customers whose latest order entered "{stageFilter}" within this date range.
+        </div>
+      )}
 
       {selectedIds.size > 0 && (
         <div

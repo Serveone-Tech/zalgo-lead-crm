@@ -55,6 +55,9 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
         (SELECT co3.stage FROM customer_orders co3
          WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
          ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_stage,
+        (SELECT COALESCE(co3.stage_changed_at, co3.created_at) FROM customer_orders co3
+         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_stage_changed_at,
         (SELECT co3.amount FROM customer_orders co3
          WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
          ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_amount,
@@ -509,6 +512,11 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
          tracking_id=COALESCE($7, tracking_id),
          provider=COALESCE($8, provider),
          stage=COALESCE($9, stage),
+         -- `stage` here still reads the pre-update value (all SET
+         -- expressions in one UPDATE see the same pre-statement row), so
+         -- this only stamps a new timestamp on an actual transition, not
+         -- every save that happens to re-submit the same stage.
+         stage_changed_at=CASE WHEN $9 IS NOT NULL AND $9 IS DISTINCT FROM stage THEN NOW() ELSE stage_changed_at END,
          notes=COALESCE($10, notes),
          city=COALESCE($11, city),
          state=COALESCE($12, state),

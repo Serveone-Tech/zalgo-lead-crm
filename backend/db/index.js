@@ -179,10 +179,31 @@ const initDB = async () => {
       // calendar day this order actually sent a reminder.
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_due_reminder_sent_date DATE`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS payment_overdue_reminder_sent_date DATE`,
+      // Updated every time `stage` actually changes (see the order PUT route)
+      // — unlike delivered_at (which only ever fires once, for is_delivered
+      // stages specifically), this is generic to whichever stage the order
+      // is in right now, so Customers' stage+date filter can ask "which
+      // orders entered stage X within this date range" for any stage. No
+      // DEFAULT here on purpose — existing rows land NULL so the one-time
+      // backfill below (guarded by IS NULL) stays safely idempotent across
+      // every server restart instead of re-stamping already-correct rows.
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS stage_changed_at TIMESTAMP`,
     ];
     for (const q of alterCustomerOrders) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
+    // One-time backfill for rows that predate the column — best available
+    // guess for an order already delivered is delivered_at, otherwise
+    // created_at. Safe to re-run: once a row has a value it's never NULL
+    // again (every future write path always sets a real timestamp).
+    await client
+      .query(`UPDATE customer_orders SET stage_changed_at = COALESCE(delivered_at, created_at) WHERE stage_changed_at IS NULL`)
+      .catch((e) => console.log("backfill skip:", e.message));
+    // Only affects future INSERTs that don't explicitly set it — existing
+    // rows above are already backfilled and untouched by this.
+    await client
+      .query(`ALTER TABLE customer_orders ALTER COLUMN stage_changed_at SET DEFAULT NOW()`)
+      .catch((e) => console.log("alter skip:", e.message));
 
     const alterOrderStages = [
       `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS deduct_inventory BOOLEAN DEFAULT false`,
