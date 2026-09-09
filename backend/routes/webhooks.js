@@ -73,8 +73,8 @@ async function captureInboundMessage(tenantId, { phone, name, message, platform,
     );
   }
   await pool.query(
-    `INSERT INTO lead_messages (lead_id, message, message_date, direction, media_url, media_type, media_name, wa_message_id)
-     VALUES ($1,$2,NOW(),'in',$3,$4,$5,$6)`,
+    `INSERT INTO lead_messages (lead_id, message, message_date, direction, media_url, media_type, media_name, wa_message_id, channel)
+     VALUES ($1,$2,NOW(),'in',$3,$4,$5,$6,'whatsapp')`,
     [leadId, message, media?.url || null, media?.type || null, media?.name || null, waMessageId || null],
   );
 }

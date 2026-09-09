@@ -486,7 +486,11 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
-// GET conversation log for a lead
+// GET conversation log for a lead — pass ?channel=whatsapp to get only real
+// WhatsApp messages (used by the WhatsApp-styled chat views); omitted, this
+// returns everything including private call-log notes (LeadModal's own
+// "Conversation Log" view, which is plain text, not chat bubbles, and is
+// meant to show the telecaller's full history including their own notes).
 router.get("/:id/messages", auth, async (req, res) => {
   try {
     const lead = await pool.query(
@@ -499,10 +503,11 @@ router.get("/:id/messages", auth, async (req, res) => {
       return res.status(403).json({ error: "Permission denied" });
     }
 
+    const channelClause = req.query.channel === "whatsapp" ? " AND lm.channel='whatsapp'" : "";
     const result = await pool.query(
       `SELECT lm.*, u.name as author_name FROM lead_messages lm
        LEFT JOIN users u ON u.id = lm.user_id
-       WHERE lm.lead_id=$1 ORDER BY lm.message_date DESC, lm.created_at DESC`,
+       WHERE lm.lead_id=$1${channelClause} ORDER BY lm.message_date DESC, lm.created_at DESC`,
       [req.params.id],
     );
     res.json(result.rows);
@@ -511,7 +516,11 @@ router.get("/:id/messages", auth, async (req, res) => {
   }
 });
 
-// POST add a dated conversation entry
+// POST add a dated conversation entry — a private call-log note (e.g. "what
+// was discussed on this call"), never actually sent anywhere. channel is
+// always 'call_log' here; only the real /whatsapp-send routes below use
+// 'whatsapp' — this is what keeps these notes out of the WhatsApp chat
+// views instead of looking like a message that was actually delivered.
 router.post("/:id/messages", auth, async (req, res) => {
   const { message, message_date } = req.body;
   if (!message) return res.status(400).json({ error: "Message required" });
@@ -527,8 +536,8 @@ router.post("/:id/messages", auth, async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO lead_messages (lead_id, user_id, message, message_date)
-       VALUES ($1,$2,$3,$4) RETURNING *`,
+      `INSERT INTO lead_messages (lead_id, user_id, message, message_date, channel)
+       VALUES ($1,$2,$3,$4,'call_log') RETURNING *`,
       [req.params.id, req.user.id, message, message_date || new Date().toISOString()],
     );
 
@@ -576,8 +585,8 @@ router.post("/:id/whatsapp-send", auth, requireSubscription, requirePlanFeature(
     const waMessageId = metaResult?.messages?.[0]?.id || null;
 
     const result = await pool.query(
-      `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction, wa_message_id, wa_status)
-       VALUES ($1,$2,$3,NOW(),'out',$4,'accepted') RETURNING *`,
+      `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction, wa_message_id, wa_status, channel)
+       VALUES ($1,$2,$3,NOW(),'out',$4,'accepted','whatsapp') RETURNING *`,
       [req.params.id, req.user.id, message.trim(), waMessageId],
     );
     await pool.query(
@@ -639,8 +648,8 @@ router.post(
 
         const mediaUrl = `/uploads/whatsapp-media/${req.file.filename}`;
         const result = await pool.query(
-          `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction, media_url, media_type, media_name, wa_message_id, wa_status)
-           VALUES ($1,$2,$3,NOW(),'out',$4,$5,$6,$7,'accepted') RETURNING *`,
+          `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction, media_url, media_type, media_name, wa_message_id, wa_status, channel)
+           VALUES ($1,$2,$3,NOW(),'out',$4,$5,$6,$7,'accepted','whatsapp') RETURNING *`,
           [req.params.id, req.user.id, caption || `[${type}]`, mediaUrl, type, req.file.originalname, waMessageId],
         );
         await pool.query(

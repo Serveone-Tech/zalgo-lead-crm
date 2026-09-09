@@ -76,6 +76,14 @@ const initDB = async () => {
       // outcome once the async status webhook reports back (see webhooks.js).
       `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS wa_status VARCHAR(20) DEFAULT ''`,
       `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS wa_error TEXT DEFAULT ''`,
+      // Distinguishes a real WhatsApp message ('whatsapp' — actually sent/
+      // received through Meta) from a private call-log note typed into a
+      // lead's "Conversation Log" (POST /:id/messages, 'call_log') — both
+      // used to land in this same table indistinguishably, so a telecaller's
+      // internal notes rendered identically to a real sent message in the
+      // WhatsApp-styled chat views. No default here on purpose — see the
+      // one-time IS NULL-guarded backfill below.
+      `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS channel VARCHAR(20)`,
     ];
     for (const q of alterLeadMessages) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -85,6 +93,16 @@ const initDB = async () => {
     // Idempotent: already-migrated rows no longer match direction='out'.
     await client
       .query(`UPDATE lead_messages SET direction='in' WHERE user_id IS NULL AND direction='out'`)
+      .catch((e) => console.log("backfill skip:", e.message));
+    // Best available guess for pre-existing rows: inbound is always real
+    // WhatsApp (only source today), as is anything that carries a Meta
+    // message id or attached media — everything else is assumed to be a
+    // call-log note (the more common case, and the safer default: better to
+    // under-classify an old real send than keep showing a private note as
+    // if it were actually delivered). Safe to re-run: never touches a row
+    // that already has a channel.
+    await client
+      .query(`UPDATE lead_messages SET channel = CASE WHEN direction='in' OR wa_message_id IS NOT NULL OR media_url IS NOT NULL THEN 'whatsapp' ELSE 'call_log' END WHERE channel IS NULL`)
       .catch((e) => console.log("backfill skip:", e.message));
 
     const alterSubscriptions = [

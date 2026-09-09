@@ -29,7 +29,8 @@ export default function WhatsAppChat({ leadId, fullHeight = false }) {
   const load = async (silent) => {
     if (!silent) setLoading(true);
     try {
-      const { data } = await api.get(`/leads/${leadId}/messages`);
+      // channel=whatsapp — real messages only, never a private call-log note
+      const { data } = await api.get(`/leads/${leadId}/messages`, { params: { channel: "whatsapp" } });
       // Backend returns newest-first (for the generic note log) — a chat
       // reads oldest-first, newest at the bottom.
       setMessages([...data].reverse());
