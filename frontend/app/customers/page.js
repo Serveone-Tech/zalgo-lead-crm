@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
-import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar, Download } from "lucide-react";
+import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar, Download, XCircle } from "lucide-react";
 import SendToSelectedModal from "../../components/SendToSelectedModal";
 
 function today() {
@@ -265,6 +265,14 @@ export default function CustomersPage() {
     (s, c) => s + parseFloat(c.total_due_amount || 0),
     0,
   );
+  const totalCancelled = filtered.reduce(
+    (s, c) => s + parseFloat(c.cancelled_amount || 0),
+    0,
+  );
+  const cancelledOrderCount = filtered.reduce(
+    (s, c) => s + parseInt(c.cancelled_order_count || 0, 10),
+    0,
+  );
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -392,6 +400,12 @@ export default function CustomersPage() {
             value: fmt(totalDue),
             color: "var(--danger)",
             icon: <Clock size={18} />,
+          },
+          {
+            label: "Cancelled",
+            value: `${fmt(totalCancelled)} (${cancelledOrderCount})`,
+            color: "var(--text-muted)",
+            icon: <XCircle size={18} />,
           },
         ].map((sc) => (
           <div

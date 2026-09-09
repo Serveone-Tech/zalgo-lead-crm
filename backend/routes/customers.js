@@ -36,6 +36,10 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
         COALESCE(SUM(CASE WHEN NOT COALESCE(os_due.excludes_dues,false) THEN co.advance_paid ELSE 0 END),0) AS total_collected,
         COALESCE(SUM(CASE WHEN NOT COALESCE(os_due.excludes_dues,false) THEN co.amount ELSE 0 END),0) AS total_order_value,
         COALESCE(SUM(CASE WHEN co.payment_type='cod' AND NOT COALESCE(os_due.excludes_dues,false) THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
+        -- Surfaced separately so cancelled money isn't just silently
+        -- dropped from the totals above — it's visible as its own figure.
+        COALESCE(SUM(CASE WHEN COALESCE(os_due.excludes_dues,false) THEN co.amount ELSE 0 END),0) AS cancelled_amount,
+        COALESCE(COUNT(CASE WHEN COALESCE(os_due.excludes_dues,false) THEN 1 END),0) AS cancelled_order_count,
         (SELECT MIN(co2.next_due_date) FROM customer_orders co2
          LEFT JOIN order_stages os2 ON os2.user_id=co2.user_id AND os2.name=co2.stage
          WHERE co2.customer_id=c.id AND co2.payment_type='cod' AND co2.deleted_at IS NULL
