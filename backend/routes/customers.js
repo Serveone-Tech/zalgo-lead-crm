@@ -512,7 +512,7 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
          tracking_id=COALESCE($7, tracking_id),
          provider=COALESCE($8, provider),
          stage=COALESCE($9, stage),
-         -- `stage` here still reads the pre-update value (all SET
+         -- stage here still reads the pre-update value (all SET
          -- expressions in one UPDATE see the same pre-statement row), so
          -- this only stamps a new timestamp on an actual transition, not
          -- every save that happens to re-submit the same stage.
