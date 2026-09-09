@@ -200,6 +200,19 @@ async function processStatuses(statuses) {
     } catch (e) {
       console.error("processStatuses failed:", e.message);
     }
+
+    // Same status callback also covers 1:1 replies sent from a lead's
+    // WhatsApp thread (Leads page chat, the WhatsApp inbox page) — a
+    // message id only ever belongs to one or the other table, so this is a
+    // harmless no-op when it's actually a broadcast recipient.
+    try {
+      await pool.query(
+        `UPDATE lead_messages SET wa_status=$1, wa_error=$2 WHERE wa_message_id=$3`,
+        [status, errMsg, waMessageId],
+      );
+    } catch (e) {
+      console.error("processStatuses (lead_messages) failed:", e.message);
+    }
   }
 }
 

@@ -572,12 +572,13 @@ router.post("/:id/whatsapp-send", auth, requireSubscription, requirePlanFeature(
       return res.status(400).json({ error: "WhatsApp isn't connected — set it up under Automation first" });
     }
 
-    await sendWhatsAppViaMeta(creds, lead.rows[0].phone, message.trim());
+    const metaResult = await sendWhatsAppViaMeta(creds, lead.rows[0].phone, message.trim());
+    const waMessageId = metaResult?.messages?.[0]?.id || null;
 
     const result = await pool.query(
-      `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction)
-       VALUES ($1,$2,$3,NOW(),'out') RETURNING *`,
-      [req.params.id, req.user.id, message.trim()],
+      `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction, wa_message_id, wa_status)
+       VALUES ($1,$2,$3,NOW(),'out',$4,'accepted') RETURNING *`,
+      [req.params.id, req.user.id, message.trim(), waMessageId],
     );
     await pool.query(
       "UPDATE leads SET last_message=$1, updated_at=NOW() WHERE id=$2",
@@ -627,19 +628,20 @@ router.post(
         const buffer = fs.readFileSync(req.file.path);
         const caption = (req.body.caption || "").trim();
 
-        await sendWhatsAppMediaViaMeta(creds, lead.rows[0].phone, {
+        const metaResult = await sendWhatsAppMediaViaMeta(creds, lead.rows[0].phone, {
           buffer,
           mimeType: req.file.mimetype,
           filename: req.file.originalname,
           type,
           caption,
         });
+        const waMessageId = metaResult?.messages?.[0]?.id || null;
 
         const mediaUrl = `/uploads/whatsapp-media/${req.file.filename}`;
         const result = await pool.query(
-          `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction, media_url, media_type, media_name)
-           VALUES ($1,$2,$3,NOW(),'out',$4,$5,$6) RETURNING *`,
-          [req.params.id, req.user.id, caption || `[${type}]`, mediaUrl, type, req.file.originalname],
+          `INSERT INTO lead_messages (lead_id, user_id, message, message_date, direction, media_url, media_type, media_name, wa_message_id, wa_status)
+           VALUES ($1,$2,$3,NOW(),'out',$4,$5,$6,$7,'accepted') RETURNING *`,
+          [req.params.id, req.user.id, caption || `[${type}]`, mediaUrl, type, req.file.originalname, waMessageId],
         );
         await pool.query(
           "UPDATE leads SET last_message=$1, updated_at=NOW() WHERE id=$2",

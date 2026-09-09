@@ -53,7 +53,7 @@ export default function WhatsAppInboxPage() {
       return;
     }
     load(false);
-    const iv = setInterval(() => load(true), 15000);
+    const iv = setInterval(() => load(true), 4000);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

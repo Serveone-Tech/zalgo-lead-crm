@@ -42,7 +42,7 @@ export default function WhatsAppChat({ leadId, fullHeight = false }) {
 
   useEffect(() => {
     load(false);
-    const iv = setInterval(() => load(true), 10000);
+    const iv = setInterval(() => load(true), 3000);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadId]);
@@ -157,6 +157,11 @@ export default function WhatsAppChat({ leadId, fullHeight = false }) {
                     <div style={{ fontSize: 13, lineHeight: 1.4, whiteSpace: "pre-wrap" }}>{m.message}</div>
                   )}
                   <div style={{ fontSize: 9.5, opacity: 0.75, marginTop: 3, textAlign: "right" }}>{fmtTime(m.message_date)}</div>
+                  {out && m.wa_status === "failed" && (
+                    <div style={{ fontSize: 10.5, color: "#ffd6d6", marginTop: 2, textAlign: "right" }} title={m.wa_error || ""}>
+                      ⚠ Not delivered{m.wa_error ? ` — ${m.wa_error}` : ""}
+                    </div>
+                  )}
                 </div>
               </div>
             );

@@ -70,6 +70,12 @@ const initDB = async () => {
       `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS media_type VARCHAR(20)`,
       `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS media_name TEXT`,
       `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS wa_message_id VARCHAR(120)`,
+      // Meta's send API accepting a message only means "queued" — a freeform
+      // reply to someone outside the 24h customer-service window is accepted
+      // the same way, then silently fails to deliver. These track the real
+      // outcome once the async status webhook reports back (see webhooks.js).
+      `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS wa_status VARCHAR(20) DEFAULT ''`,
+      `ALTER TABLE lead_messages ADD COLUMN IF NOT EXISTS wa_error TEXT DEFAULT ''`,
     ];
     for (const q of alterLeadMessages) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -660,6 +666,7 @@ const initDB = async () => {
       // Looked up on every inbound WhatsApp status webhook to match a
       // delivery/failure update back to the recipient it belongs to.
       `CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_wa_msg ON broadcast_recipients(wa_message_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_lead_messages_wa_msg ON lead_messages(wa_message_id)`,
       `CREATE INDEX IF NOT EXISTS idx_broadcast_recipients_campaign ON broadcast_recipients(campaign_id)`,
       `CREATE INDEX IF NOT EXISTS idx_customer_payments_user_id ON customer_payments(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_customer_payments_customer_id ON customer_payments(customer_id)`,
