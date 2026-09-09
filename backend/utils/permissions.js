@@ -13,6 +13,7 @@ const PERMISSION_KEYS = [
   "manage_inventory",
   "delete_inventory",
   "manage_automation",
+  "view_whatsapp",
   "manage_employees",
   "manage_settings",
 ];

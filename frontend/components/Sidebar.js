@@ -208,7 +208,7 @@ export default function Sidebar() {
             </svg>
           ),
         },
-        ...(hasPlanFeature("automation")
+        ...(hasPlanFeature("automation") && (isOwnerUser(user) || hasPerm(user, "view_whatsapp"))
           ? [
               {
                 href: "/whatsapp",

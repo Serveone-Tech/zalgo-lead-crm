@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import api from "../../lib/api";
+import api, { refreshUser } from "../../lib/api";
 import WhatsAppChat from "../../components/WhatsAppChat";
+import { isOwnerUser, hasPerm } from "../../lib/permissions";
 
 function initials(name) {
   if (!name) return "?";
@@ -52,6 +53,17 @@ export default function WhatsAppInboxPage() {
       router.push("/login");
       return;
     }
+    const cached = localStorage.getItem("crm_user");
+    if (cached) {
+      const u = JSON.parse(cached);
+      if (!isOwnerUser(u) && !hasPerm(u, "view_whatsapp")) {
+        router.push("/dashboard");
+        return;
+      }
+    }
+    refreshUser().then((fresh) => {
+      if (fresh && !isOwnerUser(fresh) && !hasPerm(fresh, "view_whatsapp")) router.push("/dashboard");
+    });
     load(false);
     const iv = setInterval(() => load(true), 4000);
     return () => clearInterval(iv);

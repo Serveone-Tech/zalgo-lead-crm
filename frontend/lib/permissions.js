@@ -12,6 +12,7 @@ export const PERMISSION_KEYS = [
   { key: "manage_inventory", label: "Add/edit inventory items" },
   { key: "delete_inventory", label: "Delete inventory items" },
   { key: "manage_automation", label: "Manage automation (email/SMS/WhatsApp)" },
+  { key: "view_whatsapp", label: "View & reply in the WhatsApp inbox" },
   { key: "manage_employees", label: "Manage team / employees" },
   { key: "manage_settings", label: "Manage org settings" },
 ];
@@ -51,6 +52,11 @@ export const PERMISSION_MODULES = [
     key: "automation",
     label: "Automation",
     write: { keys: ["manage_automation"], hint: "Configure lead-source webhooks, WhatsApp, delivery providers" },
+  },
+  {
+    key: "whatsapp",
+    label: "WhatsApp Inbox",
+    read: { keys: ["view_whatsapp"], hint: "Open the WhatsApp inbox and view/reply to chats" },
   },
   {
     key: "team",
