@@ -388,38 +388,45 @@ export default function Sidebar() {
         overflow: "visible",
       }}
     >
-      {/* Collapse/expand toggle — floats on the sidebar's right edge */}
+      {/* Collapse/expand toggle — a small handle centered on the sidebar's
+          right edge, like VSCode/Notion's panel collapse control. */}
       <button
         onClick={toggleCollapsed}
         title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         style={{
           position: "absolute",
-          top: 26,
-          right: -12,
-          width: 24,
-          height: 24,
+          top: "50%",
+          right: -13,
+          transform: "translateY(-50%)",
+          width: 26,
+          height: 26,
           borderRadius: "50%",
-          background: "var(--bg-card)",
+          background: "var(--bg-surface)",
           border: "1px solid var(--border-strong)",
-          color: "var(--text-secondary)",
+          color: "var(--text-muted)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",
           zIndex: 60,
           padding: 0,
-          boxShadow: "var(--shadow-sm)",
+          boxShadow: "var(--shadow-md)",
+          transition: "background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s",
         }}
         onMouseEnter={(e) => {
+          e.currentTarget.style.background = "var(--teal)";
           e.currentTarget.style.borderColor = "var(--teal)";
-          e.currentTarget.style.color = "var(--teal-light)";
+          e.currentTarget.style.color = "#fff";
+          e.currentTarget.style.transform = "translateY(-50%) scale(1.1)";
         }}
         onMouseLeave={(e) => {
+          e.currentTarget.style.background = "var(--bg-surface)";
           e.currentTarget.style.borderColor = "var(--border-strong)";
-          e.currentTarget.style.color = "var(--text-secondary)";
+          e.currentTarget.style.color = "var(--text-muted)";
+          e.currentTarget.style.transform = "translateY(-50%) scale(1)";
         }}
       >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.18s" }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.18s" }}>
           <polyline points="15 18 9 12 15 6" />
         </svg>
       </button>
