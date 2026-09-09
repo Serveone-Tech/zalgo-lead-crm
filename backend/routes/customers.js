@@ -103,18 +103,47 @@ router.get("/due/upcoming", auth, requireSubscription, requirePlanFeature("custo
   }
 });
 
-// ── GET Sales Report (Excel) — delivered orders only, one row per item.
-// BEFORE /:id so "reports" never gets swallowed as an :id param. "Delivered"
-// means the order's current stage is flagged is_delivered in Settings →
-// Order Stages (any number of stages can carry that flag, same pattern as
-// excludes_dues) — not a hardcoded stage name, since tenants rename/retype
-// their own stages (one tenant's is literally "DELIVERDED", a typo).
+// ── GET Sales Report (Excel) — one row per order, one row per item within it.
+// BEFORE /:id so "reports" never gets swallowed as an :id param. Mirrors
+// whatever's currently filtered on the Customers page itself — `stage` and
+// `search` are optional and match those controls exactly, so what downloads
+// is what's on screen, not a fixed separate report. With no `stage` given
+// this keeps its original meaning: delivered orders only (is_delivered
+// flagged in Settings → Order Stages — any number of stages can carry that
+// flag, since tenants rename/retype their own stages, e.g. "DELIVERDED").
+// The date range's meaning follows `stage` the same way the page's date
+// filter does: stage_changed_at once a stage is picked, else delivered_at.
 router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
-    const { from, to } = req.query;
-    if (!from || !to) return res.status(400).json({ error: "from and to dates are required" });
+    const { from, to, stage, search } = req.query;
 
-    const vis = visibilityClause(req, 4);
+    const params = [req.tenantId];
+    const conditions = ["co.deleted_at IS NULL"];
+    let stageJoin = "JOIN order_stages os ON os.user_id = co.user_id AND os.name = co.stage AND os.is_delivered = true";
+    let dateBasisExpr = "COALESCE(co.delivered_at, co.created_at)";
+
+    if (stage) {
+      stageJoin = "LEFT JOIN order_stages os ON os.user_id = co.user_id AND os.name = co.stage";
+      params.push(stage);
+      conditions.push(`co.stage = $${params.length}`);
+      dateBasisExpr = "COALESCE(co.stage_changed_at, co.created_at)";
+    }
+    if (from) {
+      params.push(from);
+      conditions.push(`${dateBasisExpr} >= $${params.length}`);
+    }
+    if (to) {
+      params.push(to);
+      conditions.push(`${dateBasisExpr} < ($${params.length}::date + INTERVAL '1 day')`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      const idx = params.length;
+      conditions.push(`(c.name ILIKE $${idx} OR c.phone ILIKE $${idx} OR c.email ILIKE $${idx} OR co.tracking_id ILIKE $${idx})`);
+    }
+
+    const vis = visibilityClause(req, params.length + 1);
+
     // One row per ORDER, not per item — items/HSN/quantity are aggregated
     // into comma-separated lists (still positionally aligned with each
     // other) so a 3-item order doesn't repeat its full total 3 times.
@@ -122,8 +151,9 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
     // order — that's what "Employee" is meant to answer here.
     const result = await pool.query(
       `SELECT
-         COALESCE(co.delivered_at, co.created_at) AS delivered_date,
+         ${dateBasisExpr} AS report_date,
          c.name AS customer_name,
+         co.stage AS order_stage,
          co.city, co.pincode, co.state,
          items_agg.item_names,
          items_agg.hsn_codes,
@@ -136,7 +166,7 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
          co.provider
        FROM customer_orders co
        JOIN customers c ON c.id = co.customer_id
-       JOIN order_stages os ON os.user_id = co.user_id AND os.name = co.stage AND os.is_delivered = true
+       ${stageJoin}
        LEFT JOIN users emp ON emp.id = c.assigned_to
        LEFT JOIN (
          SELECT oi.order_id,
@@ -147,17 +177,16 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
          LEFT JOIN inventory_items i ON i.id = oi.inventory_item_id
          GROUP BY oi.order_id
        ) items_agg ON items_agg.order_id = co.id
-       WHERE co.user_id=$1 AND co.deleted_at IS NULL
-         AND COALESCE(co.delivered_at, co.created_at) >= $2
-         AND COALESCE(co.delivered_at, co.created_at) < ($3::date + INTERVAL '1 day')${vis.clause}
-       ORDER BY delivered_date DESC, co.id`,
-      [req.tenantId, from, to, ...vis.params],
+       WHERE co.user_id=$1 AND ${conditions.join(" AND ")}${vis.clause}
+       ORDER BY report_date DESC, co.id`,
+      [...params, ...vis.params],
     );
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Sales Report");
     sheet.columns = [
-      { header: "Delivered Date", key: "delivered_date", width: 18 },
+      { header: stage ? "Date" : "Delivered Date", key: "report_date", width: 18 },
+      { header: "Stage", key: "order_stage", width: 14 },
       { header: "Customer Name", key: "customer_name", width: 24 },
       { header: "City", key: "city", width: 16 },
       { header: "Pincode", key: "pincode", width: 10 },
@@ -176,7 +205,8 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
 
     for (const row of result.rows) {
       sheet.addRow({
-        delivered_date: row.delivered_date ? row.delivered_date.split("T")[0] : "",
+        report_date: row.report_date ? row.report_date.split("T")[0] : "",
+        order_stage: row.order_stage || "",
         customer_name: row.customer_name,
         city: row.city || "",
         pincode: row.pincode || "",
@@ -193,8 +223,10 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
       });
     }
 
+    const rangeLabel = from && to ? `${from}-to-${to}` : new Date().toISOString().split("T")[0];
+    const stageLabel = stage ? `-${stage.replace(/[^a-zA-Z0-9]+/g, "_")}` : "";
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", `attachment; filename="sales-report-${from}-to-${to}.xlsx"`);
+    res.setHeader("Content-Disposition", `attachment; filename="sales-report${stageLabel}-${rangeLabel}.xlsx"`);
     await workbook.xlsx.write(res);
     res.end();
   } catch (e) {

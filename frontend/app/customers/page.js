@@ -106,10 +106,18 @@ export default function CustomersPage() {
   };
 
   const openReportModal = () => {
-    const now = new Date();
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    setReportFrom(firstOfMonth.toISOString().split("T")[0]);
-    setReportTo(now.toISOString().split("T")[0]);
+    // Starts from whatever's already applied on the page (stage/date range)
+    // so the export matches what's on screen by default — only falls back
+    // to "this month" when no date range is active yet.
+    if (!dateFrom && !dateTo) {
+      const now = new Date();
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      setReportFrom(firstOfMonth.toISOString().split("T")[0]);
+      setReportTo(now.toISOString().split("T")[0]);
+    } else {
+      setReportFrom(dateFrom);
+      setReportTo(dateTo);
+    }
     setReportError("");
     setShowReportModal(true);
   };
@@ -129,21 +137,27 @@ export default function CustomersPage() {
   };
 
   const downloadSalesReport = async () => {
-    if (!reportFrom || !reportTo) {
-      setReportError("Pick both a from and to date");
-      return;
-    }
     setReportDownloading(true);
     setReportError("");
     try {
+      // Same search/stage the page itself is filtered by — the date range
+      // is the modal's own (defaults to the page's, but editable here)
+      // so the export matches what's currently on screen.
       const res = await api.get("/customers/reports/sales-excel", {
-        params: { from: reportFrom, to: reportTo },
+        params: {
+          from: reportFrom || undefined,
+          to: reportTo || undefined,
+          stage: stageFilter || undefined,
+          search: search || undefined,
+        },
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const a = document.createElement("a");
       a.href = url;
-      a.download = `sales-report-${reportFrom}-to-${reportTo}.xlsx`;
+      const stagePart = stageFilter ? `-${stageFilter.replace(/[^a-zA-Z0-9]+/g, "_")}` : "";
+      const rangePart = reportFrom && reportTo ? `${reportFrom}-to-${reportTo}` : new Date().toISOString().split("T")[0];
+      a.download = `sales-report${stagePart}-${rangePart}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1318,9 +1332,12 @@ export default function CustomersPage() {
               </button>
             </div>
             <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>
-              Excel download of every order marked 📬 Delivered (Settings → Order Stages), one row per order —
-              delivered date, customer, city/pincode/state, items/HSN codes/quantities, COD/Prepaid, total amount,
-              order type, the customer's assigned employee, and tracking ID/courier.
+              {stageFilter ? (
+                <>Excel download of orders in stage <strong>"{stageFilter}"</strong>{search ? <> matching "<strong>{search}</strong>"</> : ""}, one row per order — plus city/pincode/state, items/HSN codes/quantities, COD/Prepaid, total amount, order type, assigned employee, and tracking ID/courier.</>
+              ) : (
+                <>Excel download of every order marked 📬 Delivered (Settings → Order Stages){search ? <> matching "<strong>{search}</strong>"</> : ""}, one row per order — delivered date, customer, city/pincode/state, items/HSN codes/quantities, COD/Prepaid, total amount, order type, the customer's assigned employee, and tracking ID/courier.</>
+              )}
+              {" "}Pick a stage on the page before opening this to export that instead.
             </p>
 
             {reportError && (
