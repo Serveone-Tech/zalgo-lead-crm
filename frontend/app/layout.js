@@ -22,7 +22,7 @@ export default function RootLayout({ children }) {
         <link rel="icon" href="/favicon.png" type="image/png" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{document.documentElement.dataset.theme=localStorage.getItem('crm_theme')||'dark';}catch(e){}`,
+            __html: `try{document.documentElement.dataset.theme=localStorage.getItem('crm_theme')||'dark';document.documentElement.style.setProperty('--sidebar-w',localStorage.getItem('crm_sidebar_collapsed')==='1'?'68px':'232px');}catch(e){}`,
           }}
         />
       </head>
@@ -38,6 +38,7 @@ export default function RootLayout({ children }) {
               minHeight: '100vh',
               background: 'var(--bg-base)',
               overflow: 'auto',
+              transition: 'margin-left 0.18s ease',
             }}>
               {children}
             </main>

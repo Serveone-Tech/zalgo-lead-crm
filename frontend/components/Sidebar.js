@@ -37,6 +37,22 @@ export default function Sidebar() {
   const [lowStockCount, setLowStockCount] = useState(0);
   const [theme, setTheme] = useState("dark");
   const [sub, setSub] = useState(null);
+  const [collapsed, setCollapsed] = useState(false);
+
+  const SIDEBAR_W = { open: "232px", collapsed: "68px" };
+
+  const applySidebarWidth = (isCollapsed) => {
+    document.documentElement.style.setProperty("--sidebar-w", isCollapsed ? SIDEBAR_W.collapsed : SIDEBAR_W.open);
+  };
+
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem("crm_sidebar_collapsed", next ? "1" : "0");
+      applySidebarWidth(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const raw = localStorage.getItem("crm_user");
@@ -46,6 +62,10 @@ export default function Sidebar() {
     }
     const u = JSON.parse(raw);
     setUser(u);
+
+    const savedCollapsed = localStorage.getItem("crm_sidebar_collapsed") === "1";
+    setCollapsed(savedCollapsed);
+    applySidebarWidth(savedCollapsed);
 
     const savedTheme = localStorage.getItem("crm_theme") || "dark";
     setTheme(savedTheme);
@@ -364,69 +384,137 @@ export default function Sidebar() {
         flexDirection: "column",
         zIndex: 50,
         boxShadow: "var(--shadow-sm)",
+        transition: "width 0.18s ease",
+        overflow: "visible",
       }}
     >
+      {/* Collapse/expand toggle — floats on the sidebar's right edge */}
+      <button
+        onClick={toggleCollapsed}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        style={{
+          position: "absolute",
+          top: 26,
+          right: -12,
+          width: 24,
+          height: 24,
+          borderRadius: "50%",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border-strong)",
+          color: "var(--text-secondary)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          zIndex: 60,
+          padding: 0,
+          boxShadow: "var(--shadow-sm)",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "var(--teal)";
+          e.currentTarget.style.color = "var(--teal-light)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = "var(--border-strong)";
+          e.currentTarget.style.color = "var(--text-secondary)";
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.18s" }}>
+          <polyline points="15 18 9 12 15 6" />
+        </svg>
+      </button>
+
       {/* Logo */}
       <div
         style={{
-          padding: "22px 20px 18px",
+          padding: collapsed ? "22px 0 18px" : "22px 20px 18px",
           borderBottom: "1px solid var(--border)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: collapsed ? "center" : "flex-start",
         }}
       >
-        <Image
-          src={theme === "light" ? "/logo_light.png" : "/logo_dark.png"}
-          alt="Zalgo Infotech"
-          width={150}
-          height={45}
-          style={{ objectFit: "contain", objectPosition: "left" }}
-          priority
-        />
-        <div
-          style={{
-            marginTop: 9,
-            fontSize: 10,
-            background: "var(--gradient-accent)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-            letterSpacing: "0.16em",
-            textTransform: "uppercase",
-            fontFamily: "var(--font-main)",
-            fontWeight: 700,
-          }}
-        >
-          Lead Management System
-        </div>
+        {collapsed ? (
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 8,
+              background: "var(--gradient-accent)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#fff",
+              fontWeight: 800,
+              fontFamily: "var(--font-main)",
+              fontSize: 15,
+            }}
+            title="Zalgo Infotech"
+          >
+            Z
+          </div>
+        ) : (
+          <>
+            <Image
+              src={theme === "light" ? "/logo_light.png" : "/logo_dark.png"}
+              alt="Zalgo Infotech"
+              width={150}
+              height={45}
+              style={{ objectFit: "contain", objectPosition: "left" }}
+              priority
+            />
+            <div
+              style={{
+                marginTop: 9,
+                fontSize: 10,
+                background: "var(--gradient-accent)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+                fontFamily: "var(--font-main)",
+                fontWeight: 700,
+              }}
+            >
+              Lead Management System
+            </div>
+          </>
+        )}
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: "16px 12px", overflowY: "auto" }}>
+      <nav style={{ flex: 1, padding: collapsed ? "16px 8px" : "16px 12px", overflowY: "auto" }}>
         {NAV.map(({ section, items }) => (
           <div key={section} style={{ marginBottom: 14 }}>
-            <div
-              style={{
-                fontSize: 9,
-                color: "var(--text-muted)",
-                fontWeight: 700,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
-                fontFamily: "var(--font-main)",
-                padding: "4px 10px 8px",
-              }}
-            >
-              {section}
-            </div>
+            {!collapsed && (
+              <div
+                style={{
+                  fontSize: 9,
+                  color: "var(--text-muted)",
+                  fontWeight: 700,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  fontFamily: "var(--font-main)",
+                  padding: "4px 10px 8px",
+                }}
+              >
+                {section}
+              </div>
+            )}
             {items.map((item) => {
               const active = pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  title={collapsed ? item.label : undefined}
                   style={{
+                    position: "relative",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "10px 12px",
+                    justifyContent: collapsed ? "center" : "space-between",
+                    padding: collapsed ? "10px 0" : "10px 12px",
                     borderRadius: "var(--radius-sm)",
                     marginBottom: 3,
                     color: active ? "#fff" : "var(--text-secondary)",
@@ -457,9 +545,22 @@ export default function Sidebar() {
                     style={{ display: "flex", alignItems: "center", gap: 10 }}
                   >
                     {item.icon}
-                    {item.label}
+                    {!collapsed && item.label}
                   </div>
-                  {item.badge > 0 && (
+                  {item.badge > 0 && (collapsed ? (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        background: "var(--danger)",
+                        border: "1.5px solid var(--bg-surface)",
+                      }}
+                    />
+                  ) : (
                     <span
                       style={{
                         background: active ? "rgba(255,255,255,0.25)" : "var(--danger)",
@@ -475,7 +576,7 @@ export default function Sidebar() {
                     >
                       {item.badge}
                     </span>
-                  )}
+                  ))}
                 </Link>
               );
             })}
@@ -484,17 +585,19 @@ export default function Sidebar() {
       </nav>
 
       {/* Subscription info — owners only */}
-      {sub && (
+      {sub && !collapsed && (
         <PlanChip sub={sub} />
       )}
 
       {/* User + logout */}
-      <div style={{ padding: "16px", borderTop: "1px solid var(--border)" }}>
+      <div style={{ padding: collapsed ? "16px 8px" : "16px", borderTop: "1px solid var(--border)" }}>
         {user && (
           <div
+            title={collapsed ? `${user.name} — ${user.email}` : undefined}
             style={{
               display: "flex",
               alignItems: "center",
+              justifyContent: collapsed ? "center" : "flex-start",
               gap: 10,
               marginBottom: 12,
               padding: "8px",
@@ -521,37 +624,40 @@ export default function Sidebar() {
             >
               {user.name?.charAt(0).toUpperCase()}
             </div>
-            <div style={{ minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: "var(--text-primary)",
-                  fontFamily: "var(--font-main)",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {user.name}
+            {!collapsed && (
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-primary)",
+                    fontFamily: "var(--font-main)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {user.name}
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "var(--text-muted)",
+                    marginTop: 1,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {user.email}
+                </div>
               </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "var(--text-muted)",
-                  marginTop: 1,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {user.email}
-              </div>
-            </div>
+            )}
           </div>
         )}
         <button
           onClick={toggleTheme}
+          title={collapsed ? (theme === "dark" ? "Light Mode" : "Dark Mode") : undefined}
           style={{
             width: "100%",
             padding: "9px",
@@ -594,10 +700,11 @@ export default function Sidebar() {
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
           )}
-          {theme === "dark" ? "Light Mode" : "Dark Mode"}
+          {!collapsed && (theme === "dark" ? "Light Mode" : "Dark Mode")}
         </button>
         <button
           onClick={logout}
+          title={collapsed ? "Sign Out" : undefined}
           style={{
             width: "100%",
             padding: "9px",
@@ -635,7 +742,7 @@ export default function Sidebar() {
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg>
-          Sign Out
+          {!collapsed && "Sign Out"}
         </button>
       </div>
     </aside>
