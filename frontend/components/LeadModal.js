@@ -356,19 +356,6 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
               </Field>
             </div>
 
-            {/* Last Message — full width */}
-            <div style={{ gridColumn: "1/-1" }}>
-              <Field label="Last Message">
-                <input
-                  name="last_message"
-                  value={form.last_message}
-                  onChange={handle}
-                  placeholder="What was the last thing discussed?"
-                  style={inp}
-                />
-              </Field>
-            </div>
-
             {/* Follow-up Date */}
             <Field label="Next Follow-up Date & Time">
               <input
@@ -395,7 +382,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
             </div>
           </div>
 
-          {/* Conversation Log — only once the lead exists */}
+          {/* Remarks — only once the lead exists */}
           {lead?.id && (
             <div style={{ marginTop: 18 }}>
               <div
@@ -409,7 +396,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                   fontFamily: "var(--font-main)",
                 }}
               >
-                Conversation Log
+                Remarks
               </div>
 
               <div
@@ -430,7 +417,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                       textAlign: "center",
                     }}
                   >
-                    No conversation logged yet
+                    No remarks logged yet
                   </div>
                 ) : (
                   messages.map((m) => (
@@ -488,7 +475,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                 <input
                   value={newMsg}
                   onChange={(e) => setNewMsg(e.target.value)}
-                  placeholder="What was discussed on this date?"
+                  placeholder="Add a remark..."
                   style={inp}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
