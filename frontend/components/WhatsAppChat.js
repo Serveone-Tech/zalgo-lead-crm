@@ -16,7 +16,7 @@ function fmtTime(d) {
 // (including images/files Meta hands us) and outbound replies sent live
 // through the tenant's own connected WhatsApp number, in one scrolling
 // view instead of a flat note log.
-export default function WhatsAppChat({ leadId }) {
+export default function WhatsAppChat({ leadId, fullHeight = false }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
@@ -86,16 +86,18 @@ export default function WhatsAppChat({ leadId }) {
   };
 
   return (
-    <div>
+    <div style={fullHeight ? { display: "flex", flexDirection: "column", height: "100%" } : undefined}>
       <div
         style={{
-          maxHeight: 320,
-          minHeight: 160,
+          ...(fullHeight ? { flex: 1, minHeight: 0 } : { maxHeight: 320, minHeight: 160 }),
           overflowY: "auto",
           border: "1px solid var(--border)",
-          borderRadius: 8,
-          marginBottom: 10,
-          padding: "10px 10px 4px",
+          borderRadius: fullHeight ? 0 : 8,
+          borderLeft: fullHeight ? "none" : undefined,
+          borderRight: fullHeight ? "none" : undefined,
+          borderTop: fullHeight ? "none" : undefined,
+          marginBottom: fullHeight ? 0 : 10,
+          padding: fullHeight ? "16px 20px" : "10px 10px 4px",
           background: "var(--bg-surface)",
           display: "flex",
           flexDirection: "column",
@@ -164,10 +166,10 @@ export default function WhatsAppChat({ leadId }) {
       </div>
 
       {error && (
-        <div style={{ fontSize: 11, color: "var(--danger)", marginBottom: 8 }}>⚠ {error}</div>
+        <div style={{ fontSize: 11, color: "var(--danger)", margin: fullHeight ? "8px 20px 0" : "0 0 8px" }}>⚠ {error}</div>
       )}
 
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, flexShrink: 0, ...(fullHeight ? { padding: "14px 20px", borderTop: "1px solid var(--border)", background: "var(--bg-card)" } : {}) }}>
         <input
           ref={fileRef}
           type="file"
