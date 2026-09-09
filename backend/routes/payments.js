@@ -231,6 +231,10 @@ router.post("/addon/verify", auth, requireOwner, async (req, res) => {
     const newLimit = currentLimit === -1 ? -1 : currentLimit + purchase.seats_added;
     await pool.query("UPDATE subscriptions SET employee_limit_override=$1 WHERE id=$2", [newLimit, sub.id]);
 
+    const userRow = await pool.query("SELECT name, email FROM users WHERE id=$1", [req.userId]);
+    const u = userRow.rows[0];
+    if (u) mailer.sendAddonPurchased(u.email, u.name, purchase.seats_added, newLimit, purchase.amount);
+
     res.json({ success: true, seats_added: purchase.seats_added, new_limit: newLimit });
   } catch (e) {
     console.error("Razorpay addon verify failed:", e.message);

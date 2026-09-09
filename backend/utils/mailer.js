@@ -11,12 +11,17 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
 }
 
+// The "light" logo (dark wordmark, transparent background) only reads on a
+// light banner — a dark/teal header would swallow it, so the header stays
+// white instead of the old teal gradient just for this image to work.
+const LOGO_URL = `${process.env.PUBLIC_API_URL || "https://lead-management.zalgostore.com"}/logo_light.png`;
+
 function wrap(body) {
   return `
 <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:auto;background:#0a1523;border-radius:14px;overflow:hidden">
-  <div style="background:linear-gradient(135deg,#00868a 0%,#005f6b 100%);padding:28px 32px">
-    <div style="color:#fff;font-size:22px;font-weight:800;letter-spacing:-0.3px">Zalgo CRM</div>
-    <div style="color:rgba(255,255,255,0.65);font-size:11px;margin-top:3px;letter-spacing:0.14em;text-transform:uppercase">Lead Management System</div>
+  <div style="background:#ffffff;padding:24px 32px">
+    <img src="${LOGO_URL}" alt="Zalgo Infotech" style="height:32px;display:block" />
+    <div style="color:#5a7a96;font-size:11px;margin-top:8px;letter-spacing:0.14em;text-transform:uppercase">Lead Management System</div>
   </div>
   <div style="background:#0f1923;padding:32px;border:1px solid #1e3040;border-top:none">
     ${body}
@@ -106,6 +111,31 @@ async function sendPlanActivated(email, name, planName, billingCycle, endsAt) {
       </table>
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">You now have full access to all features included in the ${planName} plan. Login to your dashboard to get started.</p>
+  `));
+}
+
+// ── EMPLOYEE SEAT ADD-ON PURCHASED ──────────────────────────────
+async function sendAddonPurchased(email, name, seatsAdded, newLimit, amount) {
+  await send(email, `${seatsAdded} employee seats added — Zalgo CRM`, wrap(`
+    <h2 style="color:#00c4ca;margin:0 0 8px">Seats Added ✅</h2>
+    <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your payment went through and your plan's seat limit has been increased.</p>
+    <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="color:#5a7a96;font-size:12px;padding:6px 0;text-transform:uppercase;letter-spacing:0.06em">Seats Added</td>
+          <td style="color:#e2e8f0;font-size:14px;font-weight:600;padding:6px 0;text-align:right">+${seatsAdded}</td>
+        </tr>
+        <tr>
+          <td style="color:#5a7a96;font-size:12px;padding:6px 0;text-transform:uppercase;letter-spacing:0.06em">New Total Limit</td>
+          <td style="color:#00c4ca;font-size:14px;font-weight:600;padding:6px 0;text-align:right">${newLimit === -1 ? "Unlimited" : newLimit}</td>
+        </tr>
+        <tr>
+          <td style="color:#5a7a96;font-size:12px;padding:6px 0;text-transform:uppercase;letter-spacing:0.06em">Amount Paid</td>
+          <td style="color:#e2e8f0;font-size:14px;font-weight:600;padding:6px 0;text-align:right">₹${amount}</td>
+        </tr>
+      </table>
+    </div>
+    <p style="color:#94a3b8;font-size:13px;margin:0">These seats stay on your account until you or a Super Admin change them — no separate renewal needed.</p>
   `));
 }
 
@@ -234,6 +264,7 @@ module.exports = {
   sendRegisterOtp,
   sendTrialStarted,
   sendPlanActivated,
+  sendAddonPurchased,
   sendPlanExtended,
   sendExpiryReminder,
   sendPlanExpired,
