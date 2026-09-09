@@ -28,10 +28,13 @@ router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requ
     const vis = visibilityClause(req, 2);
     const result = await pool.query(
       `SELECT c.*, u.name AS assigned_to_name,
-        COALESCE(SUM(co.advance_paid),0) AS total_collected,
-        COALESCE(SUM(co.amount),0) AS total_order_value,
         -- Cancelled/returned orders (stage flagged excludes_dues) no longer
-        -- count toward what's still owed — the sale isn't happening.
+        -- count as a real sale at all — excluded from order value and
+        -- collected the same way they're already excluded from what's
+        -- still owed, so Total = Collected + Pending always reconciles
+        -- instead of a cancelled order's value silently inflating Total.
+        COALESCE(SUM(CASE WHEN NOT COALESCE(os_due.excludes_dues,false) THEN co.advance_paid ELSE 0 END),0) AS total_collected,
+        COALESCE(SUM(CASE WHEN NOT COALESCE(os_due.excludes_dues,false) THEN co.amount ELSE 0 END),0) AS total_order_value,
         COALESCE(SUM(CASE WHEN co.payment_type='cod' AND NOT COALESCE(os_due.excludes_dues,false) THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
         (SELECT MIN(co2.next_due_date) FROM customer_orders co2
          LEFT JOIN order_stages os2 ON os2.user_id=co2.user_id AND os2.name=co2.stage
