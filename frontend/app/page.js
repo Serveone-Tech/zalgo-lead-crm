@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Poppins } from "next/font/google";
 import {
   ArrowRight,
   Check,
@@ -34,6 +35,11 @@ import HeroSalesMockup from "../components/mockups/HeroSalesMockup";
 import CustomerJourney from "../components/CustomerJourney";
 import FaqAccordion from "../components/FaqAccordion";
 import TrialSignupForm from "../components/TrialSignupForm";
+
+// The reference design uses a rounder, more geometric display face than
+// the app's own Inter — scoped to just this page (not the shared
+// --font-main used by the authenticated app) via next/font/google.
+const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], display: "swap" });
 
 const inboxChannels = [
   { icon: <MetaGlyph size={30} />, title: "Meta Lead Forms", desc: "New enquiries, automatically captured" },
@@ -74,7 +80,7 @@ export default function HomePage() {
   if (!checked) return null;
 
   return (
-    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className={poppins.className} style={{ background: "#fff", color: ink }}>
       <MarketingNav />
 
       {/* ══════════════════ HERO ══════════════════ */}
@@ -336,6 +342,11 @@ export default function HomePage() {
         @keyframes floatCardA { 0%,100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
         @keyframes floatCardB { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
         @keyframes floatCardC { 0%,100% { transform: translateY(0); } 50% { transform: translateY(7px); } }
+
+        /* Shared hover treatment for feature/step/industry cards — nothing
+           stays highlighted permanently, it only lifts on actual hover. */
+        .hover-lift { transition: transform 0.28s cubic-bezier(0.16,1,0.3,1), box-shadow 0.28s ease, border-color 0.28s ease; cursor: default; }
+        .hover-lift:hover { transform: translateY(-7px); box-shadow: 0 20px 40px rgba(20,30,35,0.14); border-color: #00868a !important; }
       `}</style>
 
       {/* ══════════════════ EVERY LEAD ONE SMART INBOX ══════════════════ */}
@@ -352,6 +363,7 @@ export default function HomePage() {
             <Reveal
               key={c.title}
               delay={i * 0.08}
+              className="hover-lift"
               style={{ border: `1px solid ${border}`, borderRadius: 12, padding: "26px 16px", textAlign: "center" }}
             >
               <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6, marginBottom: 14 }}>
@@ -469,8 +481,9 @@ export default function HomePage() {
                 0{i + 1}
               </div>
               <div
+                className="hover-lift"
                 style={{
-                  border: `1px solid ${i === 3 ? teal : border}`,
+                  border: `1px solid ${border}`,
                   borderRadius: 12,
                   padding: "22px 16px",
                   height: "100%",
@@ -827,7 +840,7 @@ export default function HomePage() {
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, marginBottom: 40 }}>
           {industries.map((ind, i) => (
-            <Reveal key={ind.title} delay={(i % 3) * 0.08} style={{ border: `1px solid ${border}`, borderRadius: 14, padding: 22, borderTop: `3px solid ${teal}` }}>
+            <Reveal key={ind.title} delay={(i % 3) * 0.08} className="hover-lift" style={{ border: `1px solid ${border}`, borderRadius: 14, padding: 22, borderTop: `3px solid ${teal}` }}>
               <div style={{ width: 46, height: 46, borderRadius: "50%", background: "rgba(0,134,138,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
                 {ind.icon}
               </div>

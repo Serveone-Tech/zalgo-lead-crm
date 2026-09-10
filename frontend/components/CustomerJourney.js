@@ -119,9 +119,12 @@ export default function CustomerJourney() {
 
   return (
     <div style={{ maxWidth: 1140, margin: "0 auto", padding: "0 48px 96px" }}>
-      {/* Tab bar */}
+      {/* Tab bar — a sliding capsule glides behind whichever tab is active
+          instead of the fill just appearing/disappearing, and the panel
+          below fades+slides in fresh on every switch. */}
       <div
         style={{
+          position: "relative",
           display: "grid",
           gridTemplateColumns: "repeat(4,1fr)",
           background: "#fff",
@@ -131,12 +134,27 @@ export default function CustomerJourney() {
           marginBottom: 0,
         }}
       >
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: `${active * 25}%`,
+            width: "25%",
+            background: teal,
+            borderRadius: 0,
+            transition: "left 0.38s cubic-bezier(0.65,0,0.35,1)",
+            zIndex: 0,
+          }}
+        />
         {TABS.map((t, i) => {
           const isActive = i === active;
           return (
             <button
               key={t.key}
               onClick={() => setActive(i)}
+              className="journey-tab-btn"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -145,13 +163,14 @@ export default function CustomerJourney() {
                 padding: "16px 10px",
                 border: "none",
                 borderRight: i < 3 ? `1px solid ${border}` : "none",
-                background: isActive ? teal : "transparent",
+                background: "transparent",
                 color: isActive ? "#fff" : ink,
                 fontSize: 13.5,
                 fontWeight: 700,
                 cursor: "pointer",
                 position: "relative",
-                transition: "background 0.2s, color 0.2s",
+                zIndex: 1,
+                transition: "color 0.25s ease",
               }}
             >
               <span style={{ fontSize: 11, opacity: 0.7 }}>0{i + 1}</span>
@@ -166,6 +185,7 @@ export default function CustomerJourney() {
                     width: 14,
                     height: 14,
                     background: teal,
+                    transition: "left 0.38s cubic-bezier(0.65,0,0.35,1)",
                   }}
                 />
               )}
@@ -173,6 +193,14 @@ export default function CustomerJourney() {
           );
         })}
       </div>
+      <style>{`
+        .journey-tab-btn:hover { color: #00868a; }
+        @keyframes journeyPanelIn {
+          from { opacity: 0; transform: translateY(14px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .journey-panel { animation: journeyPanelIn 0.45s cubic-bezier(0.16,1,0.3,1); }
+      `}</style>
 
       {/* Panel */}
       <div
@@ -181,9 +209,10 @@ export default function CustomerJourney() {
           borderRadius: 16,
           padding: "44px 44px",
           marginTop: 26,
+          overflow: "hidden",
         }}
       >
-        <div key={tab.key} style={{ display: "grid", gridTemplateColumns: "0.95fr 1.15fr", gap: 48, alignItems: "start" }}>
+        <div key={tab.key} className="journey-panel" style={{ display: "grid", gridTemplateColumns: "0.95fr 1.15fr", gap: 48, alignItems: "start" }}>
           <Reveal>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: teal, letterSpacing: "0.12em", marginBottom: 14 }}>{tab.step}</div>
             <h3 style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.22, marginBottom: 16, color: ink }}>{tab.headline}</h3>
