@@ -2,9 +2,23 @@
 import { ink, sub } from "../lib/marketing-theme";
 import Reveal from "./Reveal";
 
-export default function SectionHeading({ children, subtitle, align = "center" }) {
+export default function SectionHeading({ children, subtitle, align = "center", eyebrow }) {
   return (
     <Reveal style={{ textAlign: align, marginBottom: subtitle ? 14 : 44 }}>
+      {eyebrow && (
+        <div
+          style={{
+            fontSize: 11.5,
+            fontWeight: 700,
+            color: "#00868a",
+            letterSpacing: "0.14em",
+            textTransform: "uppercase",
+            marginBottom: 12,
+          }}
+        >
+          {eyebrow}
+        </div>
+      )}
       <h2
         style={{
           fontSize: 30,
