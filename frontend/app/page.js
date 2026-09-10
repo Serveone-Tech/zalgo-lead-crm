@@ -100,7 +100,7 @@ export default function HomePage() {
           style={{
             maxWidth: 1400,
             margin: "0 auto",
-            padding: "64px 48px 100px",
+            padding: "48px 48px 64px",
             display: "grid",
             gridTemplateColumns: "0.85fr 1.15fr",
             gap: 40,
@@ -350,7 +350,7 @@ export default function HomePage() {
       `}</style>
 
       {/* ══════════════════ EVERY LEAD ONE SMART INBOX ══════════════════ */}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "96px 48px 40px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "56px 48px 32px" }}>
         <SectionHeading
           eyebrow="Automated Lead Capture"
           subtitle="Capture Meta forms, calls and WhatsApp enquiries in one place. Give your team a clear next step for every lead."
@@ -446,7 +446,7 @@ export default function HomePage() {
       </div>
 
       {/* ══════════════════ HOW ZALGO CRM WORKS ══════════════════ */}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "80px 48px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "56px 48px" }}>
         <SectionHeading
           eyebrow="How Zalgo CRM Works"
           subtitle="A clear next step for every lead — from capture to follow-up, order and delivery."
@@ -526,7 +526,7 @@ export default function HomePage() {
       </div>
 
       {/* ══════════════════ ONE WHATSAPP NUMBER, YOUR ENTIRE TEAM ══════════════════ */}
-      <div style={{ background: "#eef8f7", padding: "80px 48px" }}>
+      <div style={{ background: "#eef8f7", padding: "56px 48px" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto" }}>
           <div style={{ display: "grid", gridTemplateColumns: "0.85fr 1.15fr", gap: 48, alignItems: "center", marginBottom: 48 }}>
             <Reveal>
@@ -638,7 +638,7 @@ export default function HomePage() {
       </div>
 
       {/* ══════════════════ COMPLETE CUSTOMER JOURNEY (interactive tabs) ══════════════════ */}
-      <div style={{ padding: "96px 0 0" }}>
+      <div style={{ padding: "56px 0 0" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 48px" }}>
           <SectionHeading eyebrow="The Complete Customer Journey" subtitle="Capture enquiries, follow up, confirm orders and track delivery.">
             One lead. <span style={{ color: teal }}>A clear journey.</span>
@@ -648,7 +648,7 @@ export default function HomePage() {
       </div>
 
       {/* ══════════════════ CLOSE THE SALE (dark) ══════════════════ */}
-      <div style={{ background: "linear-gradient(120deg, #0b3a3c 0%, #06282a 100%)", padding: "90px 48px" }}>
+      <div style={{ background: "linear-gradient(120deg, #0b3a3c 0%, #06282a 100%)", padding: "60px 48px" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto", display: "grid", gridTemplateColumns: "0.85fr 1.15fr", gap: 48, alignItems: "center" }}>
           <Reveal>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: "#7fd6d0", letterSpacing: "0.12em", marginBottom: 14 }}>
@@ -736,7 +736,7 @@ export default function HomePage() {
       </div>
 
       {/* ══════════════════ SALE CONFIRMED (darker) ══════════════════ */}
-      <div style={{ background: "#04181a", padding: "90px 48px" }}>
+      <div style={{ background: "#04181a", padding: "60px 48px" }}>
         <div style={{ maxWidth: 1400, margin: "0 auto", display: "grid", gridTemplateColumns: "0.85fr 1.15fr", gap: 48, alignItems: "center", position: "relative" }}>
           <AnimatedDots width={90} height={180} color="rgba(0,168,173,0.3)" style={{ position: "absolute", left: -50, bottom: 0 }} />
           <Reveal>
@@ -833,7 +833,7 @@ export default function HomePage() {
       </div>
 
       {/* ══════════════════ BUILT FOR YOUR SALES WORKFLOW ══════════════════ */}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "96px 48px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "60px 48px" }}>
         <SectionHeading eyebrow="Built for Your Sales Workflow" subtitle="For teams that turn enquiries into customers.">
           Different businesses. <span style={{ color: teal }}>One connected CRM.</span>
         </SectionHeading>
@@ -863,7 +863,7 @@ export default function HomePage() {
       </div>
 
       {/* ══════════════════ 15-DAY FREE TRIAL FORM ══════════════════ */}
-      <div style={{ background: "#eef8f7", padding: "90px 48px", position: "relative", overflow: "hidden" }}>
+      <div style={{ background: "#eef8f7", padding: "60px 48px", position: "relative", overflow: "hidden" }}>
         <AnimatedDots width={70} height={280} style={{ position: "absolute", left: 0, bottom: 0 }} />
         <div style={{ maxWidth: 1400, margin: "0 auto", display: "grid", gridTemplateColumns: "0.95fr 1.05fr", gap: 56, alignItems: "center", position: "relative" }}>
           <Reveal>
@@ -920,7 +920,7 @@ export default function HomePage() {
       </div>
 
       {/* ══════════════════ FAQ ══════════════════ */}
-      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "96px 48px" }}>
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "60px 48px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "0.75fr 1.25fr", gap: 56 }}>
           <Reveal>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: teal, letterSpacing: "0.12em", marginBottom: 14 }}>

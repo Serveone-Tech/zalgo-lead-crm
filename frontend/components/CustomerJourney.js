@@ -118,7 +118,7 @@ export default function CustomerJourney() {
   const tab = TABS[active];
 
   return (
-    <div style={{ maxWidth: 1140, margin: "0 auto", padding: "0 48px 96px" }}>
+    <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 48px 56px" }}>
       {/* Tab bar — a sliding capsule glides behind whichever tab is active
           instead of the fill just appearing/disappearing, and the panel
           below fades+slides in fresh on every switch. */}
@@ -207,8 +207,8 @@ export default function CustomerJourney() {
         style={{
           background: "#eef8f7",
           borderRadius: 16,
-          padding: "44px 44px",
-          marginTop: 26,
+          padding: "36px 40px",
+          marginTop: 20,
           overflow: "hidden",
         }}
       >
