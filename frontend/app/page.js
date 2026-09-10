@@ -381,9 +381,9 @@ export default function HomePage() {
               fill="none"
               stroke={teal}
               strokeWidth="2"
-              strokeDasharray={i === 3 ? "6 6" : "0"}
+              strokeDasharray="6 6"
               markerEnd={i === 3 ? "url(#flowArrow)" : undefined}
-              className={i === 3 ? "flow-path" : ""}
+              className="flow-path"
               style={{ animationDelay: `${i * 0.15}s` }}
             />
           ))}
