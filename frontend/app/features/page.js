@@ -12,8 +12,10 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { teal, ink, sub, muted, border } from "../../lib/marketing-theme";
+import { poppins } from "../../lib/marketing-font";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import MarketingStyles from "../../components/MarketingStyles";
 import Reveal from "../../components/Reveal";
 import SectionHeading from "../../components/SectionHeading";
 import DashboardMockup from "../../components/mockups/DashboardMockup";
@@ -71,7 +73,7 @@ const STATS = [
 export default function FeaturesPage() {
   const router = useRouter();
   return (
-    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif", overflow: "hidden" }}>
+    <div className={`${poppins.className} mk-page`} style={{ background: "#fff", color: ink, overflow: "hidden" }}>
       <MarketingNav />
 
       <div style={{ position: "relative" }}>
@@ -115,7 +117,7 @@ export default function FeaturesPage() {
         </Reveal>
       </div>
 
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "88px 48px 96px" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "56px 48px 64px" }}>
         <SectionHeading subtitle="Eight modules that cover the whole journey — capturing a lead, working it, fulfilling the order, and reporting on how the business is doing.">
           Built for the <span style={{ color: teal }}>Whole Sales Process</span>
         </SectionHeading>
@@ -123,7 +125,7 @@ export default function FeaturesPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20 }}>
           {FEATURES.map((f, i) => (
             <Reveal key={f.title} delay={(i % 4) * 0.08}>
-              <div className="feature-card" style={{ border: `1px solid ${border}`, borderRadius: 14, padding: "24px 20px" }}>
+              <div className="hover-lift" style={{ border: `1px solid ${border}`, borderRadius: 14, padding: "24px 20px" }}>
                 <div
                   style={{
                     width: 44,
@@ -146,17 +148,7 @@ export default function FeaturesPage() {
         </div>
       </div>
 
-      <style>{`
-        .feature-card {
-          transition: transform 0.25s, box-shadow 0.25s;
-        }
-        .feature-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 16px 32px rgba(20,30,35,0.1);
-        }
-      `}</style>
-
-      <Reveal as="div" style={{ padding: "0 48px 80px" }}>
+      <Reveal as="div" style={{ padding: "0 48px 56px" }}>
         <div
           style={{
             maxWidth: 1140,
@@ -198,6 +190,7 @@ export default function FeaturesPage() {
       </Reveal>
 
       <MarketingFooter />
+      <MarketingStyles />
     </div>
   );
 }

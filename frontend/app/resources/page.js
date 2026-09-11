@@ -2,8 +2,10 @@
 import { useRouter } from "next/navigation";
 import { Rocket, BookOpen, HelpCircle, ArrowRight } from "lucide-react";
 import { teal, ink, sub, border } from "../../lib/marketing-theme";
+import { poppins } from "../../lib/marketing-font";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import MarketingStyles from "../../components/MarketingStyles";
 import Reveal from "../../components/Reveal";
 
 const RESOURCES = [
@@ -27,7 +29,7 @@ const RESOURCES = [
 export default function ResourcesPage() {
   const router = useRouter();
   return (
-    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className={`${poppins.className} mk-page`} style={{ background: "#fff", color: ink }}>
       <MarketingNav />
 
       <Reveal style={{ maxWidth: 1180, margin: "0 auto", padding: "72px 48px 24px", textAlign: "center" }}>
@@ -40,12 +42,13 @@ export default function ResourcesPage() {
         </p>
       </Reveal>
 
-      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "48px 48px 96px" }}>
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 48px 56px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           {RESOURCES.map((r, i) => (
             <Reveal
               key={r.title}
               delay={i * 0.08}
+              className="hover-lift"
               style={{
                 border: `1px solid ${border}`,
                 borderRadius: 14,
@@ -112,6 +115,7 @@ export default function ResourcesPage() {
       </div>
 
       <MarketingFooter />
+      <MarketingStyles />
     </div>
   );
 }

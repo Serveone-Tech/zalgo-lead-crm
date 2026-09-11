@@ -2,8 +2,10 @@
 import { useRouter } from "next/navigation";
 import { Phone, TrendingUp, GraduationCap, ShoppingBag, Download, UserPlus, Send, Target, ArrowRight, CheckCircle2 } from "lucide-react";
 import { teal, ink, sub, border } from "../../lib/marketing-theme";
+import { poppins } from "../../lib/marketing-font";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import MarketingStyles from "../../components/MarketingStyles";
 import SectionHeading from "../../components/SectionHeading";
 import Reveal from "../../components/Reveal";
 import LeadsMockup from "../../components/mockups/LeadsMockup";
@@ -45,7 +47,7 @@ const steps = [
 export default function SolutionsPage() {
   const router = useRouter();
   return (
-    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif", overflow: "hidden" }}>
+    <div className={`${poppins.className} mk-page`} style={{ background: "#fff", color: ink, overflow: "hidden" }}>
       <MarketingNav />
 
       <div style={{ position: "relative" }}>
@@ -77,13 +79,13 @@ export default function SolutionsPage() {
         </Reveal>
       </div>
 
-      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "88px 48px 40px" }}>
+      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "56px 48px 32px" }}>
         <SectionHeading subtitle="Four kinds of teams lean on Zalgo CRM every day — here's exactly what it does for each.">
           Who It&apos;s <span style={{ color: teal }}>Built For</span>
         </SectionHeading>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>
           {AUDIENCES.map((a, i) => (
-            <Reveal key={a.title} delay={(i % 2) * 0.1} style={{ border: `1px solid ${border}`, borderRadius: 14, padding: "28px 26px" }}>
+            <Reveal key={a.title} delay={(i % 2) * 0.1} className="hover-lift" style={{ border: `1px solid ${border}`, borderRadius: 14, padding: "28px 26px" }}>
               <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
                 <div
                   style={{
@@ -117,7 +119,7 @@ export default function SolutionsPage() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "56px 48px 96px" }}>
+      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "32px 48px 56px" }}>
         <SectionHeading subtitle="Four steps, start to finish — every lead follows the same reliable path from the moment it lands to a converted customer.">
           From First Enquiry to <span style={{ color: teal }}>Conversion</span>
         </SectionHeading>
@@ -160,7 +162,7 @@ export default function SolutionsPage() {
         </div>
       </div>
 
-      <Reveal as="div" style={{ padding: "0 48px 80px" }}>
+      <Reveal as="div" style={{ padding: "0 48px 56px" }}>
         <div
           style={{
             maxWidth: 1140,
@@ -202,6 +204,7 @@ export default function SolutionsPage() {
       </Reveal>
 
       <MarketingFooter />
+      <MarketingStyles />
     </div>
   );
 }

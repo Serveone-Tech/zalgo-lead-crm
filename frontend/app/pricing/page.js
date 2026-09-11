@@ -4,9 +4,11 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { Check, ArrowRight } from "lucide-react";
 import { teal, ink, sub, muted, border } from "../../lib/marketing-theme";
+import { poppins } from "../../lib/marketing-font";
 import { FEATURE_LABELS } from "../../lib/plan-features";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import MarketingStyles from "../../components/MarketingStyles";
 import Reveal from "../../components/Reveal";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -46,7 +48,7 @@ export default function PricingPage() {
   ];
 
   return (
-    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className={`${poppins.className} mk-page`} style={{ background: "#fff", color: ink }}>
       <MarketingNav />
 
       <Reveal style={{ maxWidth: 1180, margin: "0 auto", padding: "72px 48px 24px", textAlign: "center" }}>
@@ -59,7 +61,7 @@ export default function PricingPage() {
         </p>
       </Reveal>
 
-      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "40px 48px 96px" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto", padding: "32px 48px 56px" }}>
         {loading ? (
           <div style={{ textAlign: "center", color: muted, padding: 60 }}>Loading plans...</div>
         ) : (
@@ -70,7 +72,7 @@ export default function PricingPage() {
                 <Reveal
                   key={p.id}
                   delay={i * 0.08}
-                  className="price-card"
+                  className="hover-lift"
                   style={{
                     border: highlighted ? `2px solid ${teal}` : `1px solid ${border}`,
                     borderRadius: 16,
@@ -151,16 +153,8 @@ export default function PricingPage() {
         )}
       </div>
 
-      <style>{`
-        .price-card {
-          transition: box-shadow 0.25s;
-        }
-        .price-card:hover {
-          box-shadow: 0 20px 44px rgba(20,30,35,0.12);
-        }
-      `}</style>
-
       <MarketingFooter />
+      <MarketingStyles />
     </div>
   );
 }

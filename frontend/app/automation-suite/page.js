@@ -2,9 +2,11 @@
 import { useRouter } from "next/navigation";
 import { MessagesSquare, Mail, ArrowRight, Zap } from "lucide-react";
 import { teal, ink, sub, muted, border } from "../../lib/marketing-theme";
+import { poppins } from "../../lib/marketing-font";
 import { WhatsAppGlyph } from "../../components/BrandIcons";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import MarketingStyles from "../../components/MarketingStyles";
 import SectionHeading from "../../components/SectionHeading";
 import Reveal from "../../components/Reveal";
 import AutomationMockup from "../../components/mockups/AutomationMockup";
@@ -39,7 +41,7 @@ const TRIGGERS = [
 export default function AutomationSuitePage() {
   const router = useRouter();
   return (
-    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif", overflow: "hidden" }}>
+    <div className={`${poppins.className} mk-page`} style={{ background: "#fff", color: ink, overflow: "hidden" }}>
       <MarketingNav />
 
       <div style={{ position: "relative" }}>
@@ -87,7 +89,7 @@ export default function AutomationSuitePage() {
         </Reveal>
       </div>
 
-      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "88px 48px 40px" }}>
+      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "56px 48px 32px" }}>
         <SectionHeading subtitle="Three channels, one setup — connect them once and every automated trigger can reach a lead however they actually prefer to be contacted.">
           Three Channels, <span style={{ color: teal }}>One Setup</span>
         </SectionHeading>
@@ -96,6 +98,7 @@ export default function AutomationSuitePage() {
             <Reveal
               key={c.title}
               delay={i * 0.1}
+              className="hover-lift"
               style={{ border: `1px solid ${border}`, borderRadius: 14, padding: "28px 22px", textAlign: "center" }}
             >
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>{c.icon}</div>
@@ -106,7 +109,7 @@ export default function AutomationSuitePage() {
         </div>
       </div>
 
-      <div style={{ background: "#f7fafa", padding: "72px 48px" }}>
+      <div style={{ background: "#f7fafa", padding: "48px 48px" }}>
         <div style={{ maxWidth: 1140, margin: "0 auto", display: "grid", gridTemplateColumns: "0.9fr 1.1fr", gap: 56, alignItems: "center" }}>
           <Reveal>
             <h3 style={{ fontSize: 27, fontWeight: 700, lineHeight: 1.3, marginBottom: 14 }}>
@@ -167,7 +170,7 @@ export default function AutomationSuitePage() {
         </div>
       </div>
 
-      <Reveal as="div" style={{ padding: "80px 48px" }}>
+      <Reveal as="div" style={{ padding: "56px 48px" }}>
         <div
           style={{
             maxWidth: 1140,
@@ -211,6 +214,7 @@ export default function AutomationSuitePage() {
       </Reveal>
 
       <MarketingFooter />
+      <MarketingStyles />
     </div>
   );
 }

@@ -3,8 +3,10 @@ import { useState } from "react";
 import axios from "axios";
 import { Mail, Send, CheckCircle2 } from "lucide-react";
 import { teal, ink, sub, muted, border } from "../../lib/marketing-theme";
+import { poppins } from "../../lib/marketing-font";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
+import MarketingStyles from "../../components/MarketingStyles";
 import Reveal from "../../components/Reveal";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -52,10 +54,10 @@ export default function ContactPage() {
   };
 
   return (
-    <div style={{ background: "#fff", color: ink, fontFamily: "'Inter', system-ui, sans-serif" }}>
+    <div className={`${poppins.className} mk-page`} style={{ background: "#fff", color: ink }}>
       <MarketingNav />
 
-      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "72px 48px 96px" }}>
+      <div style={{ maxWidth: 1140, margin: "0 auto", padding: "56px 48px 64px" }}>
         <Reveal style={{ textAlign: "center", marginBottom: 56 }}>
           <h1 style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 14 }}>
             Get in <span style={{ color: teal }}>Touch</span>
@@ -187,6 +189,7 @@ export default function ContactPage() {
       </div>
 
       <MarketingFooter />
+      <MarketingStyles />
     </div>
   );
 }
