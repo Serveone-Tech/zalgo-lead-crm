@@ -1,6 +1,6 @@
 const express = require("express");
 const { pool } = require("../db");
-const { findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue } = require("../utils/lead-dedup");
+const { findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue, withPhoneLock } = require("../utils/lead-dedup");
 const { savePendingLead } = require("../utils/pending-leads");
 const { downloadWhatsAppMedia } = require("../utils/whatsapp-media");
 
@@ -41,32 +41,45 @@ async function withinLeadLimit(tenantId) {
 // against the existing one if this phone already has a lead. `media` is
 // optional — {url, type, name} for an inbound image/document/etc.
 async function captureInboundMessage(tenantId, { phone, name, message, platform, media, waMessageId }) {
-  const existing = await findDuplicateLeadByPhone(tenantId, phone);
-  const leadId = existing
-    ? existing.id
-    : await (async () => {
-        if (!(await withinLeadLimit(tenantId))) {
-          console.log(`${platform} lead skipped — plan limit reached for tenant ${tenantId}`);
-          return null;
-        }
-        const { rows } = await pool.query(
-          `INSERT INTO leads (user_id, name, phone, platform, last_message, notes)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-          [
-            tenantId,
-            name || phone,
-            phone,
-            platform,
-            message,
-            `Auto-captured from incoming ${platform} message`,
-          ],
-        );
-        fireTrigger("new_lead", tenantId, { name: name || phone, phone, email: "" }).catch(() => {});
-        return rows[0].id;
-      })();
-  if (!leadId) return;
+  // withPhoneLock serialises this per tenant+phone — otherwise two
+  // messages arriving milliseconds apart (very common right after someone
+  // first messages in) could both see "no existing lead" and each insert
+  // their own, leaving the same number as two+ separate leads.
+  let leadId, existed;
+  try {
+    leadId = await withPhoneLock(tenantId, phone, async (client) => {
+      const existing = await findDuplicateLeadByPhone(tenantId, phone, null, client);
+      existed = !!existing;
+      if (existing) return existing.id;
 
-  if (existing) {
+      if (!(await withinLeadLimit(tenantId))) {
+        console.log(`${platform} lead skipped — plan limit reached for tenant ${tenantId}`);
+        return null;
+      }
+      const { rows } = await client.query(
+        `INSERT INTO leads (user_id, name, phone, platform, last_message, notes)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+        [
+          tenantId,
+          name || phone,
+          phone,
+          platform,
+          message,
+          `Auto-captured from incoming ${platform} message`,
+        ],
+      );
+      return rows[0].id;
+    });
+  } catch (e) {
+    console.error("captureInboundMessage lock/insert failed:", e.message);
+    return;
+  }
+  if (!leadId) return;
+  if (!existed) {
+    fireTrigger("new_lead", tenantId, { name: name || phone, phone, email: "" }).catch(() => {});
+  }
+
+  if (existed) {
     await pool.query(
       "UPDATE leads SET last_message=$1, updated_at=NOW() WHERE id=$2",
       [message, leadId],
@@ -108,10 +121,7 @@ router.post("/google-leads/:token", express.json(), async (req, res) => {
       return res.status(400).json({ message: "Lead has no phone or email" });
     }
 
-    if (phone) {
-      const dup = await findDuplicateLeadByPhone(tenantId, phone);
-      if (dup) return res.json({}); // already have this lead — ack, skip
-    } else {
+    if (!phone) {
       // No usable phone — park it for review instead of adding to Leads.
       await savePendingLead(tenantId, {
         name,
@@ -122,17 +132,32 @@ router.post("/google-leads/:token", express.json(), async (req, res) => {
       return res.json({ pending: true });
     }
 
-    if (!(await withinLeadLimit(tenantId))) {
-      return res.status(403).json({ message: "Lead limit reached for this plan" });
+    // Locked per tenant+phone — see captureInboundMessage above for why:
+    // Google can retry a lead-form submission, and without this two
+    // retries arriving close together could both pass the duplicate check
+    // and create two leads for the same phone number.
+    let isNew = false;
+    try {
+      await withPhoneLock(tenantId, phone, async (client) => {
+        const dup = await findDuplicateLeadByPhone(tenantId, phone, null, client);
+        if (dup) return; // already have this lead — ack, skip
+
+        if (!(await withinLeadLimit(tenantId))) {
+          throw Object.assign(new Error("Lead limit reached for this plan"), { limitReached: true });
+        }
+        await client.query(
+          `INSERT INTO leads (user_id, name, phone, email, platform, last_message, notes)
+           VALUES ($1,$2,$3,$4,'Google Ads','','Auto-captured from Google Ads Lead Form')`,
+          [tenantId, name, phone, email],
+        );
+        isNew = true;
+      });
+    } catch (e) {
+      if (e.limitReached) return res.status(403).json({ message: e.message });
+      throw e;
     }
 
-    await pool.query(
-      `INSERT INTO leads (user_id, name, phone, email, platform, last_message, notes)
-       VALUES ($1,$2,$3,$4,'Google Ads','','Auto-captured from Google Ads Lead Form')`,
-      [tenantId, name, phone, email],
-    );
-
-    fireTrigger("new_lead", tenantId, { name, phone, email }).catch(() => {});
+    if (isNew) fireTrigger("new_lead", tenantId, { name, phone, email }).catch(() => {});
 
     res.json({});
   } catch (e) {
@@ -301,10 +326,7 @@ router.post("/sheets/:token", express.json(), async (req, res) => {
       return res.status(400).json({ message: "Row has no name, phone, or email" });
     }
 
-    if (phone) {
-      const dup = await findDuplicateLeadByPhone(tenantId, phone);
-      if (dup) return res.json({ skipped: "duplicate" });
-    } else {
+    if (!phone) {
       // No usable phone — park it for review instead of adding to Leads.
       await savePendingLead(tenantId, {
         name,
@@ -313,10 +335,6 @@ router.post("/sheets/:token", express.json(), async (req, res) => {
         notes: notes || "Auto-captured from Google Sheet (no phone)",
       });
       return res.json({ pending: true });
-    }
-
-    if (!(await withinLeadLimit(tenantId))) {
-      return res.status(403).json({ message: "Lead limit reached for this plan" });
     }
 
     // If the sheet has its own submission timestamp, keep the lead's
@@ -332,19 +350,39 @@ router.post("/sheets/:token", express.json(), async (req, res) => {
       createdAt = created_at.trim();
     }
 
-    await pool.query(
-      `INSERT INTO leads (user_id, name, phone, email, platform, last_message, notes, created_at)
-       VALUES ($1,$2,$3,$4,$5,'',$6, COALESCE($7::timestamp, NOW()))`,
-      [
-        tenantId,
-        name || phone,
-        phone || "",
-        email || "",
-        platform || "Google Sheets",
-        notes || "Auto-captured from Google Sheet",
-        createdAt,
-      ],
-    );
+    // Locked per tenant+phone — a sync script re-running (or a sheet with
+    // the same row synced twice) can otherwise create duplicate leads the
+    // same way concurrent WhatsApp messages did (see captureInboundMessage).
+    let isNew = false;
+    try {
+      await withPhoneLock(tenantId, phone, async (client) => {
+        const dup = await findDuplicateLeadByPhone(tenantId, phone, null, client);
+        if (dup) return;
+
+        if (!(await withinLeadLimit(tenantId))) {
+          throw Object.assign(new Error("Lead limit reached for this plan"), { limitReached: true });
+        }
+        await client.query(
+          `INSERT INTO leads (user_id, name, phone, email, platform, last_message, notes, created_at)
+           VALUES ($1,$2,$3,$4,$5,'',$6, COALESCE($7::timestamp, NOW()))`,
+          [
+            tenantId,
+            name || phone,
+            phone || "",
+            email || "",
+            platform || "Google Sheets",
+            notes || "Auto-captured from Google Sheet",
+            createdAt,
+          ],
+        );
+        isNew = true;
+      });
+    } catch (e) {
+      if (e.limitReached) return res.status(403).json({ message: e.message });
+      throw e;
+    }
+
+    if (!isNew) return res.json({ skipped: "duplicate" });
 
     fireTrigger("new_lead", tenantId, { name: name || phone, phone, email }).catch(() => {});
 

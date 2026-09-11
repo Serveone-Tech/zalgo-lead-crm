@@ -25,8 +25,10 @@ const cleanPhoneValue = (phone) => {
 };
 
 // Find an existing lead in this tenant with the same phone number.
-// excludeId lets an update skip matching itself.
-async function findDuplicateLeadByPhone(tenantId, phone, excludeId = null) {
+// excludeId lets an update skip matching itself. Accepts an optional
+// `db` (a checked-out client) so callers inside withPhoneLock's
+// transaction can reuse the same connection instead of the shared pool.
+async function findDuplicateLeadByPhone(tenantId, phone, excludeId = null, db = pool) {
   const key = phoneKey(phone);
   if (!key) return null;
   const params = [tenantId, key];
@@ -38,8 +40,39 @@ async function findDuplicateLeadByPhone(tenantId, phone, excludeId = null) {
     query += ` AND id != $${params.length}`;
   }
   query += ` LIMIT 1`;
-  const { rows } = await pool.query(query, params);
+  const { rows } = await db.query(query, params);
   return rows[0] || null;
 }
 
-module.exports = { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue };
+// Serialises "does a lead with this phone already exist?" + "insert if not"
+// for a single tenant+phone so a burst of near-simultaneous webhook calls
+// (Meta retrying delivery, a Sheets sync firing twice, two WhatsApp
+// messages arriving within milliseconds of each other) can't all pass the
+// duplicate check before any of them commits an insert — which is exactly
+// how the same phone number ended up with 2-3 separate lead rows in
+// production. Postgres advisory locks are the fix: acquire one keyed to
+// (tenantId, phone) for the duration of a transaction, so a second caller
+// for the same tenant+phone blocks until the first has committed and its
+// new row is actually visible to the second caller's duplicate check.
+//
+// `fn(client)` receives a checked-out client already inside BEGIN, with
+// the lock held — do the SELECT-for-duplicate and the INSERT (if needed)
+// against `client`, not the shared pool, so they're part of the same
+// transaction the lock protects.
+async function withPhoneLock(tenantId, phone, fn) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock($1, hashtext($2))", [tenantId, phoneKey(phone)]);
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (e) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { phoneKey, findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue, withPhoneLock };
