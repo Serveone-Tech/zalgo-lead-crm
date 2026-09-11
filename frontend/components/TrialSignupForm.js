@@ -17,10 +17,21 @@ const inputStyle = {
   boxSizing: "border-box",
   fontFamily: "inherit",
 };
-const labelStyle = { display: "block", fontSize: 12.5, fontWeight: 700, color: ink, marginBottom: 6 };
+const labelStyle = {
+  display: "block",
+  fontSize: 12.5,
+  fontWeight: 700,
+  color: ink,
+  marginBottom: 6,
+};
 
 export default function TrialSignupForm() {
-  const [form, setForm] = useState({ name: "", company: "", email: "", phone: "" });
+  const [form, setForm] = useState({
+    name: "",
+    company: "",
+    email: "",
+    phone: "",
+  });
   const [status, setStatus] = useState("idle"); // idle | sending | done | error
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -48,36 +59,76 @@ export default function TrialSignupForm() {
     return (
       <div style={{ textAlign: "center", padding: "40px 10px" }}>
         <div style={{ fontSize: 34, marginBottom: 10 }}>✅</div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: ink, marginBottom: 6 }}>Request received!</div>
-        <div style={{ fontSize: 13.5, color: sub }}>Our team will reach out shortly to get your trial set up.</div>
+        <div
+          style={{ fontSize: 17, fontWeight: 700, color: ink, marginBottom: 6 }}
+        >
+          Request received!
+        </div>
+        <div style={{ fontSize: 13.5, color: sub }}>
+          Our team will reach out shortly to get your trial set up.
+        </div>
       </div>
     );
   }
 
   return (
     <form onSubmit={submit}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: 14,
+          marginBottom: 14,
+        }}
+      >
         <div>
           <label style={labelStyle}>Full name</label>
-          <input value={form.name} onChange={set("name")} placeholder="Your name" required style={inputStyle} />
+          <input
+            value={form.name}
+            onChange={set("name")}
+            placeholder="Your name"
+            required
+            style={inputStyle}
+          />
         </div>
         <div>
           <label style={labelStyle}>Business name</label>
-          <input value={form.company} onChange={set("company")} placeholder="Company or brand" style={inputStyle} />
+          <input
+            value={form.company}
+            onChange={set("company")}
+            placeholder="Company or brand"
+            style={inputStyle}
+          />
         </div>
       </div>
       <div style={{ marginBottom: 14 }}>
         <label style={labelStyle}>Work email</label>
-        <input type="email" value={form.email} onChange={set("email")} placeholder="you@company.com" required style={inputStyle} />
+        <input
+          type="email"
+          value={form.email}
+          onChange={set("email")}
+          placeholder="you@company.com"
+          required
+          style={inputStyle}
+        />
       </div>
       <div style={{ marginBottom: 6 }}>
         <label style={labelStyle}>Phone / WhatsApp</label>
-        <input value={form.phone} onChange={set("phone")} placeholder="Include country code" style={inputStyle} />
+        <input
+          value={form.phone}
+          onChange={set("phone")}
+          placeholder="Include country code"
+          style={inputStyle}
+        />
       </div>
-      <div style={{ fontSize: 11.5, color: muted, marginBottom: 18 }}>We will contact you about your trial request.</div>
+      <div style={{ fontSize: 11.5, color: muted, marginBottom: 18 }}>
+        We will contact you about your trial request.
+      </div>
 
       {status === "error" && (
-        <div style={{ fontSize: 12.5, color: "#c8372f", marginBottom: 12 }}>Something went wrong — please try again.</div>
+        <div style={{ fontSize: 12.5, color: "#c8372f", marginBottom: 12 }}>
+          Something went wrong — please try again.
+        </div>
       )}
 
       <button
@@ -100,18 +151,33 @@ export default function TrialSignupForm() {
           opacity: status === "sending" ? 0.7 : 1,
         }}
       >
-        {status === "sending" ? "Sending..." : "Get My 15-Day Free Trial"} <ArrowRight size={15} />
+        {status === "sending" ? "Sending..." : "Get My 15-Day Free Trial"}{" "}
+        <ArrowRight size={15} />
       </button>
 
-      <div style={{ textAlign: "center", fontSize: 11.5, color: muted, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${border}` }}>
+      <div
+        style={{
+          textAlign: "center",
+          fontSize: 11.5,
+          color: muted,
+          marginTop: 14,
+          paddingTop: 14,
+          borderTop: `1px solid ${border}`,
+        }}
+      >
         Our team will help you get started.
       </div>
-      <div style={{ textAlign: "center", fontSize: 12, color: sub, marginTop: 10 }}>
+      {/* <div
+        style={{ textAlign: "center", fontSize: 12, color: sub, marginTop: 10 }}
+      >
         Have questions?{" "}
-        <a href="mailto:sales@zalgoinfotech.com" style={{ color: teal, fontWeight: 600 }}>
+        <a
+          href="mailto:sales@zalgoinfotech.com"
+          style={{ color: teal, fontWeight: 600 }}
+        >
           sales@zalgoinfotech.com
         </a>
-      </div>
+      </div> */}
     </form>
   );
 }
