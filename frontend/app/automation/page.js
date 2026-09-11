@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
+import { WhatsAppGlyph, GoogleAdsGlyph } from "../../components/BrandIcons";
 
 const TRIGGER_DEFS = [
   {
@@ -725,7 +726,7 @@ export default function AutomationPage() {
             {
               key: "whatsapp",
               title: "WhatsApp (Meta Cloud API)",
-              icon: "🟢",
+              icon: <WhatsAppGlyph size={18} />,
               fields: [
                 { k: "wa_account_sid", l: "Phone Number ID", ph: "e.g. 1261586240366783" },
                 {
@@ -1194,7 +1195,7 @@ export default function AutomationPage() {
                           {
                             k: "whatsapp",
                             l: "WhatsApp",
-                            icon: "🟢",
+                            icon: <WhatsAppGlyph size={14} />,
                             ok: creds.whatsapp_enabled,
                           },
                         ].map((ch) => {
@@ -1335,7 +1336,7 @@ export default function AutomationPage() {
                   {
                     k: "whatsapp",
                     l: "WhatsApp",
-                    icon: "🟢",
+                    icon: <WhatsAppGlyph size={14} />,
                     ok: creds.whatsapp_enabled,
                   },
                 ].map((ch) => (
@@ -1599,7 +1600,7 @@ export default function AutomationPage() {
                 {[
                   { k: "email", l: "Email", icon: "✉️", ok: creds.email_enabled },
                   { k: "sms", l: "SMS", icon: "💬", ok: creds.sms_enabled },
-                  { k: "whatsapp", l: "WhatsApp", icon: "🟢", ok: creds.whatsapp_enabled },
+                  { k: "whatsapp", l: "WhatsApp", icon: <WhatsAppGlyph size={14} />, ok: creds.whatsapp_enabled },
                 ].map((ch) => (
                   <button
                     key={ch.k}
@@ -2055,7 +2056,7 @@ export default function AutomationPage() {
               {/* Google Ads card */}
               <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 18 }}>🎯</span>
+                  <GoogleAdsGlyph size={18} />
                   <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
                     Google Ads Lead Form
                   </span>
@@ -2081,7 +2082,7 @@ export default function AutomationPage() {
               {/* WhatsApp card */}
               <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
                 <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontSize: 18 }}>🟢</span>
+                  <WhatsAppGlyph size={18} />
                   <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
                     WhatsApp (incoming messages)
                   </span>

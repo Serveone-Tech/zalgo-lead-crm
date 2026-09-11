@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import api from "../lib/api";
+import { WhatsAppGlyph } from "./BrandIcons";
 
 const VARS = ["{name}", "{phone}", "{email}", "{business_name}"];
 
@@ -89,7 +90,7 @@ export default function SendToSelectedModal({ customerIds, target = "customers",
             {[
               { k: "email", l: "Email", icon: "✉️" },
               { k: "sms", l: "SMS", icon: "💬" },
-              { k: "whatsapp", l: "WhatsApp", icon: "🟢" },
+              { k: "whatsapp", l: "WhatsApp", icon: <WhatsAppGlyph size={14} /> },
             ].map((ch) => (
               <button
                 key={ch.k}
