@@ -1,8 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "../../../lib/api";
+import Pagination from "../../../components/Pagination";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -51,6 +52,13 @@ export default function ContactRequestsPage() {
   };
 
   const logout = () => { localStorage.clear(); router.push("/login"); };
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const paged = useMemo(
+    () => requests.slice((page - 1) * pageSize, page * pageSize),
+    [requests, page, pageSize],
+  );
 
   if (loading) return <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "var(--bg-base)", color: "var(--text-muted)", fontFamily: "var(--font-main)" }}>Loading...</div>;
 
@@ -102,11 +110,11 @@ export default function ContactRequestsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {requests.map((r, i) => {
+                  {paged.map((r, i) => {
                     const sc = STATUS_COLORS[r.status] || STATUS_COLORS.new;
                     return (
                       <tr key={r.id} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={{ padding: "12px 14px", color: "var(--text-muted)", fontSize: 12 }}>{i + 1}</td>
+                        <td style={{ padding: "12px 14px", color: "var(--text-muted)", fontSize: 12 }}>{(page - 1) * pageSize + i + 1}</td>
                         <td style={{ padding: "12px 14px", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>{r.name}</td>
                         <td style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-secondary)" }}>{r.email}</td>
                         <td style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-secondary)" }}>{r.phone || "—"}</td>
@@ -133,6 +141,16 @@ export default function ContactRequestsPage() {
             </div>
           )}
         </div>
+
+        {requests.length > 0 && (
+          <Pagination
+            page={page}
+            setPage={setPage}
+            pageSize={pageSize}
+            setPageSize={setPageSize}
+            total={requests.length}
+          />
+        )}
       </main>
     </div>
   );

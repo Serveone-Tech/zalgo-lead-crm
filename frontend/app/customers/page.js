@@ -5,6 +5,7 @@ import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar, Download, XCircle } from "lucide-react";
 import SendToSelectedModal from "../../components/SendToSelectedModal";
+import Pagination from "../../components/Pagination";
 
 function today() {
   return new Date().toISOString().split("T")[0];
@@ -206,6 +207,16 @@ export default function CustomersPage() {
         return true;
       }),
     [customers, search, dateFrom, dateTo, stageFilter],
+  );
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  useEffect(() => {
+    setPage(1);
+  }, [search, dateFrom, dateTo, stageFilter]);
+  const paged = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
   );
 
   const addCustomer = async (e) => {
@@ -740,7 +751,7 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((c, i) => {
+                {paged.map((c, i) => {
                   const balance = parseFloat(c.total_due_amount || 0);
                   const over = isOverdue(c.next_due_date),
                     tod = isToday(c.next_due_date);
@@ -779,7 +790,7 @@ export default function CustomersPage() {
                           fontSize: 12,
                         }}
                       >
-                        {i + 1}
+                        {(page - 1) * pageSize + i + 1}
                       </td>
                       <td style={{ padding: "12px 14px" }}>
                         <div
@@ -1067,6 +1078,16 @@ export default function CustomersPage() {
           </div>
         )}
       </div>
+
+      {!loading && filtered.length > 0 && (
+        <Pagination
+          page={page}
+          setPage={setPage}
+          pageSize={pageSize}
+          setPageSize={setPageSize}
+          total={filtered.length}
+        />
+      )}
 
       {!loading && filtered.length > 0 && (
         <div

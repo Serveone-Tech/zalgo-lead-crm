@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 import { Package, Plus, Pencil, Trash2 } from "lucide-react";
+import Pagination from "../../components/Pagination";
 
 export default function InventoryPage() {
   const router = useRouter();
@@ -135,6 +136,16 @@ export default function InventoryPage() {
   const fmt = mounted ? formatCurrency : (n) => `₹${parseFloat(n) || 0}`;
   const filtered = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
   const lowStockItems = items.filter((i) => i.stock_qty <= threshold);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+  const paged = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
+  );
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -374,7 +385,7 @@ export default function InventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((item) => (
+              {paged.map((item) => (
                 <tr key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={{ padding: "12px 14px", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>
                     {item.name}
@@ -449,6 +460,16 @@ export default function InventoryPage() {
           </table>
         )}
       </div>
+
+      {!loading && filtered.length > 0 && (
+        <Pagination
+          page={page}
+          setPage={setPage}
+          pageSize={pageSize}
+          setPageSize={setPageSize}
+          total={filtered.length}
+        />
+      )}
 
       {showForm && (
         <div

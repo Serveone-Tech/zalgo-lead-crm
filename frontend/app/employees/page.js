@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import { PERMISSION_MODULES } from "../../lib/permissions";
 import { Users } from "lucide-react";
+import Pagination from "../../components/Pagination";
 
 const emptyForm = {
   name: "",
@@ -145,6 +146,13 @@ export default function EmployeesPage() {
     load();
   };
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const paged = useMemo(
+    () => employees.slice((page - 1) * pageSize, page * pageSize),
+    [employees, page, pageSize],
+  );
+
   return (
     <div style={{ padding: "28px 32px" }}>
       <div
@@ -224,7 +232,7 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {employees.map((emp) => (
+                {paged.map((emp) => (
                   <tr key={emp.id} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={td}>
                       <span style={{ fontFamily: "var(--font-main)", fontWeight: 600, color: "var(--text-primary)" }}>
@@ -276,6 +284,16 @@ export default function EmployeesPage() {
           </div>
         )}
       </div>
+
+      {!loading && employees.length > 0 && (
+        <Pagination
+          page={page}
+          setPage={setPage}
+          pageSize={pageSize}
+          setPageSize={setPageSize}
+          total={employees.length}
+        />
+      )}
 
       {modalOpen && (
         <div

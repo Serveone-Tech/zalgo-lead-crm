@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
+import Pagination from "../../components/Pagination";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -115,6 +116,13 @@ export default function UnverifiedLeadsPage() {
     }
     setBulkDeleting(false);
   };
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const paged = useMemo(
+    () => rows.slice((page - 1) * pageSize, page * pageSize),
+    [rows, page, pageSize],
+  );
 
   if (loading)
     return (
@@ -253,7 +261,7 @@ export default function UnverifiedLeadsPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, i) => (
+                {paged.map((row, i) => (
                   <tr
                     key={row.id}
                     style={{
@@ -269,7 +277,7 @@ export default function UnverifiedLeadsPage() {
                         style={{ cursor: "pointer", accentColor: "var(--teal)" }}
                       />
                     </td>
-                    <td style={{ padding: "12px 14px", color: "var(--text-muted)", fontSize: 12 }}>{i + 1}</td>
+                    <td style={{ padding: "12px 14px", color: "var(--text-muted)", fontSize: 12 }}>{(page - 1) * pageSize + i + 1}</td>
                     <td style={{ padding: "12px 14px", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>
                       {row.name}
                     </td>
@@ -308,6 +316,16 @@ export default function UnverifiedLeadsPage() {
           </div>
         )}
       </div>
+
+      {rows.length > 0 && (
+        <Pagination
+          page={page}
+          setPage={setPage}
+          pageSize={pageSize}
+          setPageSize={setPageSize}
+          total={rows.length}
+        />
+      )}
 
       {modalRow && (
         <LeadModal

@@ -8,6 +8,7 @@ import BulkUploadModal from "../../components/BulkUploadModal";
 import OrderFulfillmentModal from "../../components/OrderFulfillmentModal";
 import WhatsAppChatModal from "../../components/WhatsAppChatModal";
 import SendToSelectedModal from "../../components/SendToSelectedModal";
+import Pagination from "../../components/Pagination";
 import { Upload, Plus, Calendar } from "lucide-react";
 import {
   STAGE_COLORS,
@@ -183,6 +184,16 @@ function LeadsContent() {
         return true;
       }),
     [leads, search, stageF, platformF, dateF, assigneeF, dateFrom, dateTo],
+  );
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  useEffect(() => {
+    setPage(1);
+  }, [search, stageF, platformF, dateF, assigneeF, dateFrom, dateTo]);
+  const paged = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
   );
 
   // Built from whatever platform values actually exist on this tenant's
@@ -898,7 +909,7 @@ function LeadsContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((lead, i) => {
+                  {paged.map((lead, i) => {
                     const over =
                       isOverdue(lead.follow_up_date) &&
                       !["CLOSED", "LOST", "CONVERTED"].includes((lead.stage || "").toUpperCase());
@@ -956,7 +967,7 @@ function LeadsContent() {
                             fontSize: 12,
                           }}
                         >
-                          {i + 1}
+                          {(page - 1) * pageSize + i + 1}
                         </td>
 
                         {/* Name & Link */}
@@ -1323,6 +1334,10 @@ function LeadsContent() {
             </div>
           )}
         </div>
+      )}
+
+      {!loading && filtered.length > 0 && view === "table" && (
+        <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} total={filtered.length} />
       )}
 
       {!loading && filtered.length > 0 && view === "table" && (

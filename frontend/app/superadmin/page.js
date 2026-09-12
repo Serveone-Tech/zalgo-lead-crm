@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "../../lib/api";
 import EmployeesModal from "./EmployeesModal";
+import Pagination from "../../components/Pagination";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -92,6 +93,16 @@ export default function SuperAdminDashboard() {
     return matchSearch && matchStatus;
   });
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  useEffect(() => {
+    setPage(1);
+  }, [search, filterStatus]);
+  const paged = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize],
+  );
+
   if (loading) return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"var(--bg-base)", color:"var(--text-muted)", fontFamily:"var(--font-main)" }}>Loading...</div>;
 
   const statCards = [
@@ -179,7 +190,7 @@ export default function SuperAdminDashboard() {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr><td colSpan={10} style={{ padding:40, textAlign:"center", color:"var(--text-muted)" }}>No users found</td></tr>
-                ) : filtered.map((u,i)=>{
+                ) : paged.map((u,i)=>{
                   const sc = STATUS_COLORS[u.sub_status] || { bg:"rgba(100,100,100,0.12)", color:"#888", label:u.sub_status||"No Plan" };
                   const expiry = u.sub_status==="trial" ? u.trial_ends_at : u.ends_at;
                   const dl = daysLeft(expiry);
@@ -187,7 +198,7 @@ export default function SuperAdminDashboard() {
                     <tr key={u.id} style={{ borderBottom:"1px solid var(--border)", transition:"background 0.15s" }}
                       onMouseEnter={e=>e.currentTarget.style.background="var(--bg-hover)"}
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <td style={{ padding:"12px 14px", color:"var(--text-muted)", fontSize:12 }}>{i+1}</td>
+                      <td style={{ padding:"12px 14px", color:"var(--text-muted)", fontSize:12 }}>{(page-1)*pageSize+i+1}</td>
                       <td style={{ padding:"12px 14px" }}>
                         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                           {u.logo_url ? (
@@ -246,6 +257,16 @@ export default function SuperAdminDashboard() {
             </table>
           </div>
         </div>
+
+        {filtered.length > 0 && (
+          <Pagination
+            page={page}
+            setPage={setPage}
+            pageSize={pageSize}
+            setPageSize={setPageSize}
+            total={filtered.length}
+          />
+        )}
 
         <div style={{ marginTop:12, fontSize:12, color:"var(--text-muted)", textAlign:"right" }}>
           {filtered.length} of {users.length} users
