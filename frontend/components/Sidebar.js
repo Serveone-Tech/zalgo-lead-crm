@@ -39,6 +39,7 @@ export default function Sidebar() {
   const [theme, setTheme] = useState("dark");
   const [sub, setSub] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const SIDEBAR_W = { open: "232px", collapsed: "68px" };
 
@@ -96,6 +97,11 @@ export default function Sidebar() {
     }, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Close the mobile drawer whenever navigation happens.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   const toggleTheme = () => {
     const next = theme === "dark" ? "light" : "dark";
@@ -368,23 +374,77 @@ export default function Sidebar() {
   ];
 
   return (
-    <aside
-      style={{
-        position: "fixed",
-        left: 0,
-        top: 0,
-        bottom: 0,
-        width: "var(--sidebar-w)",
-        background: "var(--bg-surface)",
-        borderRight: "1px solid var(--border)",
-        display: "flex",
-        flexDirection: "column",
-        zIndex: 50,
-        boxShadow: "var(--shadow-sm)",
-        transition: "width 0.18s ease",
-        overflow: "visible",
-      }}
-    >
+    <>
+      {/* Mobile hamburger — hidden on desktop via CSS, fixed above everything */}
+      <button
+        onClick={() => setMobileOpen((v) => !v)}
+        aria-label={mobileOpen ? "Close menu" : "Open menu"}
+        className="sidebar-mobile-toggle"
+        style={{
+          position: "fixed",
+          top: 14,
+          left: 14,
+          zIndex: 70,
+          width: 40,
+          height: 40,
+          borderRadius: 10,
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border-strong)",
+          color: "var(--text-primary)",
+          boxShadow: "var(--shadow-md)",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+        }}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          {mobileOpen ? (
+            <>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </>
+          ) : (
+            <>
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </>
+          )}
+        </svg>
+      </button>
+
+      {/* Backdrop — only relevant on mobile, closes the drawer on tap */}
+      {mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          className="sidebar-backdrop"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            zIndex: 45,
+          }}
+        />
+      )}
+
+      <aside
+        className={`app-sidebar${mobileOpen ? " mobile-open" : ""}`}
+        style={{
+          position: "fixed",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: "var(--sidebar-w)",
+          background: "var(--bg-surface)",
+          borderRight: "1px solid var(--border)",
+          display: "flex",
+          flexDirection: "column",
+          zIndex: 50,
+          boxShadow: "var(--shadow-sm)",
+          transition: "width 0.18s ease, transform 0.22s ease",
+          overflow: "visible",
+        }}
+      >
       {/* Collapse/expand toggle — a small handle centered on the sidebar's
           right edge, like VSCode/Notion's panel collapse control. */}
       <button
@@ -749,7 +809,8 @@ export default function Sidebar() {
           {!collapsed && "Sign Out"}
         </button>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
 

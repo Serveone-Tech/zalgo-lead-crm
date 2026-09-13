@@ -98,3 +98,36 @@ input, select, textarea { font-family: inherit; }
 
 input, select, textarea, button { transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, opacity 0.15s ease; }
 input:focus, select:focus, textarea:focus { border-color: var(--teal) !important; box-shadow: 0 0 0 3px var(--teal-dim); }
+
+/* ── Mobile responsive shell ──────────────────────────────────────────
+   The sidebar is a fixed 232px column on desktop; on phones it becomes
+   a slide-in drawer (Sidebar.js toggles the .mobile-open class) behind
+   a hamburger button, and the main content always takes full width. */
+.sidebar-mobile-toggle { display: none; }
+@media (max-width: 768px) {
+  .sidebar-mobile-toggle { display: flex !important; }
+  .app-sidebar { transform: translateX(-100%); }
+  .app-sidebar.mobile-open { transform: translateX(0); }
+  main { margin-left: 0 !important; }
+
+  /* Blanket stacking fix: every CSS-grid layout in the authenticated app
+     (stat cards, form field rows, dashboard widgets) becomes single-column
+     on phones instead of squeezing columns down to unreadable widths.
+     Marketing pages (mk-* classes) already have their own hand-tuned
+     responsive breakpoints, so they're excluded to avoid double-applying. */
+  [style*="grid-template-columns"]:not([class*="mk-"]) { grid-template-columns: 1fr !important; }
+
+  /* Header rows built as "space-between" flex rows (title + action
+     button) wrap instead of clipping/squishing when both sides don't
+     fit on one line. */
+  [style*="justify-content: space-between"]:not([class*="mk-"]) { flex-wrap: wrap; row-gap: 12px; }
+
+  /* The app's page wrapper padding (28px 32px) is too wide for a phone
+     screen — tighten it, and add extra top clearance so page headings
+     don't sit underneath the fixed hamburger button. */
+  [style*="padding: 28px 32px"] { padding: 64px 14px 16px 14px !important; }
+
+  /* The desktop-only collapse/expand handle on the sidebar's edge would
+     otherwise peek in from the screen edge while the drawer is closed. */
+  .app-sidebar > button { display: none !important; }
+}
