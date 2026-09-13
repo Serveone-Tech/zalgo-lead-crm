@@ -72,8 +72,18 @@ export default function TrialSignupForm() {
   }
 
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className="trial-form">
+      <style>{`
+        .trial-form input, .trial-form button { font-size: 16px; }
+        @media (min-width: 481px) {
+          .trial-form input { font-size: 13.5px; }
+        }
+        @media (max-width: 480px) {
+          .trial-form .trial-grid { grid-template-columns: 1fr !important; gap: 12px !important; }
+        }
+      `}</style>
       <div
+        className="trial-grid"
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
