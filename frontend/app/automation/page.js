@@ -266,10 +266,6 @@ export default function AutomationPage() {
   // WhatsApp Templates
   const [templates, setTemplates] = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
-  const [templateForm, setTemplateForm] = useState({ name: "", category: "MARKETING", language: "en_US", header_text: "", body_text: "", footer_text: "", buttons: [] });
-  const [templateSaving, setTemplateSaving] = useState(false);
-  const [templateError, setTemplateError] = useState("");
-  const [refreshingTemplate, setRefreshingTemplate] = useState(null);
 
   useEffect(() => {
     const raw = localStorage.getItem("crm_token");
@@ -336,44 +332,6 @@ export default function AutomationPage() {
       setTemplates(data);
     } catch {}
     setTemplatesLoading(false);
-  };
-
-  const createTemplateSubmit = async (e) => {
-    e.preventDefault();
-    setTemplateError("");
-    setTemplateSaving(true);
-    try {
-      await api.post("/automation/whatsapp-templates", templateForm);
-      setTemplateForm({ name: "", category: "MARKETING", language: "en_US", header_text: "", body_text: "", footer_text: "", buttons: [] });
-      showToast("Template submitted to Meta for review!");
-      loadTemplates();
-    } catch (err) {
-      setTemplateError(err?.response?.data?.error || "Could not create template");
-    } finally {
-      setTemplateSaving(false);
-    }
-  };
-
-  const refreshTemplate = async (id) => {
-    setRefreshingTemplate(id);
-    try {
-      await api.post(`/automation/whatsapp-templates/${id}/refresh`);
-      loadTemplates();
-    } catch (err) {
-      showToast(err?.response?.data?.error || "Could not check status", "error");
-    } finally {
-      setRefreshingTemplate(null);
-    }
-  };
-
-  const deleteTemplateHandler = async (id) => {
-    if (!confirm("Delete this template? This removes it from Meta too.")) return;
-    try {
-      await api.delete(`/automation/whatsapp-templates/${id}`);
-      loadTemplates();
-    } catch (err) {
-      showToast(err?.response?.data?.error || "Could not delete template", "error");
-    }
   };
 
   const checkAudienceCount = async () => {
@@ -1808,222 +1766,30 @@ export default function AutomationPage() {
       {/* TAB — WHATSAPP TEMPLATES */}
       {tab === "templates" && (
         <div style={{ maxWidth: 620 }}>
-          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: "24px", marginBottom: 20 }}>
-            <h3 style={{ fontFamily: "var(--font-main)", fontSize: 15, fontWeight: 700, color: "var(--text-primary)", marginBottom: 6 }}>
-              Create a WhatsApp Template
+          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: "32px 28px", textAlign: "center" }}>
+            <div style={{ fontSize: 32, marginBottom: 14 }}>📄</div>
+            <h3 style={{ fontFamily: "var(--font-main)", fontSize: 16, fontWeight: 700, color: "var(--text-primary)", marginBottom: 8 }}>
+              WhatsApp Templates has a new home
             </h3>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.5 }}>
-              Templates are the only way to message a customer outside the free 24-hour reply window. Submitting one
-              here sends it to Meta for review — nothing gets sent to any customer until it's approved. Needs a
-              WhatsApp Business Account ID set under Channel Setup first.
+            <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 22, lineHeight: 1.6, maxWidth: 440, marginLeft: "auto", marginRight: "auto" }}>
+              Build templates with a live WhatsApp-style preview, per-variable sample values, media headers, and full
+              validation before submitting to Meta — all in the dedicated Template Builder.
             </p>
-
-            {templateError && (
-              <div style={{ marginBottom: 14, padding: "9px 13px", background: "var(--danger-dim)", border: "1px solid var(--danger)", borderRadius: 8, fontSize: 12, color: "var(--danger)" }}>
-                ⚠ {templateError}
-              </div>
-            )}
-
-            <form onSubmit={createTemplateSubmit}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                <div>
-                  <label style={lbl}>Template Name</label>
-                  <input
-                    value={templateForm.name}
-                    onChange={(e) => setTemplateForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="festival_offer"
-                    required
-                    style={{ ...inp, marginTop: 6 }}
-                  />
-                </div>
-                <div>
-                  <label style={lbl}>Category</label>
-                  <select
-                    value={templateForm.category}
-                    onChange={(e) => setTemplateForm((f) => ({ ...f, category: e.target.value }))}
-                    style={{ ...inp, marginTop: 6 }}
-                  >
-                    <option value="MARKETING">Marketing</option>
-                    <option value="UTILITY">Utility</option>
-                    <option value="AUTHENTICATION">Authentication</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                <label style={lbl}>Header (optional)</label>
-                <input
-                  value={templateForm.header_text}
-                  onChange={(e) => setTemplateForm((f) => ({ ...f, header_text: e.target.value }))}
-                  placeholder="Big Diwali Sale!"
-                  style={{ ...inp, marginTop: 6 }}
-                />
-              </div>
-
-              <div style={{ marginBottom: 6 }}>
-                <label style={lbl}>Body</label>
-                <textarea
-                  value={templateForm.body_text}
-                  onChange={(e) => setTemplateForm((f) => ({ ...f, body_text: e.target.value }))}
-                  rows={4}
-                  required
-                  placeholder="Hi {{1}}, get 20% off on {{2}} this week only!"
-                  style={{ ...inp, resize: "vertical", marginTop: 6, minHeight: 90 }}
-                />
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 14 }}>
-                Use {"{{1}}"}, {"{{2}}"}... as placeholders — {"{{1}}"} is always auto-filled with the customer's name
-                when you send a broadcast with this template.
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <label style={lbl}>Footer (optional)</label>
-                <input
-                  value={templateForm.footer_text}
-                  onChange={(e) => setTemplateForm((f) => ({ ...f, footer_text: e.target.value }))}
-                  placeholder="Reply STOP to opt out"
-                  style={{ ...inp, marginTop: 6 }}
-                />
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <label style={lbl}>Buttons (optional, up to 3)</label>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", margin: "6px 0 10px" }}>
-                  Shown below the message. "Visit Website" opens a link, "Call Us" opens the dialer, "Quick Reply" sends a fixed text back to you when tapped.
-                </div>
-                {templateForm.buttons.map((b, i) => (
-                  <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
-                    <select
-                      value={b.type}
-                      onChange={(e) => {
-                        const next = [...templateForm.buttons];
-                        next[i] = { type: e.target.value, text: b.text, url: "", phone_number: "" };
-                        setTemplateForm((f) => ({ ...f, buttons: next }));
-                      }}
-                      style={{ ...inp, width: 140, flexShrink: 0 }}
-                    >
-                      <option value="QUICK_REPLY">Quick Reply</option>
-                      <option value="URL">Visit Website</option>
-                      <option value="PHONE_NUMBER">Call Us</option>
-                    </select>
-                    <input
-                      value={b.text}
-                      onChange={(e) => {
-                        const next = [...templateForm.buttons];
-                        next[i] = { ...b, text: e.target.value };
-                        setTemplateForm((f) => ({ ...f, buttons: next }));
-                      }}
-                      placeholder="Button label, e.g. Shop Now"
-                      style={{ ...inp, flex: 1 }}
-                    />
-                    {b.type === "URL" && (
-                      <input
-                        value={b.url}
-                        onChange={(e) => {
-                          const next = [...templateForm.buttons];
-                          next[i] = { ...b, url: e.target.value };
-                          setTemplateForm((f) => ({ ...f, buttons: next }));
-                        }}
-                        placeholder="https://yoursite.com"
-                        style={{ ...inp, flex: 1 }}
-                      />
-                    )}
-                    {b.type === "PHONE_NUMBER" && (
-                      <input
-                        value={b.phone_number}
-                        onChange={(e) => {
-                          const next = [...templateForm.buttons];
-                          next[i] = { ...b, phone_number: e.target.value };
-                          setTemplateForm((f) => ({ ...f, buttons: next }));
-                        }}
-                        placeholder="+919876543210"
-                        style={{ ...inp, flex: 1 }}
-                      />
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setTemplateForm((f) => ({ ...f, buttons: f.buttons.filter((_, x) => x !== i) }))}
-                      style={{ background: "none", border: "none", color: "var(--danger)", cursor: "pointer", fontSize: 16, padding: "4px 8px", flexShrink: 0 }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {templateForm.buttons.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setTemplateForm((f) => ({ ...f, buttons: [...f.buttons, { type: "QUICK_REPLY", text: "", url: "", phone_number: "" }] }))}
-                    style={{ background: "none", border: "1px dashed var(--border-strong)", borderRadius: 8, color: "var(--teal)", cursor: "pointer", fontSize: 12, padding: "7px 14px" }}
-                  >
-                    + Add Button
-                  </button>
-                )}
-              </div>
-
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  type="submit"
-                  disabled={templateSaving}
-                  style={{
-                    padding: "10px 24px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: templateSaving ? "var(--bg-hover)" : "var(--teal)",
-                    color: "#fff",
-                    fontFamily: "var(--font-main)",
-                    fontWeight: 600,
-                    fontSize: 13,
-                    cursor: templateSaving ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {templateSaving ? "Submitting..." : "Submit for Review"}
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, padding: "20px 24px" }}>
-            <h3 style={{ fontFamily: "var(--font-main)", fontSize: 14, fontWeight: 700, color: "var(--text-primary)", marginBottom: 14 }}>
-              Your Templates
-            </h3>
-            {templatesLoading ? (
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading...</div>
-            ) : templates.length === 0 ? (
-              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No templates yet.</div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {templates.map((t) => {
-                  const statusColor = t.status === "approved" ? "var(--success)" : t.status === "rejected" ? "var(--danger)" : "var(--warn)";
-                  return (
-                    <div key={t.id} style={{ border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                        <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 13, color: "var(--text-primary)" }}>{t.name}</span>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: statusColor, background: `${statusColor}18`, borderRadius: 20, padding: "2px 10px", textTransform: "uppercase" }}>
-                          {t.status}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>{t.body_text}</div>
-                      {t.status === "rejected" && t.rejection_reason && (
-                        <div style={{ fontSize: 11, color: "var(--danger)", marginBottom: 6 }}>Reason: {t.rejection_reason}</div>
-                      )}
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                          onClick={() => refreshTemplate(t.id)}
-                          disabled={refreshingTemplate === t.id}
-                          style={{ padding: "4px 10px", borderRadius: 6, background: "transparent", border: "1px solid var(--border)", color: "var(--teal)", fontSize: 11, cursor: "pointer", fontFamily: "var(--font-main)" }}
-                        >
-                          {refreshingTemplate === t.id ? "Checking..." : "Refresh Status"}
-                        </button>
-                        <button
-                          onClick={() => deleteTemplateHandler(t.id)}
-                          style={{ padding: "4px 10px", borderRadius: 6, background: "transparent", border: "1px solid var(--border)", color: "var(--danger)", fontSize: 11, cursor: "pointer", fontFamily: "var(--font-main)" }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+            <button
+              onClick={() => router.push("/whatsapp-templates")}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                padding: "11px 24px", borderRadius: 8, border: "none",
+                background: "var(--gradient-accent)", color: "#fff",
+                fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13.5,
+                cursor: "pointer", boxShadow: "var(--shadow-glow)",
+              }}
+            >
+              Open Template Builder →
+            </button>
+            {templates.length > 0 && (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 16 }}>
+                {templates.length} template{templates.length !== 1 ? "s" : ""} already saved — they'll show up there too.
               </div>
             )}
           </div>

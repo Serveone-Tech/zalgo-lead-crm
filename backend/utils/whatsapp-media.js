@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { GRAPH_BASE } = require("./meta-graph");
 
 const UPLOAD_DIR = path.join(__dirname, "..", "uploads", "whatsapp-media");
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -21,7 +22,7 @@ const EXT_BY_MIME = {
 // short-lived download URL, then fetch that URL (still needs the same
 // bearer token) and save it here so it can be served from our own /uploads.
 async function downloadWhatsAppMedia(mediaId, accessToken) {
-  const metaRes = await fetch(`https://graph.facebook.com/v20.0/${mediaId}`, {
+  const metaRes = await fetch(`${GRAPH_BASE}/${mediaId}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const meta = await metaRes.json().catch(() => null);

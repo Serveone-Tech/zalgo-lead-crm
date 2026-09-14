@@ -197,13 +197,21 @@ router.post("/whatsapp-templates", auth, requireSubscription, requirePlanFeature
       return res.status(400).json({ error: "Add your WhatsApp Business Account ID under Channel Setup first" });
     }
 
+    // Legacy flat-field route (superseded by /api/whatsapp-templates' builder
+    // flow) — adapt to the structured shape createTemplate()/buildMetaComponents()
+    // now expect, auto-filling variable samples the same way this route always did.
+    const LEGACY_SAMPLES = ["Rahul", "20%", "Order #1234", "3 days", "₹499"];
+    const toVars = (text) =>
+      [...new Set([...(text || "").matchAll(/\{\{(\d+)\}\}/g)].map((m) => parseInt(m[1], 10)))]
+        .map((position) => ({ position, sample: LEGACY_SAMPLES[position - 1] || `value${position}` }));
+
     const metaResult = await createTemplate(creds.wa_from, creds.wa_auth_token, {
       name: slug,
       language: lang,
       category: cat,
-      header_text,
-      body_text,
-      footer_text,
+      header: header_text?.trim() ? { format: "TEXT", text: header_text, variables: toVars(header_text) } : { format: "NONE" },
+      body: { text: body_text, variables: toVars(body_text) },
+      footer: { text: footer_text || "" },
       buttons: cleanButtons,
     });
 

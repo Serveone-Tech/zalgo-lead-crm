@@ -602,6 +602,23 @@ const initDB = async () => {
         UNIQUE(user_id, name, language)
       );
 
+      -- Audit trail of every submit-to-Meta attempt for a template — the
+      -- payload actually sent and the raw response/error Meta gave back, so
+      -- a rejection or failure can be diagnosed without re-deriving what was
+      -- sent at the time (the template row itself may have since changed).
+      CREATE TABLE IF NOT EXISTS whatsapp_template_submissions (
+        id SERIAL PRIMARY KEY,
+        template_id INTEGER REFERENCES whatsapp_templates(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        payload JSONB,
+        response JSONB,
+        http_status INTEGER,
+        status VARCHAR(20) DEFAULT 'error',
+        meta_error_code VARCHAR(50) DEFAULT '',
+        meta_error_message TEXT DEFAULT '',
+        submitted_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS broadcast_campaigns (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -688,6 +705,31 @@ const initDB = async () => {
       .query(`ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS buttons JSONB DEFAULT '[]'`)
       .catch((e) => console.log("alter skip:", e.message));
 
+    // Template Builder v2 columns — additive, backward compatible with the
+    // original flat header_text/body_text/footer_text/buttons columns
+    // (still kept in sync on every save so the legacy automation.js routes
+    // and the broadcast module keep working unmodified). `components` is
+    // the canonical structured config (header/body/footer/buttons, each
+    // with per-variable name+sample) the new builder UI reads/writes;
+    // header_format lets the builder distinguish a template with no header
+    // from one with a text header without parsing header_text emptiness.
+    const templateBuilderCols = [
+      `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS header_format VARCHAR(20) DEFAULT 'NONE'`,
+      `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS components JSONB DEFAULT '{}'`,
+      `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS waba_id VARCHAR(50) DEFAULT ''`,
+      `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS phone_number_id VARCHAR(50) DEFAULT ''`,
+      `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP`,
+      `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP`,
+    ];
+    for (const q of templateBuilderCols) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
+    // Backfill header_format for rows created before this column existed —
+    // one-time, idempotent (only touches rows still at the column default).
+    await client
+      .query(`UPDATE whatsapp_templates SET header_format='TEXT' WHERE header_format='NONE' AND header_text IS NOT NULL AND header_text <> ''`)
+      .catch((e) => console.log("backfill skip:", e.message));
+
     // ── STEP 3.6: Indexes ─────────────────────────────────────
     // Every query in this app filters by tenant (user_id) first — without an
     // index on it, Postgres was doing a full sequential scan of these tables
@@ -721,6 +763,9 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id)`,
       `CREATE INDEX IF NOT EXISTS idx_customers_assigned_to ON customers(assigned_to)`,
       `CREATE INDEX IF NOT EXISTS idx_inventory_items_user_id ON inventory_items(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_user_id ON whatsapp_templates(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_user_status ON whatsapp_templates(user_id, status)`,
+      `CREATE INDEX IF NOT EXISTS idx_whatsapp_template_submissions_template ON whatsapp_template_submissions(template_id)`,
     ];
     for (const q of indexes) {
       await client.query(q).catch((e) => console.log("index skip:", e.message));

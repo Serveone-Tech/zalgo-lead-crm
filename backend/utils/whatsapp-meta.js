@@ -1,3 +1,5 @@
+const { GRAPH_BASE } = require("./meta-graph");
+
 // Sends an outbound WhatsApp message via Meta's WhatsApp Cloud API.
 // Reuses the automation_credentials columns that used to hold Twilio's
 // wa_account_sid/wa_auth_token — repurposed to store Meta's Phone Number ID
@@ -11,7 +13,7 @@ async function sendWhatsAppViaMeta(creds, toPhone, message) {
     throw new Error("Meta WhatsApp credentials not configured");
   }
 
-  const res = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
+  const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -49,7 +51,7 @@ async function sendWhatsAppMediaViaMeta(creds, toPhone, { buffer, mimeType, file
   form.append("file", new Blob([buffer], { type: mimeType }), filename);
   form.append("type", mimeType);
 
-  const uploadRes = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/media`, {
+  const uploadRes = await fetch(`${GRAPH_BASE}/${phoneNumberId}/media`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}` },
     body: form,
@@ -63,7 +65,7 @@ async function sendWhatsAppMediaViaMeta(creds, toPhone, { buffer, mimeType, file
   if (caption && (type === "image" || type === "document" || type === "video")) mediaObject.caption = caption;
   if (type === "document") mediaObject.filename = filename;
 
-  const sendRes = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId}/messages`, {
+  const sendRes = await fetch(`${GRAPH_BASE}/${phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

@@ -4,90 +4,34 @@
 // (stored in automation_credentials.wa_from, repurposed from the unused
 // Twilio-era column) and go through Meta's own review before they're
 // usable, so creating one here never sends anything by itself.
+//
+// Payload construction (turning the CRM's structured template config into
+// Meta's `components` array) lives in meta-template-validator.js's
+// buildMetaComponents() — this file only makes the actual Graph API calls.
 
-const GRAPH = "https://graph.facebook.com/v20.0";
+const { GRAPH_BASE } = require("./meta-graph");
+const { slugifyTemplateName, buildMetaComponents } = require("./meta-template-validator");
 
-// Meta's BUTTONS component takes an array of up to 3 buttons: QUICK_REPLY
-// (just a text label, tapping it sends that text back to you), URL (opens
-// a link — Meta requires the destination be visible/plausible, no raw IP
-// links etc.), or PHONE_NUMBER (opens the dialer). Mixing URL/PHONE_NUMBER
-// buttons with QUICK_REPLY in the same template isn't allowed by Meta, but
-// that's enforced on their side — we just pass through whatever was built.
-function buildButtonsComponent(buttons) {
-  if (!Array.isArray(buttons) || buttons.length === 0) return null;
-  const cleaned = buttons
-    .filter((b) => b?.text?.trim())
-    .slice(0, 3)
-    .map((b) => {
-      const text = b.text.trim();
-      if (b.type === "URL") return { type: "URL", text, url: (b.url || "").trim() };
-      if (b.type === "PHONE_NUMBER") return { type: "PHONE_NUMBER", text, phone_number: (b.phone_number || "").trim() };
-      return { type: "QUICK_REPLY", text };
-    });
-  if (cleaned.length === 0) return null;
-  return { type: "BUTTONS", buttons: cleaned };
-}
-
-// Sample values Meta shows its reviewer in place of each {{n}} — without
-// these, template review consistently comes back REJECTED with
-// rejected_reason "INVALID_FORMAT" since Meta can't render a preview.
-// {{1}} is always the recipient's name at send time, so its example says
-// so; anything past that gets a generic placeholder.
-const SAMPLE_VALUES = ["Rahul", "20%", "Order #1234", "3 days", "₹499"];
-
-function highestVarIndex(text) {
-  const matches = [...(text || "").matchAll(/\{\{(\d+)\}\}/g)];
-  return matches.reduce((max, m) => Math.max(max, parseInt(m[1], 10)), 0);
-}
-
-function buildComponents({ header_text, body_text, footer_text, buttons }) {
-  const components = [];
-
-  const headerVarCount = highestVarIndex(header_text);
-  if (header_text?.trim()) {
-    const comp = { type: "HEADER", format: "TEXT", text: header_text.trim() };
-    if (headerVarCount > 0) comp.example = { header_text: [SAMPLE_VALUES.slice(0, headerVarCount)] };
-    components.push(comp);
-  }
-
-  const bodyVarCount = highestVarIndex(body_text);
-  const bodyComp = { type: "BODY", text: body_text };
-  if (bodyVarCount > 0) bodyComp.example = { body_text: [SAMPLE_VALUES.slice(0, bodyVarCount)] };
-  components.push(bodyComp);
-
-  if (footer_text?.trim()) components.push({ type: "FOOTER", text: footer_text.trim() });
-  const buttonsComponent = buildButtonsComponent(buttons);
-  if (buttonsComponent) components.push(buttonsComponent);
-  return components;
-}
-
-// Meta only accepts lowercase letters, numbers, and underscores in a
-// template name — derive a safe one from whatever the admin typed.
-function slugifyTemplateName(name) {
-  return (name || "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .slice(0, 64);
-}
-
-async function createTemplate(wabaId, accessToken, { name, language, category, header_text, body_text, footer_text, buttons }) {
-  const res = await fetch(`${GRAPH}/${wabaId}/message_templates`, {
+async function createTemplate(wabaId, accessToken, tpl) {
+  const res = await fetch(`${GRAPH_BASE}/${wabaId}/message_templates`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({
-      name,
-      language,
-      category,
-      components: buildComponents({ header_text, body_text, footer_text, buttons }),
+      name: tpl.name,
+      language: tpl.language,
+      category: tpl.category,
+      components: buildMetaComponents(tpl),
     }),
   });
   const data = await res.json().catch(() => null);
   if (!res.ok || data?.error) {
-    throw new Error(data?.error?.error_user_msg || data?.error?.message || `Meta rejected the template (HTTP ${res.status})`);
+    const err = new Error(data?.error?.error_user_msg || data?.error?.message || `Meta rejected the template (HTTP ${res.status})`);
+    err.httpStatus = res.status;
+    err.metaError = data?.error || null;
+    throw err;
   }
   return data; // { id, status, category }
 }
@@ -98,7 +42,7 @@ async function createTemplate(wabaId, accessToken, { name, language, category, h
 async function fetchTemplateStatus(wabaId, accessToken, name) {
   // rejected_reason isn't included by default — has to be asked for
   // explicitly via `fields`, unlike status/category which always come back.
-  const res = await fetch(`${GRAPH}/${wabaId}/message_templates?name=${encodeURIComponent(name)}&fields=name,status,category,rejected_reason`, {
+  const res = await fetch(`${GRAPH_BASE}/${wabaId}/message_templates?name=${encodeURIComponent(name)}&fields=id,name,status,category,rejected_reason`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const data = await res.json().catch(() => null);
@@ -109,7 +53,7 @@ async function fetchTemplateStatus(wabaId, accessToken, name) {
 }
 
 async function deleteTemplate(wabaId, accessToken, name) {
-  const res = await fetch(`${GRAPH}/${wabaId}/message_templates?name=${encodeURIComponent(name)}`, {
+  const res = await fetch(`${GRAPH_BASE}/${wabaId}/message_templates?name=${encodeURIComponent(name)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -132,7 +76,7 @@ async function sendTemplateMessage(creds, toPhone, { name, language, bodyParams 
     ? [{ type: "body", parameters: bodyParams.map((text) => ({ type: "text", text: String(text ?? "") })) }]
     : [];
 
-  const res = await fetch(`${GRAPH}/${phoneNumberId}/messages`, {
+  const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
