@@ -66,6 +66,7 @@ router.get("/credentials", auth, requireSubscription, requirePlanFeature("automa
         wa_account_sid: "",
         wa_auth_token: "",
         wa_from: "",
+        meta_app_id: "",
       });
     }
     const row = result.rows[0];
@@ -121,6 +122,8 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
       // Token (repurposed from the old Twilio-shaped columns). wa_from —
       // Twilio's unused "from number" — now holds the WhatsApp Business
       // Account (WABA) id, needed only for creating/managing templates.
+      // meta_app_id is needed alongside these for the Resumable Upload API
+      // (template header media) — not a secret, never masked.
       cols = {
         whatsapp_enabled: !!fields.whatsapp_enabled,
         wa_account_sid: fields.wa_account_sid || cur.wa_account_sid || "",
@@ -128,6 +131,7 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
           ? cur.wa_auth_token || ""
           : fields.wa_auth_token || "",
         wa_from: fields.wa_from || cur.wa_from || "",
+        meta_app_id: fields.meta_app_id || cur.meta_app_id || "",
       };
     } else return res.status(400).json({ error: "Invalid channel" });
 
@@ -586,7 +590,7 @@ router.get("/broadcast/:id/recipients", auth, requireSubscription, requirePlanFe
 // per-channel senders automation triggers use, just looped over an
 // audience instead of firing off one event.
 router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
-  const { audience, days, channels, message, customer_ids, target, template_id, template_params } = req.body;
+  const { audience, days, channels, message, customer_ids, target, template_id, template_params, variable_mapping } = req.body;
   const usingTemplate = !!template_id;
   if (!usingTemplate && !message?.trim()) return res.status(400).json({ error: "Message required" });
   if (!Array.isArray(channels) || channels.length === 0) {
@@ -607,7 +611,10 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
     // A template is the only way to reach WhatsApp recipients outside the
     // free 24h customer-service window — resolved once up front, then
     // {{1}} gets each recipient's name while any further {{2}}, {{3}}...
-    // use the same fixed values for everyone in this broadcast.
+    // are resolved per-recipient from variable_mapping (a CRM field like
+    // phone/email, with a static fallback) — or, for older frontend builds
+    // still sending the legacy flat template_params, the same fixed value
+    // for everyone in this broadcast.
     let template = null;
     if (usingTemplate) {
       const tplRes = await pool.query(
@@ -616,6 +623,37 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
       );
       template = tplRes.rows[0];
       if (!template) return res.status(400).json({ error: "Template not found or not yet approved" });
+
+      const requiredExtraVars = Math.max(0, (template.variable_count || 1) - 1);
+      if (requiredExtraVars > 0) {
+        const mapping = Array.isArray(variable_mapping) ? variable_mapping : null;
+        if (mapping) {
+          if (mapping.length < requiredExtraVars) {
+            return res.status(400).json({ error: `This template needs ${requiredExtraVars} more variable(s) mapped — only ${mapping.length} provided.` });
+          }
+          const unresolvable = mapping.slice(0, requiredExtraVars).findIndex(
+            (m) => (!m?.source || m.source === "static") && !m?.value?.trim(),
+          );
+          if (unresolvable !== -1) {
+            return res.status(400).json({ error: `Variable {{${unresolvable + 2}}} has no fixed value and no CRM field mapped.` });
+          }
+        } else if (!Array.isArray(template_params) || template_params.length < requiredExtraVars) {
+          return res.status(400).json({ error: `This template needs ${requiredExtraVars} more variable(s) filled in.` });
+        }
+      }
+    }
+
+    // Resolves one {{n}} (n>=2) for a specific recipient — a mapped CRM
+    // field (falling back to the configured static value if that field is
+    // blank for this particular recipient) or a fixed value used for
+    // everyone. `r` is one row from resolveAudience() — only id/name/phone/
+    // email are ever available, so those are the only field sources.
+    function resolveMappedVar(entry, r) {
+      if (!entry) return "";
+      if (entry.source === "phone") return r.phone?.trim() || entry.value || "";
+      if (entry.source === "email") return r.email?.trim() || entry.value || "";
+      if (entry.source === "name") return r.name?.trim() || entry.value || "";
+      return entry.value || "";
     }
 
     const settRes = await pool.query("SELECT institute_name FROM user_settings WHERE user_id=$1", [req.tenantId]);
@@ -638,7 +676,12 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
     for (const r of recipients) {
       if (channels.includes("whatsapp") && r.phone) {
         if (template) {
-          const bodyParams = [r.name || "", ...(Array.isArray(template_params) ? template_params : [])];
+          const bodyParams = [
+            r.name || "",
+            ...(Array.isArray(variable_mapping)
+              ? variable_mapping.map((entry) => resolveMappedVar(entry, r))
+              : Array.isArray(template_params) ? template_params : []),
+          ];
           jobs.push(
             sendTemplateMessage(creds, r.phone, { name: template.name, language: template.language, bodyParams })
               .then((result) => {

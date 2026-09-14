@@ -208,6 +208,7 @@ export default function AutomationPage() {
     wa_account_sid: "",
     wa_auth_token: "",
     wa_from: "",
+    meta_app_id: "",
   });
   const [triggers, setTriggers] = useState({});
   const [deliveryProviders, setDeliveryProviders] = useState([]);
@@ -228,7 +229,7 @@ export default function AutomationPage() {
   const [webhooks, setWebhooks] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
   const [sub, setSub] = useState(null);
-  const [broadcast, setBroadcast] = useState({ audience: "all", days: 30, channels: [], message: "", template_id: "", template_params: [] });
+  const [broadcast, setBroadcast] = useState({ audience: "all", days: 30, channels: [], message: "", template_id: "", variable_mapping: [] });
   const [audienceCount, setAudienceCount] = useState(null);
   const [countingAudience, setCountingAudience] = useState(false);
   const [broadcasting, setBroadcasting] = useState(false);
@@ -368,7 +369,7 @@ export default function AutomationPage() {
     try {
       const { data } = await api.post("/automation/broadcast", broadcast);
       showToast(`Sent! ${data.sent_count} delivered, ${data.failed_count} failed, out of ${data.recipient_count} recipients.`);
-      setBroadcast((b) => ({ ...b, message: "", template_id: "", template_params: [] }));
+      setBroadcast((b) => ({ ...b, message: "", template_id: "", variable_mapping: [] }));
       setBroadcastHistory((h) => [data, ...h]);
     } catch (err) {
       showToast(err?.response?.data?.error || "Broadcast failed", "error");
@@ -694,6 +695,7 @@ export default function AutomationPage() {
                   type: "password",
                 },
                 { k: "wa_from", l: "WhatsApp Business Account ID", ph: "Needed only for message templates" },
+                { k: "meta_app_id", l: "Meta App ID", ph: "Needed only for template image/video/document headers" },
               ],
             },
           ].map(({ key, title, icon, fields, helpText }) => {
@@ -1599,7 +1601,7 @@ export default function AutomationPage() {
                 {approvedTemplates.length > 0 && (
                   <select
                     value={broadcast.template_id}
-                    onChange={(e) => setBroadcast((b) => ({ ...b, template_id: e.target.value, template_params: [] }))}
+                    onChange={(e) => setBroadcast((b) => ({ ...b, template_id: e.target.value, variable_mapping: [] }))}
                     style={inp}
                   >
                     <option value="">— Plain text (24h window only) —</option>
@@ -1611,25 +1613,48 @@ export default function AutomationPage() {
                 {broadcast.template_id && (() => {
                   const tpl = approvedTemplates.find((t) => String(t.id) === String(broadcast.template_id));
                   const extraVars = Math.max(0, (tpl?.variable_count || 1) - 1);
+                  const varNames = tpl?.components?.body?.variables || [];
+                  const setMapping = (i, patch) => {
+                    const next = [...broadcast.variable_mapping];
+                    next[i] = { source: "static", value: "", ...next[i], ...patch };
+                    setBroadcast((b) => ({ ...b, variable_mapping: next }));
+                  };
                   return (
                     <div style={{ marginTop: 10 }}>
                       <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
                         {"{{1}}"} is auto-filled with each customer's name.
-                        {extraVars > 0 && " Fill in the rest below — same value for everyone in this broadcast:"}
+                        {extraVars > 0 && " Map the rest to a CRM field (per-recipient) or a fixed value (same for everyone):"}
                       </div>
-                      {Array.from({ length: extraVars }).map((_, i) => (
-                        <input
-                          key={i}
-                          value={broadcast.template_params[i] || ""}
-                          onChange={(e) => {
-                            const next = [...broadcast.template_params];
-                            next[i] = e.target.value;
-                            setBroadcast((b) => ({ ...b, template_params: next }));
-                          }}
-                          placeholder={`{{${i + 2}}} value`}
-                          style={{ ...inp, marginBottom: 6 }}
-                        />
-                      ))}
+                      {Array.from({ length: extraVars }).map((_, i) => {
+                        const entry = broadcast.variable_mapping[i] || { source: "static", value: "" };
+                        const varLabel = varNames.find((v) => v.position === i + 2)?.name;
+                        return (
+                          <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "center" }}>
+                            <span style={{ fontSize: 11, color: "var(--teal)", fontWeight: 700, flexShrink: 0, minWidth: 36 }}>
+                              {`{{${i + 2}}}`}
+                            </span>
+                            <select
+                              value={entry.source || "static"}
+                              onChange={(e) => setMapping(i, { source: e.target.value })}
+                              style={{ ...inp, width: 150, flexShrink: 0 }}
+                            >
+                              <option value="static">Fixed value</option>
+                              <option value="phone">Recipient's Phone</option>
+                              <option value="email">Recipient's Email</option>
+                            </select>
+                            <input
+                              value={entry.value || ""}
+                              onChange={(e) => setMapping(i, { value: e.target.value })}
+                              placeholder={
+                                entry.source && entry.source !== "static"
+                                  ? "Fallback if this field is empty (optional)"
+                                  : varLabel ? `Value for "${varLabel}"` : `{{${i + 2}}} value`
+                              }
+                              style={{ ...inp, flex: 1 }}
+                            />
+                          </div>
+                        );
+                      })}
                       {audienceCount != null && (
                         <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 4 }}>
                           Estimated WhatsApp cost: ~₹{(audienceCount * whatsappRate).toFixed(2)} ({audienceCount} × ₹{whatsappRate}/msg)

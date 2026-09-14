@@ -95,7 +95,7 @@ test("more than 3 buttons is rejected", () => {
     { type: "QUICK_REPLY", text: "C" }, { type: "QUICK_REPLY", text: "D" },
   ] });
   assert.strictEqual(r.valid, false);
-  assert.ok(r.errors.some((e) => e.field === "buttons" && /at most 3/.test(e.message)));
+  assert.ok(r.errors.some((e) => e.field === "buttons" && /at most 3/i.test(e.message)));
 });
 
 test("two URL buttons is rejected (Meta allows at most one)", () => {
@@ -137,6 +137,43 @@ test("extractVariablePositions finds and dedupes {{n}}", () => {
 test("isSequential rejects gaps", () => {
   assert.strictEqual(isSequential([1, 2, 3]), true);
   assert.strictEqual(isSequential([1, 3]), false);
+});
+
+const CAROUSEL_CARD = {
+  header: { format: "IMAGE", media_handle: "handle123" },
+  body: { text: "Black Formal Derby ₹899", variables: [] },
+  buttons: [{ type: "QUICK_REPLY", text: "Shop Now" }],
+};
+
+test("carousel on a non-MARKETING category is rejected", () => {
+  const r = validateTemplate({ ...VALID_BASE, category: "UTILITY", carousel: { cards: [CAROUSEL_CARD, CAROUSEL_CARD] } });
+  assert.strictEqual(r.valid, false);
+  assert.ok(r.errors.some((e) => e.field === "carousel" && /Marketing/.test(e.message)));
+});
+
+test("carousel with only 1 card is rejected (needs at least 2)", () => {
+  const r = validateTemplate({ ...VALID_BASE, carousel: { cards: [CAROUSEL_CARD] } });
+  assert.strictEqual(r.valid, false);
+  assert.ok(r.errors.some((e) => e.field === "carousel" && /between 2 and 10/.test(e.message)));
+});
+
+test("carousel card with a TEXT header is rejected (must be image/video)", () => {
+  const badCard = { ...CAROUSEL_CARD, header: { format: "TEXT", text: "Hi" } };
+  const r = validateTemplate({ ...VALID_BASE, carousel: { cards: [badCard, CAROUSEL_CARD] } });
+  assert.strictEqual(r.valid, false);
+  assert.ok(r.errors.some((e) => e.field === "carousel" && /image or video header/.test(e.message)));
+});
+
+test("carousel card missing body text is rejected", () => {
+  const badCard = { ...CAROUSEL_CARD, body: { text: "" } };
+  const r = validateTemplate({ ...VALID_BASE, carousel: { cards: [badCard, CAROUSEL_CARD] } });
+  assert.strictEqual(r.valid, false);
+  assert.ok(r.errors.some((e) => e.field === "carousel" && /body text is required/.test(e.message)));
+});
+
+test("valid 2-card carousel passes", () => {
+  const r = validateTemplate({ ...VALID_BASE, carousel: { cards: [CAROUSEL_CARD, CAROUSEL_CARD] } });
+  assert.strictEqual(r.valid, true, JSON.stringify(r.errors));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

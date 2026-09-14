@@ -1,5 +1,6 @@
 "use client";
 import { Image as ImageIcon, Video, FileText, ExternalLink, Phone, MessageSquare } from "lucide-react";
+import { API_ORIGIN } from "../../lib/api";
 
 // Substitutes each {{n}} with its sample value so the preview shows exactly
 // what a reviewer (and eventually a real recipient) would see — falls back
@@ -45,11 +46,20 @@ export default function WhatsAppTemplatePreview({ template }) {
           </div>
         )}
         {["IMAGE", "VIDEO", "DOCUMENT"].includes(header.format) && (
-          <div style={{ margin: "10px 10px 0", background: "rgba(255,255,255,0.08)", borderRadius: 8, height: 120, display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.5)" }}>
-            {header.format === "IMAGE" && <ImageIcon size={28} />}
-            {header.format === "VIDEO" && <Video size={28} />}
-            {header.format === "DOCUMENT" && <FileText size={28} />}
-          </div>
+          header.media_url && header.format === "IMAGE" ? (
+            <img src={`${API_ORIGIN}${header.media_url}`} alt="" style={{ margin: "10px 10px 0", width: "calc(100% - 20px)", height: 140, objectFit: "cover", borderRadius: 8, display: "block" }} />
+          ) : header.media_url && header.format === "VIDEO" ? (
+            <video src={`${API_ORIGIN}${header.media_url}`} controls style={{ margin: "10px 10px 0", width: "calc(100% - 20px)", height: 140, borderRadius: 8, display: "block", background: "#000" }} />
+          ) : (
+            <div style={{ margin: "10px 10px 0", background: "rgba(255,255,255,0.08)", borderRadius: 8, height: 120, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, color: "rgba(255,255,255,0.5)" }}>
+              {header.format === "IMAGE" && <ImageIcon size={28} />}
+              {header.format === "VIDEO" && <Video size={28} />}
+              {header.format === "DOCUMENT" && <FileText size={28} />}
+              {header.format === "DOCUMENT" && header.file_name && (
+                <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.6)" }}>{header.file_name}</span>
+              )}
+            </div>
+          )
         )}
 
         <div style={{ padding: "10px 12px", color: "#e9edef", fontSize: 13.5, lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
@@ -90,6 +100,35 @@ export default function WhatsAppTemplatePreview({ template }) {
           </div>
         )}
       </div>
+
+      {template.carousel?.cards?.length > 0 && (
+        <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 10, paddingBottom: 4 }}>
+          {template.carousel.cards.map((card, i) => (
+            <div key={i} style={{ flexShrink: 0, width: 130, background: "#202c33", borderRadius: 10, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.3)" }}>
+              {card.header?.media_url ? (
+                card.header.format === "VIDEO" ? (
+                  <video src={`${API_ORIGIN}${card.header.media_url}`} style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
+                ) : (
+                  <img src={`${API_ORIGIN}${card.header.media_url}`} alt="" style={{ width: "100%", height: 80, objectFit: "cover", display: "block" }} />
+                )
+              ) : (
+                <div style={{ width: "100%", height: 80, background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", color: "rgba(255,255,255,0.4)" }}>
+                  {card.header?.format === "VIDEO" ? <Video size={18} /> : <ImageIcon size={18} />}
+                </div>
+              )}
+              <div style={{ padding: "6px 8px", color: "#e9edef", fontSize: 10.5, lineHeight: 1.4 }}>
+                {card.body?.text ? renderWithSamples(card.body.text, card.body.variables) : <span style={{ opacity: 0.4, fontStyle: "italic" }}>Card text…</span>}
+              </div>
+              {(card.buttons || []).map((b, bi) => (
+                <div key={bi} style={{ padding: "6px 8px", color: "#53bdeb", fontSize: 10, fontWeight: 600, textAlign: "center", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                  {b.text?.trim() || "Button"}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ textAlign: "center", fontSize: 10.5, color: "var(--text-muted)", marginTop: 10 }}>
         Live preview — variables shown with their sample values
       </div>

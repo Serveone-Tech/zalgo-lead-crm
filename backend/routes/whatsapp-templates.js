@@ -8,10 +8,13 @@
 // for backward compatibility; this file is the new builder's surface.
 
 const express = require("express");
+const fs = require("fs");
 const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { validateTemplate, buildMetaComponents, slugifyTemplateName, CATEGORIES } = require("../utils/meta-template-validator");
 const { createTemplate, fetchTemplateStatus, deleteTemplate } = require("../utils/whatsapp-templates");
+const { uploadTemplateHeaderMedia } = require("../utils/meta-media-upload");
+const { templateMediaUpload, LIMITS_BY_FORMAT } = require("../middleware/template-media-upload");
 
 const router = express.Router();
 const gate = [auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation")];
@@ -22,9 +25,9 @@ const gate = [auth, requireSubscription, requirePlanFeature("automation"), requi
 // meta_template_id then refers to a real, possibly-live template on Meta's
 // side. Editing those is done via Duplicate As New Template instead.
 const EDITABLE_STATUSES = ["draft", "rejected", "error"];
-// Only templates Meta has actually approved should ever be offered to the
-// broadcast module — draft/pending/rejected templates cannot reliably send.
-const BROADCASTABLE_STATUSES = ["approved"];
+// (Only templates Meta has actually approved should ever be offered to the
+// broadcast module — enforced by automation.js's own broadcast route via
+// `status='approved'` in its SQL, not here.)
 
 function rowToTemplateConfig(row) {
   const components = row.components && Object.keys(row.components).length > 0
@@ -43,6 +46,7 @@ function rowToTemplateConfig(row) {
     body: components.body || { text: row.body_text, variables: [] },
     footer: components.footer || { text: row.footer_text || "" },
     buttons: components.buttons || row.buttons || [],
+    carousel: components.carousel || { cards: [] },
   };
 }
 
@@ -144,6 +148,52 @@ router.post("/validate", ...gate, async (req, res) => {
   res.json(result);
 });
 
+// ── POST media/upload?format=IMAGE|VIDEO|DOCUMENT — saves the file locally
+// (so the builder can preview/re-edit it) AND pushes it through Meta's
+// Resumable Upload API to get the media "handle" a HEADER component's
+// example needs. Returns both; the frontend stores them on header.media_url
+// / header.media_handle. Never touches whatsapp_templates directly — this
+// is a standalone upload step before/independent of saving the template.
+router.post("/media/upload", ...gate, (req, res, next) => {
+  templateMediaUpload.single("file")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    next();
+  });
+}, async (req, res) => {
+  const format = (req.query.format || "").toUpperCase();
+  const limits = LIMITS_BY_FORMAT[format];
+  if (!req.file || !limits) {
+    return res.status(400).json({ error: "No file uploaded, or format must be IMAGE, VIDEO, or DOCUMENT" });
+  }
+  if (req.file.size > limits.maxSize) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: `${format} headers must be ${Math.round(limits.maxSize / 1024 / 1024)}MB or smaller` });
+  }
+
+  try {
+    const credRes = await pool.query("SELECT meta_app_id, wa_auth_token FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
+    const creds = credRes.rows[0];
+    if (!creds?.meta_app_id || !creds?.wa_auth_token) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: "Add your Meta App ID and Access Token under Automation → Channel Setup first" });
+    }
+
+    const buffer = fs.readFileSync(req.file.path);
+    const handle = await uploadTemplateHeaderMedia(creds.meta_app_id, creds.wa_auth_token, { buffer, mimeType: req.file.mimetype });
+
+    res.json({
+      media_url: `/uploads/whatsapp-template-media/${req.file.filename}`,
+      media_handle: handle,
+      mime_type: req.file.mimetype,
+      file_name: req.file.originalname,
+    });
+  } catch (e) {
+    fs.unlink(req.file.path, () => {});
+    console.error("Template media upload failed:", e.message);
+    res.status(400).json({ error: e.message || "Could not upload media to Meta" });
+  }
+});
+
 // ── POST create — saves as DRAFT only. Never calls Meta by itself; a
 // template is only submitted for review via the explicit /submit action ──
 router.post("/", ...gate, async (req, res) => {
@@ -161,7 +211,7 @@ router.post("/", ...gate, async (req, res) => {
     }
 
     const cat = CATEGORIES.includes(tpl.category) ? tpl.category : "MARKETING";
-    const components = { header: tpl.header || { format: "NONE" }, body: tpl.body || { text: "" }, footer: tpl.footer || { text: "" }, buttons: tpl.buttons || [] };
+    const components = { header: tpl.header || { format: "NONE" }, body: tpl.body || { text: "" }, footer: tpl.footer || { text: "" }, buttons: tpl.buttons || [], carousel: tpl.carousel || { cards: [] } };
     const legacy = flattenForLegacyColumns(components);
     const variableCount = (tpl.body?.variables || []).length;
 
@@ -202,7 +252,7 @@ router.put("/:id", ...gate, async (req, res) => {
     }
 
     const cat = CATEGORIES.includes(tpl.category) ? tpl.category : existing.category;
-    const components = { header: tpl.header || { format: "NONE" }, body: tpl.body || { text: "" }, footer: tpl.footer || { text: "" }, buttons: tpl.buttons || [] };
+    const components = { header: tpl.header || { format: "NONE" }, body: tpl.body || { text: "" }, footer: tpl.footer || { text: "" }, buttons: tpl.buttons || [], carousel: tpl.carousel || { cards: [] } };
     const legacy = flattenForLegacyColumns(components);
     const variableCount = (tpl.body?.variables || []).length;
 

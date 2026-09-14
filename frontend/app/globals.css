@@ -99,6 +99,9 @@ input, select, textarea { font-family: inherit; }
 input, select, textarea, button { transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease, opacity 0.15s ease; }
 input:focus, select:focus, textarea:focus { border-color: var(--teal) !important; box-shadow: 0 0 0 3px var(--teal-dim); }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
+
 /* ── Mobile responsive shell ──────────────────────────────────────────
    The sidebar is a fixed 232px column on desktop; on phones it becomes
    a slide-in drawer (Sidebar.js toggles the .mobile-open class) behind

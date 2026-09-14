@@ -9,13 +9,13 @@ const TYPE_META = {
   PHONE_NUMBER: { label: "Call Phone Number", icon: Phone },
 };
 
-export default function TemplateButtonBuilder({ buttons, onChange }) {
+export default function TemplateButtonBuilder({ buttons, onChange, maxButtons = MAX_BUTTONS, bare = false }) {
   const list = buttons || [];
   const urlCount = list.filter((b) => b.type === "URL").length;
   const phoneCount = list.filter((b) => b.type === "PHONE_NUMBER").length;
 
   const addButton = (type) => {
-    if (list.length >= MAX_BUTTONS) return;
+    if (list.length >= maxButtons) return;
     if (type === "URL" && urlCount >= 1) return;
     if (type === "PHONE_NUMBER" && phoneCount >= 1) return;
     onChange([...list, { type, text: "", url: "", url_example: "", phone_number: "" }]);
@@ -24,10 +24,10 @@ export default function TemplateButtonBuilder({ buttons, onChange }) {
   const removeButton = (i) => onChange(list.filter((_, idx) => idx !== i));
 
   return (
-    <div style={sectionCard}>
+    <div style={bare ? undefined : sectionCard}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <div style={{ ...label, marginBottom: 0 }}>Buttons (optional, up to {MAX_BUTTONS})</div>
-        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{list.length}/{MAX_BUTTONS}</span>
+        <div style={{ ...label, marginBottom: 0 }}>Buttons (optional, up to {maxButtons})</div>
+        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{list.length}/{maxButtons}</span>
       </div>
 
       {list.length > 0 && (
@@ -89,9 +89,9 @@ export default function TemplateButtonBuilder({ buttons, onChange }) {
       )}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <AddBtn disabled={list.length >= MAX_BUTTONS} onClick={() => addButton("QUICK_REPLY")} label="Quick Reply" />
-        <AddBtn disabled={list.length >= MAX_BUTTONS || urlCount >= 1} onClick={() => addButton("URL")} label="Website URL" />
-        <AddBtn disabled={list.length >= MAX_BUTTONS || phoneCount >= 1} onClick={() => addButton("PHONE_NUMBER")} label="Phone Number" />
+        <AddBtn disabled={list.length >= maxButtons} onClick={() => addButton("QUICK_REPLY")} label="Quick Reply" />
+        <AddBtn disabled={list.length >= maxButtons || urlCount >= 1} onClick={() => addButton("URL")} label="Website URL" />
+        <AddBtn disabled={list.length >= maxButtons || phoneCount >= 1} onClick={() => addButton("PHONE_NUMBER")} label="Phone Number" />
       </div>
     </div>
   );

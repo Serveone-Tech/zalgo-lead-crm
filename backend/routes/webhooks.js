@@ -241,21 +241,67 @@ async function processStatuses(statuses) {
   }
 }
 
+// Meta pushes template approval/rejection/pause/disable as its own webhook
+// field ("message_template_status_update"), separate from the
+// "messages" field the rest of this handler reads — a single POST can
+// carry either or both, spread across entry[]/changes[], so this scans
+// every change rather than assuming index [0] like the message/status
+// handling below does (that assumption has held for messages so far, but
+// template updates aren't guaranteed to share the same change entry).
+// This is additive — it doesn't require registering a new webhook URL,
+// since the App Dashboard field subscription this URL already receives
+// messages/message_status under can also carry this field once ticked on
+// (Meta App Dashboard → WhatsApp → Configuration → Webhook fields).
+async function processTemplateStatusUpdates(entries) {
+  for (const entry of entries || []) {
+    for (const change of entry?.changes || []) {
+      if (change?.field !== "message_template_status_update") continue;
+      const v = change.value || {};
+      const metaTemplateId = v.message_template_id ? String(v.message_template_id) : null;
+      const name = v.message_template_name;
+      const language = v.message_template_language;
+      const status = (v.event || "").toLowerCase(); // approved | rejected | paused | disabled | ...
+      if (!status || (!metaTemplateId && !name)) continue;
+
+      try {
+        const match = metaTemplateId
+          ? await pool.query("SELECT id FROM whatsapp_templates WHERE meta_template_id=$1", [metaTemplateId])
+          : await pool.query("SELECT id FROM whatsapp_templates WHERE name=$1 AND language=$2", [name, language || "en_US"]);
+        const tpl = match.rows[0];
+        if (!tpl) continue;
+
+        const approvedAtSql = status === "approved" ? "COALESCE(approved_at, NOW())" : "approved_at";
+        await pool.query(
+          `UPDATE whatsapp_templates SET status=$1, rejection_reason=$2, approved_at=${approvedAtSql}, updated_at=NOW() WHERE id=$3`,
+          [status, v.reason || "", tpl.id],
+        );
+      } catch (e) {
+        console.error("processTemplateStatusUpdates failed:", e.message);
+      }
+    }
+  }
+}
+
 // ── POST /api/webhooks/whatsapp/:token ───────────────────────────
-// Meta WhatsApp Cloud API webhook — fires for every inbound message and
-// for delivery/read/failed status updates on messages we sent.
+// Meta WhatsApp Cloud API webhook — fires for every inbound message,
+// delivery/read/failed status updates on messages we sent, and (once the
+// App Dashboard's webhook field is enabled) template approval status.
 router.post("/whatsapp/:token", express.json(), async (req, res) => {
   res.sendStatus(200); // Meta requires a fast ack; retries aggressively otherwise
   try {
     const tenantId = await tenantForToken(req.params.token);
     if (!tenantId) return;
 
+    if (Array.isArray(req.body?.entry)) {
+      await processTemplateStatusUpdates(req.body.entry);
+    }
+
     const value = req.body?.entry?.[0]?.changes?.[0]?.value;
     if (Array.isArray(value?.statuses) && value.statuses.length) {
       await processStatuses(value.statuses);
     }
     const message = value?.messages?.[0];
-    if (!message) return; // status update, not a new message — nothing else to do
+    if (!message) return; // status/template update, not a new message — nothing else to do
 
     const from = message.from; // sender's WhatsApp ID — digits only, e.g. "919123456780"
     const profileName = value?.contacts?.[0]?.profile?.name || "";

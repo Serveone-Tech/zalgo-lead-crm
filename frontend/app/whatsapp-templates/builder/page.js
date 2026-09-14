@@ -9,6 +9,7 @@ import TemplateHeaderBuilder from "../../../components/whatsapp-templates/Templa
 import TemplateBodyBuilder from "../../../components/whatsapp-templates/TemplateBodyBuilder";
 import TemplateFooterBuilder from "../../../components/whatsapp-templates/TemplateFooterBuilder";
 import TemplateButtonBuilder from "../../../components/whatsapp-templates/TemplateButtonBuilder";
+import TemplateCarouselBuilder from "../../../components/whatsapp-templates/TemplateCarouselBuilder";
 import WhatsAppTemplatePreview from "../../../components/whatsapp-templates/WhatsAppTemplatePreview";
 import MetaTemplateValidationPanel from "../../../components/whatsapp-templates/MetaTemplateValidationPanel";
 import MetaPayloadDebugView from "../../../components/whatsapp-templates/MetaPayloadDebugView";
@@ -23,6 +24,7 @@ const BLANK_TEMPLATE = {
   body: { text: "", variables: [] },
   footer: { text: "" },
   buttons: [],
+  carousel: { cards: [] },
 };
 
 const EDITABLE_STATUSES = ["draft", "rejected", "error"];
@@ -176,6 +178,7 @@ function BuilderContent() {
           <TemplateBodyBuilder body={template.body} onChange={(body) => setTemplate((t) => ({ ...t, body }))} />
           <TemplateFooterBuilder footer={template.footer} onChange={(footer) => setTemplate((t) => ({ ...t, footer }))} />
           <TemplateButtonBuilder buttons={template.buttons} onChange={(buttons) => setTemplate((t) => ({ ...t, buttons }))} />
+          <TemplateCarouselBuilder category={template.category} carousel={template.carousel} onChange={(carousel) => setTemplate((t) => ({ ...t, carousel }))} />
         </div>
 
         <div style={{ position: "sticky", top: 20 }}>

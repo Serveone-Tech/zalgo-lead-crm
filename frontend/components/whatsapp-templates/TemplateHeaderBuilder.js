@@ -2,20 +2,19 @@
 import { useRef } from "react";
 import { Image as ImageIcon, Video, FileText, Type, Ban } from "lucide-react";
 import TemplateVariableManager from "./TemplateVariableManager";
+import MediaUploadField from "./MediaUploadField";
 import { label, sectionCard, textInput } from "./shared-styles";
 
-// Media headers (IMAGE/VIDEO/DOCUMENT) need Meta's resumable upload-session
-// API, which isn't wired up yet — showing them as disabled with an
-// explanation is safer than a header type that produces an invalid
-// payload. The component list is deliberately data-driven so adding a real
-// media header later is "flip mediaHeadersEnabled" plus a handler, not a
-// UI rewrite (see /docs/whatsapp-template-builder.md).
+// The header-type list is data-driven so a future Meta-supported format
+// just needs a new entry here (plus a validator/payload change) — not a
+// rewrite of this component. Media formats go through Meta's Resumable
+// Upload API (backend/utils/meta-media-upload.js) via MediaUploadField.
 const HEADER_TYPES = [
-  { format: "NONE", label: "None", icon: Ban, enabled: true },
-  { format: "TEXT", label: "Text", icon: Type, enabled: true },
-  { format: "IMAGE", label: "Image", icon: ImageIcon, enabled: false },
-  { format: "VIDEO", label: "Video", icon: Video, enabled: false },
-  { format: "DOCUMENT", label: "Document", icon: FileText, enabled: false },
+  { format: "NONE", label: "None", icon: Ban },
+  { format: "TEXT", label: "Text", icon: Type },
+  { format: "IMAGE", label: "Image", icon: ImageIcon },
+  { format: "VIDEO", label: "Video", icon: Video },
+  { format: "DOCUMENT", label: "Document", icon: FileText },
 ];
 
 export default function TemplateHeaderBuilder({ header, onChange }) {
@@ -42,9 +41,7 @@ export default function TemplateHeaderBuilder({ header, onChange }) {
             <button
               key={t.format}
               type="button"
-              disabled={!t.enabled}
-              title={!t.enabled ? "Media headers need a media upload flow that isn't built yet — coming in a later update." : undefined}
-              onClick={() => t.enabled && setFormat(t.format)}
+              onClick={() => setFormat(t.format)}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -53,11 +50,10 @@ export default function TemplateHeaderBuilder({ header, onChange }) {
                 borderRadius: 8,
                 border: `1px solid ${active ? "var(--teal)" : "var(--border)"}`,
                 background: active ? "var(--teal-dim)" : "var(--bg-input)",
-                color: !t.enabled ? "var(--text-muted)" : active ? "var(--teal-light)" : "var(--text-secondary)",
+                color: active ? "var(--teal-light)" : "var(--text-secondary)",
                 fontSize: 12,
                 fontWeight: 600,
-                cursor: t.enabled ? "pointer" : "not-allowed",
-                opacity: t.enabled ? 1 : 0.55,
+                cursor: "pointer",
                 fontFamily: "var(--font-main)",
               }}
             >
@@ -66,12 +62,6 @@ export default function TemplateHeaderBuilder({ header, onChange }) {
           );
         })}
       </div>
-
-      {!HEADER_TYPES.find((t) => t.format === header.format)?.enabled && header.format !== "NONE" && header.format !== "TEXT" && (
-        <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 8 }}>
-          {header.format} headers aren't available yet — they require Meta's media upload flow, which is planned for a future update.
-        </div>
-      )}
 
       {header.format === "TEXT" && (
         <>
@@ -92,6 +82,10 @@ export default function TemplateHeaderBuilder({ header, onChange }) {
             maxVariables={1}
           />
         </>
+      )}
+
+      {["IMAGE", "VIDEO", "DOCUMENT"].includes(header.format) && (
+        <MediaUploadField format={header.format} value={header} onChange={(media) => onChange({ ...header, ...media })} />
       )}
     </div>
   );

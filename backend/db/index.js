@@ -519,6 +519,7 @@ const initDB = async () => {
         wa_account_sid TEXT DEFAULT '',
         wa_auth_token TEXT DEFAULT '',
         wa_from VARCHAR(50) DEFAULT '',
+        meta_app_id VARCHAR(50) DEFAULT '',
         webhook_token VARCHAR(64) UNIQUE,
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
@@ -713,6 +714,14 @@ const initDB = async () => {
     // with per-variable name+sample) the new builder UI reads/writes;
     // header_format lets the builder distinguish a template with no header
     // from one with a text header without parsing header_text emptiness.
+    // Meta's App ID — needed alongside the access token/WABA id to use the
+    // Resumable Upload API for template header media (image/video/document
+    // examples). Not a secret (Facebook App IDs are public), so unlike
+    // wa_auth_token it's never masked before reaching the frontend.
+    await client
+      .query(`ALTER TABLE automation_credentials ADD COLUMN IF NOT EXISTS meta_app_id VARCHAR(50) DEFAULT ''`)
+      .catch((e) => console.log("alter skip:", e.message));
+
     const templateBuilderCols = [
       `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS header_format VARCHAR(20) DEFAULT 'NONE'`,
       `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS components JSONB DEFAULT '{}'`,
