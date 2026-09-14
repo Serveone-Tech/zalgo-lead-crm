@@ -166,6 +166,82 @@ router.post("/google-leads/:token", express.json(), async (req, res) => {
   }
 });
 
+// ── GET /api/webhooks/whatsapp/meta ──────────────────────────────
+// Verification handshake for the ONE shared, app-level callback URL —
+// register this exact URL (not a per-tenant one) in Meta App Dashboard →
+// WhatsApp → Configuration when this app acts as a Meta Tech Provider
+// connecting multiple separate products' WABAs via Embedded Signup. The
+// verify token is a single secret set once in the App Dashboard, matched
+// against META_APP_VERIFY_TOKEN here — not per-tenant like the URL-token
+// route below, since Meta only ever calls this one fixed URL.
+// Registered BEFORE /whatsapp/:token so the literal "meta" path always
+// wins over that route's :token wildcard (Express matches route order,
+// and "meta" would otherwise satisfy :token like any other string).
+router.get("/whatsapp/meta", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const verifyToken = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+  if (mode === "subscribe" && verifyToken && process.env.META_APP_VERIFY_TOKEN && verifyToken === process.env.META_APP_VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
+  }
+  res.sendStatus(403);
+});
+
+// ── POST /api/webhooks/whatsapp/meta ─────────────────────────────
+// Receives EVERY WABA's events once multiple products share this one Meta
+// App (Tech Provider model) — Meta only supports one callback URL per app,
+// so this dispatches each entry (keyed by its WABA id, entry.id) to
+// whichever product actually owns that WABA:
+//   1. One of this CRM's own tenants (automation_credentials.wa_from) —
+//      processed locally, exactly like the per-tenant route below.
+//   2. A WABA another product registered via POST /registry — forwarded
+//      as-is to that product's own forward_url.
+//   3. Neither — logged and dropped (a WABA mid-setup, not yet registered
+//      anywhere, isn't an error condition worth alerting on per-event).
+// Also registered before /whatsapp/:token for the same route-order reason.
+router.post("/whatsapp/meta", express.json(), async (req, res) => {
+  res.sendStatus(200); // fast ack, same reason as the per-tenant route
+  try {
+    const entries = Array.isArray(req.body?.entry) ? req.body.entry : [];
+    for (const entry of entries) {
+      const wabaId = entry?.id;
+      if (!wabaId) continue;
+
+      const ownTenant = await pool.query("SELECT user_id FROM automation_credentials WHERE wa_from=$1", [wabaId]);
+      if (ownTenant.rows[0]) {
+        const tenantId = ownTenant.rows[0].user_id;
+        for (const change of entry.changes || []) {
+          if (change.field === "message_template_status_update") {
+            await processTemplateStatusUpdates([{ changes: [change] }]);
+          } else {
+            await processWhatsAppValueForTenant(tenantId, change.value);
+          }
+        }
+        continue;
+      }
+
+      const registered = await pool.query("SELECT * FROM webhook_registry WHERE waba_id=$1", [wabaId]);
+      const target = registered.rows[0];
+      if (!target) {
+        console.log(`Meta webhook: no product registered for WABA ${wabaId} — dropped`);
+        continue;
+      }
+
+      try {
+        await fetch(target.forward_url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Dispatcher-Secret": target.forward_secret },
+          body: JSON.stringify({ object: req.body.object, entry: [entry] }),
+        });
+      } catch (e) {
+        console.error(`Meta webhook forward to ${target.product_key} failed:`, e.message);
+      }
+    }
+  } catch (e) {
+    console.error("Meta dispatcher webhook error:", e.message);
+  }
+});
+
 // ── GET /api/webhooks/whatsapp/:token ────────────────────────────
 // Meta's one-time verification handshake when you save the webhook in the
 // Meta App dashboard. Must echo back hub.challenge if the verify token matches.
@@ -282,10 +358,67 @@ async function processTemplateStatusUpdates(entries) {
   }
 }
 
+// Shared by the per-tenant URL route (/whatsapp/:token) and the shared-app
+// dispatcher route (/whatsapp/meta) below — everything that happens once a
+// specific tenant and Meta "value" object (one changes[].value) are known:
+// delivery statuses, then an inbound message if there is one.
+async function processWhatsAppValueForTenant(tenantId, value) {
+  if (Array.isArray(value?.statuses) && value.statuses.length) {
+    await processStatuses(value.statuses);
+  }
+  const message = value?.messages?.[0];
+  if (!message) return; // status/template update, not a new message — nothing else to do
+
+  const from = message.from; // sender's WhatsApp ID — digits only, e.g. "919123456780"
+  const profileName = value?.contacts?.[0]?.profile?.name || "";
+  if (!from) return;
+
+  // Media types carry the id of the file under a key named after the
+  // type itself (message.image.id, message.document.id, ...) plus an
+  // optional caption — everything else (text, location, etc) is treated
+  // as plain text, falling back to a "[type]" placeholder if there's
+  // truly nothing to show.
+  const MEDIA_TYPES = ["image", "document", "audio", "video", "sticker"];
+  let messageBody = message.text?.body || "";
+  let media = null;
+
+  if (MEDIA_TYPES.includes(message.type) && message[message.type]?.id) {
+    const mediaPayload = message[message.type];
+    messageBody = mediaPayload.caption || `[${message.type}]`;
+    try {
+      const creds = await pool.query(
+        "SELECT wa_account_sid, wa_auth_token FROM automation_credentials WHERE user_id=$1",
+        [tenantId],
+      );
+      const accessToken = creds.rows[0]?.wa_auth_token;
+      if (accessToken) {
+        const { mediaUrl } = await downloadWhatsAppMedia(mediaPayload.id, accessToken);
+        media = { url: mediaUrl, type: message.type, name: mediaPayload.filename || mediaPayload.caption || "" };
+      }
+    } catch (e) {
+      console.error("WhatsApp media download failed:", e.message);
+    }
+  } else if (!messageBody) {
+    messageBody = message.type ? `[${message.type}]` : "";
+  }
+
+  await captureInboundMessage(tenantId, {
+    phone: from,
+    name: profileName,
+    message: messageBody,
+    platform: "WhatsApp",
+    media,
+    waMessageId: message.id || null,
+  });
+}
+
 // ── POST /api/webhooks/whatsapp/:token ───────────────────────────
 // Meta WhatsApp Cloud API webhook — fires for every inbound message,
 // delivery/read/failed status updates on messages we sent, and (once the
 // App Dashboard's webhook field is enabled) template approval status.
+// This is the per-tenant URL: a tenant who entered their own Meta
+// credentials by hand (Channel Setup) registers this exact URL in their own
+// WABA's webhook config, so the tenant is already known from the URL alone.
 router.post("/whatsapp/:token", express.json(), async (req, res) => {
   res.sendStatus(200); // Meta requires a fast ack; retries aggressively otherwise
   try {
@@ -297,55 +430,54 @@ router.post("/whatsapp/:token", express.json(), async (req, res) => {
     }
 
     const value = req.body?.entry?.[0]?.changes?.[0]?.value;
-    if (Array.isArray(value?.statuses) && value.statuses.length) {
-      await processStatuses(value.statuses);
-    }
-    const message = value?.messages?.[0];
-    if (!message) return; // status/template update, not a new message — nothing else to do
-
-    const from = message.from; // sender's WhatsApp ID — digits only, e.g. "919123456780"
-    const profileName = value?.contacts?.[0]?.profile?.name || "";
-    if (!from) return;
-
-    // Media types carry the id of the file under a key named after the
-    // type itself (message.image.id, message.document.id, ...) plus an
-    // optional caption — everything else (text, location, etc) is treated
-    // as plain text, falling back to a "[type]" placeholder if there's
-    // truly nothing to show.
-    const MEDIA_TYPES = ["image", "document", "audio", "video", "sticker"];
-    let messageBody = message.text?.body || "";
-    let media = null;
-
-    if (MEDIA_TYPES.includes(message.type) && message[message.type]?.id) {
-      const mediaPayload = message[message.type];
-      messageBody = mediaPayload.caption || `[${message.type}]`;
-      try {
-        const creds = await pool.query(
-          "SELECT wa_account_sid, wa_auth_token FROM automation_credentials WHERE user_id=$1",
-          [tenantId],
-        );
-        const accessToken = creds.rows[0]?.wa_auth_token;
-        if (accessToken) {
-          const { mediaUrl } = await downloadWhatsAppMedia(mediaPayload.id, accessToken);
-          media = { url: mediaUrl, type: message.type, name: mediaPayload.filename || mediaPayload.caption || "" };
-        }
-      } catch (e) {
-        console.error("WhatsApp media download failed:", e.message);
-      }
-    } else if (!messageBody) {
-      messageBody = message.type ? `[${message.type}]` : "";
-    }
-
-    await captureInboundMessage(tenantId, {
-      phone: from,
-      name: profileName,
-      message: messageBody,
-      platform: "WhatsApp",
-      media,
-      waMessageId: message.id || null,
-    });
+    await processWhatsAppValueForTenant(tenantId, value);
   } catch (e) {
     console.error("WhatsApp webhook error:", e.message);
+  }
+});
+
+// ── POST /api/webhooks/registry ──────────────────────────────────
+// How another product (school-erp, erp, lab, washing-erp, lms, ...)
+// registers a WABA it owns so the dispatcher above knows to forward that
+// WABA's events to it. Machine-to-machine, not a logged-in user — protected
+// by a static shared secret (DISPATCHER_REGISTRY_SECRET) both sides know,
+// not the normal JWT auth. forward_secret is chosen by the calling product
+// and echoed back on every forwarded webhook so it can verify the event
+// really came from this dispatcher and not somewhere else.
+router.post("/registry", express.json(), async (req, res) => {
+  const secret = req.headers["x-registry-secret"];
+  if (!process.env.DISPATCHER_REGISTRY_SECRET || secret !== process.env.DISPATCHER_REGISTRY_SECRET) {
+    return res.status(401).json({ error: "Invalid or missing registry secret" });
+  }
+  const { product_key, waba_id, phone_number_id, forward_url, forward_secret } = req.body || {};
+  if (!product_key?.trim() || !waba_id?.trim() || !forward_url?.trim() || !forward_secret?.trim()) {
+    return res.status(400).json({ error: "product_key, waba_id, forward_url and forward_secret are required" });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO webhook_registry (product_key, waba_id, phone_number_id, forward_url, forward_secret, updated_at)
+       VALUES ($1,$2,$3,$4,$5,NOW())
+       ON CONFLICT (waba_id) DO UPDATE SET product_key=$1, phone_number_id=$3, forward_url=$4, forward_secret=$5, updated_at=NOW()`,
+      [product_key.trim(), waba_id.trim(), phone_number_id?.trim() || "", forward_url.trim(), forward_secret.trim()],
+    );
+    res.json({ success: true });
+  } catch (e) {
+    console.error("Webhook registry write failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── DELETE /api/webhooks/registry/:waba_id ───────────────────────
+router.delete("/registry/:waba_id", async (req, res) => {
+  const secret = req.headers["x-registry-secret"];
+  if (!process.env.DISPATCHER_REGISTRY_SECRET || secret !== process.env.DISPATCHER_REGISTRY_SECRET) {
+    return res.status(401).json({ error: "Invalid or missing registry secret" });
+  }
+  try {
+    await pool.query("DELETE FROM webhook_registry WHERE waba_id=$1", [req.params.waba_id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
   }
 });
 

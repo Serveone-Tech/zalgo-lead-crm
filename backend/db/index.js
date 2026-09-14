@@ -581,6 +581,26 @@ const initDB = async () => {
         value TEXT
       );
 
+      -- Cross-product routing table for a single shared Meta App used as a
+      -- WhatsApp Tech Provider across multiple separate SaaS products
+      -- (lead-management, school-erp, erp, lab, etc — each its own codebase/
+      -- server). Meta only accepts ONE webhook callback URL per App, so this
+      -- CRM's backend acts as the central receiver (see /api/webhooks/whatsapp/meta
+      -- in routes/webhooks.js) and forwards each event to whichever product
+      -- registered the WABA that event belongs to. A row with product_key
+      -- 'lead-management' is never needed here — this app's own tenants are
+      -- matched directly against automation_credentials instead.
+      CREATE TABLE IF NOT EXISTS webhook_registry (
+        id SERIAL PRIMARY KEY,
+        product_key VARCHAR(50) NOT NULL,
+        waba_id VARCHAR(50) NOT NULL UNIQUE,
+        phone_number_id VARCHAR(50) DEFAULT '',
+        forward_url TEXT NOT NULL,
+        forward_secret VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+
       -- WhatsApp message templates a tenant has submitted to Meta for
       -- approval. A template is required to message anyone outside the
       -- free 24-hour customer-service window (which plain text can't do),
@@ -775,6 +795,7 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_user_id ON whatsapp_templates(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_user_status ON whatsapp_templates(user_id, status)`,
       `CREATE INDEX IF NOT EXISTS idx_whatsapp_template_submissions_template ON whatsapp_template_submissions(template_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_webhook_registry_waba ON webhook_registry(waba_id)`,
     ];
     for (const q of indexes) {
       await client.query(q).catch((e) => console.log("index skip:", e.message));
