@@ -42,6 +42,14 @@
   --shadow-lg: 0 16px 40px rgba(0,0,0,0.42);
   --shadow-glow: 0 0 0 1px rgba(0,102,204,0.4), 0 8px 24px rgba(0,102,204,0.18);
   --gradient-accent: linear-gradient(135deg, #00b4fb 0%, #0066cc 55%, #012e66 100%);
+  /* The logo's other half — "लो" fades blue into orange/gold. Reserved for
+     a handful of standout moments (the app's single most-used primary CTA,
+     the user avatar) rather than every button, so it reads as a deliberate
+     accent instead of diluting the blue identity everywhere. */
+  --orange: #ff9802;
+  --orange-light: #ffb347;
+  --gradient-brand: linear-gradient(120deg, #0066cc 0%, #00b4fb 45%, #ff9802 100%);
+  --shadow-glow-brand: 0 0 0 1px rgba(255,152,2,0.35), 0 8px 24px rgba(255,152,2,0.2);
 }
 
 :root[data-theme="light"] {
@@ -82,6 +90,10 @@
   --shadow-lg: 0 16px 40px rgba(20,30,35,0.12);
   --shadow-glow: 0 0 0 1px rgba(0,102,204,0.18), 0 8px 24px rgba(0,102,204,0.1);
   --gradient-accent: linear-gradient(135deg, #00b4fb 0%, #0066cc 55%, #012e66 100%);
+  --orange: #e07f00;
+  --orange-light: #ff9802;
+  --gradient-brand: linear-gradient(120deg, #0066cc 0%, #0092f7 45%, #e07f00 100%);
+  --shadow-glow-brand: 0 0 0 1px rgba(224,127,0,0.2), 0 8px 24px rgba(224,127,0,0.12);
 }
 
 html, body { height: 100%; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-body); font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-feature-settings: 'cv02','cv03','cv04','cv11'; transition: background-color 0.2s ease, color 0.2s ease; }

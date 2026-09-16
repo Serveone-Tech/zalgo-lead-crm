@@ -406,7 +406,7 @@ export default function DashboardPage() {
               setModal(true);
             }}
             style={{
-              background: "var(--gradient-accent)",
+              background: "var(--gradient-brand)",
               color: "#fff",
               border: "none",
               borderRadius: "var(--radius-sm)",
@@ -418,7 +418,7 @@ export default function DashboardPage() {
               display: "flex",
               alignItems: "center",
               gap: 6,
-              boxShadow: "var(--shadow-glow)",
+              boxShadow: "var(--shadow-glow-brand)",
             }}
           >
             <Plus size={16} /> Add Lead

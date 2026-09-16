@@ -689,7 +689,7 @@ export default function Sidebar() {
                 width: 34,
                 height: 34,
                 borderRadius: "50%",
-                background: "var(--gradient-accent)",
+                background: "var(--gradient-brand)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
