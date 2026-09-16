@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
@@ -27,9 +27,14 @@ function isToday(d) {
 
 export default function CustomersPage() {
   const router = useRouter();
-  const [customers, setCustomers] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [headerStats, setHeaderStats] = useState(null);
+  const [cardStats, setCardStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectingAll, setSelectingAll] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -78,12 +83,20 @@ export default function CustomersPage() {
     refreshUser().then((fresh) => {
       if (fresh) setUser(fresh);
     });
-    load();
+    loadHeaderStats();
     api
       .get("/order-stages")
       .then((r) => setOrderStages(r.data))
       .catch(() => {});
   }, []);
+
+  // Search gets its own debounce since, with server-side filtering, every
+  // change now fires a network request — other filters (dropdowns/dates)
+  // stay instant.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const planFeatures = sub?.features
     ? typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features
@@ -100,6 +113,8 @@ export default function CustomersPage() {
     try {
       await api.put(`/customers/${c.id}/orders/${c.latest_order_id}`, { stage });
       load();
+      loadCardStats();
+      loadHeaderStats();
     } catch {
       // no-op — dropdown just stays on whatever it was
     }
@@ -170,54 +185,51 @@ export default function CustomersPage() {
     setReportDownloading(false);
   };
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  const filterParams = {
+    search: debouncedSearch || undefined,
+    stage: stageFilter || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  };
+  const filterKey = JSON.stringify(filterParams);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterKey]);
+
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/customers");
-      setCustomers(data);
+      const { data } = await api.get("/customers/paged", { params: { page, pageSize, ...filterParams } });
+      setRows(data.rows);
+      setTotal(data.total);
     } catch {
       router.push("/login");
     } finally {
       setLoading(false);
     }
   };
-
-  const filtered = useMemo(
-    () =>
-      customers.filter((c) => {
-        const q = search.toLowerCase();
-        if (
-          q &&
-          !c.name.toLowerCase().includes(q) &&
-          !(c.phone || "").includes(q) &&
-          !(c.email || "").toLowerCase().includes(q) &&
-          !(c.latest_order_tracking_id || "").toLowerCase().includes(q)
-        )
-          return false;
-
-        if (stageFilter && c.latest_order_stage !== stageFilter) return false;
-
-        // With a stage picked, the date range means "entered that stage on
-        // this date" (latest_order_stage_changed_at) — without one, it
-        // falls back to when the customer was enrolled, same as before.
-        const dateBasis = stageFilter ? c.latest_order_stage_changed_at : c.created_at;
-        const compareDate = dateBasis ? dateBasis.split("T")[0] : null;
-        if (dateFrom && (!compareDate || compareDate < dateFrom)) return false;
-        if (dateTo && (!compareDate || compareDate > dateTo)) return false;
-        return true;
-      }),
-    [customers, search, dateFrom, dateTo, stageFilter],
-  );
-
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
   useEffect(() => {
-    setPage(1);
-  }, [search, dateFrom, dateTo, stageFilter]);
-  const paged = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
-  );
+    load();
+    loadCardStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, filterKey]);
+
+  const loadHeaderStats = async () => {
+    try {
+      const { data } = await api.get("/customers/stats");
+      setHeaderStats(data);
+    } catch {}
+  };
+  const loadCardStats = async () => {
+    try {
+      const { data } = await api.get("/customers/stats", { params: filterParams });
+      setCardStats(data);
+    } catch {}
+  };
 
   const addCustomer = async (e) => {
     e.preventDefault();
@@ -235,6 +247,8 @@ export default function CustomersPage() {
         notes: "",
       });
       load();
+      loadCardStats();
+      loadHeaderStats();
     } catch {}
     setSaving(false);
   };
@@ -244,6 +258,8 @@ export default function CustomersPage() {
     try {
       await api.delete(`/customers/${id}`);
       load();
+      loadCardStats();
+      loadHeaderStats();
     } catch {
       // no-op — leave the row in place so the user can retry
     }
@@ -260,10 +276,23 @@ export default function CustomersPage() {
     });
   };
 
-  const toggleSelectAll = () => {
-    setSelectedIds((prev) =>
-      prev.size === filtered.length ? new Set() : new Set(filtered.map((c) => c.id)),
-    );
+  // With server-side pagination, "select all" means every customer matching
+  // the current filters, not just the current page — the browser only holds
+  // one page of rows, so this asks the server for the full matching id list.
+  const toggleSelectAll = async () => {
+    if (selectedIds.size > 0) {
+      setSelectedIds(new Set());
+      return;
+    }
+    setSelectingAll(true);
+    try {
+      const { data: ids } = await api.get("/customers/matching-ids", { params: filterParams });
+      setSelectedIds(new Set(ids));
+    } catch {
+      // no-op — selection stays empty so the user can retry
+    } finally {
+      setSelectingAll(false);
+    }
   };
 
   const bulkDelete = async () => {
@@ -272,6 +301,8 @@ export default function CustomersPage() {
       await api.post("/customers/bulk-delete", { ids: Array.from(selectedIds) });
       setSelectedIds(new Set());
       load();
+      loadCardStats();
+      loadHeaderStats();
     } catch {
       // no-op — selection stays as-is so the user can retry
     }
@@ -282,30 +313,15 @@ export default function CustomersPage() {
   const fmt = mounted ? formatCurrency : (n) => `₹${parseFloat(n) || 0}`;
   // Cards reflect whatever's currently filtered (search + date range), not
   // the whole unfiltered customer list — so picking a date range actually
-  // changes the numbers shown, not just the table rows.
-  // Real order revenue (sum of every order's amount) — the old card summed
-  // customers.total_fee, a standalone manually-entered number left over from
-  // this product's coaching-tool origin that has no link to actual orders.
-  const totalFee = filtered.reduce(
-    (s, c) => s + parseFloat(c.total_order_value || 0),
-    0,
-  );
-  const totalCollected = filtered.reduce(
-    (s, c) => s + parseFloat(c.total_collected || 0),
-    0,
-  );
-  const totalDue = filtered.reduce(
-    (s, c) => s + parseFloat(c.total_due_amount || 0),
-    0,
-  );
-  const totalCancelled = filtered.reduce(
-    (s, c) => s + parseFloat(c.cancelled_amount || 0),
-    0,
-  );
-  const cancelledOrderCount = filtered.reduce(
-    (s, c) => s + parseInt(c.cancelled_order_count || 0, 10),
-    0,
-  );
+  // changes the numbers shown, not just the table rows. Real order revenue
+  // (sum of every order's amount) — the old card summed customers.total_fee,
+  // a standalone manually-entered number left over from this product's
+  // coaching-tool origin that has no link to actual orders.
+  const totalFee = parseFloat(cardStats?.total_order_value || 0);
+  const totalCollected = parseFloat(cardStats?.total_collected || 0);
+  const totalDue = parseFloat(cardStats?.total_due || 0);
+  const totalCancelled = parseFloat(cardStats?.total_cancelled || 0);
+  const cancelledOrderCount = cardStats?.cancelled_order_count || 0;
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -329,10 +345,10 @@ export default function CustomersPage() {
             Customers
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
-            {customers.length} customer{customers.length !== 1 ? "s" : ""}
-            {customers.filter((c) => isOverdue(c.next_due_date)).length > 0 && (
+            {headerStats?.total ?? 0} customer{(headerStats?.total ?? 0) !== 1 ? "s" : ""}
+            {(headerStats?.overdue_count ?? 0) > 0 && (
               <span style={{ color: "var(--danger)", marginLeft: 10 }}>
-                • {customers.filter((c) => isOverdue(c.next_due_date)).length}{" "}
+                • {headerStats.overdue_count}{" "}
                 payment overdue
               </span>
             )}
@@ -412,7 +428,7 @@ export default function CustomersPage() {
         {[
           {
             label: "Total Customers",
-            value: filtered.length,
+            value: cardStats?.total ?? 0,
             color: "var(--teal)",
             icon: <Users size={18} />,
           },
@@ -667,7 +683,7 @@ export default function CustomersPage() {
           >
             Loading...
           </div>
-        ) : filtered.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div style={{ padding: 48, textAlign: "center" }}>
             <div style={{ marginBottom: 12, color: "var(--teal)", display: "flex", justifyContent: "center" }}><Users size={36} /></div>
             <div
@@ -678,12 +694,12 @@ export default function CustomersPage() {
                 marginBottom: 6,
               }}
             >
-              {customers.length === 0
+              {headerStats?.total === 0
                 ? "No customers yet"
                 : "No matching customers"}
             </div>
             <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
-              {customers.length === 0
+              {headerStats?.total === 0
                 ? 'Convert a lead to "Converted" stage or add manually'
                 : "Try adjusting search"}
             </div>
@@ -709,9 +725,10 @@ export default function CustomersPage() {
                     >
                       <input
                         type="checkbox"
-                        checked={filtered.length > 0 && selectedIds.size === filtered.length}
+                        checked={total > 0 && selectedIds.size === total}
                         onChange={toggleSelectAll}
-                        style={{ cursor: "pointer" }}
+                        disabled={selectingAll}
+                        style={{ cursor: selectingAll ? "not-allowed" : "pointer" }}
                       />
                     </th>
                   )}
@@ -751,7 +768,7 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody>
-                {paged.map((c, i) => {
+                {rows.map((c, i) => {
                   const balance = parseFloat(c.total_due_amount || 0);
                   const over = isOverdue(c.next_due_date),
                     tod = isToday(c.next_due_date);
@@ -1079,17 +1096,17 @@ export default function CustomersPage() {
         )}
       </div>
 
-      {!loading && filtered.length > 0 && (
+      {!loading && total > 0 && (
         <Pagination
           page={page}
           setPage={setPage}
           pageSize={pageSize}
           setPageSize={setPageSize}
-          total={filtered.length}
+          total={total}
         />
       )}
 
-      {!loading && filtered.length > 0 && (
+      {!loading && total > 0 && (
         <div
           style={{
             marginTop: 12,
@@ -1098,7 +1115,7 @@ export default function CustomersPage() {
             textAlign: "right",
           }}
         >
-          Showing {filtered.length} of {customers.length} customers
+          Showing {total} of {headerStats?.total ?? 0} customers
         </div>
       )}
 

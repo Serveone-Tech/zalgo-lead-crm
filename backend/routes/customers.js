@@ -19,66 +19,166 @@ const visibilityClause = (req, paramIndex) => {
   return { clause: ` AND c.assigned_to=$${paramIndex}`, params: [req.user.id] };
 };
 
-// GET all customers
-router.get("/", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
+// Shared aggregation — same shape the old full-fetch GET / used, now reused
+// as a CTE by /paged, /stats, and /matching-ids so all three agree on what
+// a "customer row" looks like (including the derived latest_order_* /
+// last_activity_at columns that search/stage/date filters key off below).
+function customerAggCTE(visClause) {
+  return `
+    SELECT c.*, u.name AS assigned_to_name,
+      -- Cancelled/returned orders (stage flagged excludes_dues) no longer
+      -- count as a real sale at all — excluded from order value and
+      -- collected the same way they're already excluded from what's
+      -- still owed, so Total = Collected + Pending always reconciles
+      -- instead of a cancelled order's value silently inflating Total.
+      COALESCE(SUM(CASE WHEN NOT COALESCE(os_due.excludes_dues,false) THEN co.advance_paid ELSE 0 END),0) AS total_collected,
+      COALESCE(SUM(CASE WHEN NOT COALESCE(os_due.excludes_dues,false) THEN co.amount ELSE 0 END),0) AS total_order_value,
+      COALESCE(SUM(CASE WHEN co.payment_type='cod' AND NOT COALESCE(os_due.excludes_dues,false) THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
+      -- Surfaced separately so cancelled money isn't just silently
+      -- dropped from the totals above — it's visible as its own figure.
+      COALESCE(SUM(CASE WHEN COALESCE(os_due.excludes_dues,false) THEN co.amount ELSE 0 END),0) AS cancelled_amount,
+      COALESCE(COUNT(CASE WHEN COALESCE(os_due.excludes_dues,false) THEN 1 END),0) AS cancelled_order_count,
+      (SELECT MIN(co2.next_due_date) FROM customer_orders co2
+       LEFT JOIN order_stages os2 ON os2.user_id=co2.user_id AND os2.name=co2.stage
+       WHERE co2.customer_id=c.id AND co2.payment_type='cod' AND co2.deleted_at IS NULL
+         AND NOT COALESCE(os2.excludes_dues,false)
+         AND (co2.amount - COALESCE(co2.advance_paid,0)) > 0) AS next_due_date,
+      -- Whichever is more recent — the customer being added, or their most
+      -- recent order — is what "just happened" for this customer, and
+      -- what the list is sorted by so new activity always floats to top.
+      GREATEST(c.created_at, COALESCE(MAX(co.created_at), c.created_at)) AS last_activity_at,
+      (SELECT co3.id FROM customer_orders co3
+       WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+       ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_id,
+      (SELECT co3.stage FROM customer_orders co3
+       WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+       ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_stage,
+      (SELECT COALESCE(co3.stage_changed_at, co3.created_at) FROM customer_orders co3
+       WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+       ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_stage_changed_at,
+      (SELECT co3.amount FROM customer_orders co3
+       WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+       ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_amount,
+      (SELECT co3.payment_type FROM customer_orders co3
+       WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+       ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_payment_type,
+      (SELECT co3.tracking_id FROM customer_orders co3
+       WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
+       ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_tracking_id,
+      (SELECT COUNT(*) FROM customer_orders co4
+       WHERE co4.customer_id=c.id AND co4.deleted_at IS NULL) AS order_count
+    FROM customers c
+    LEFT JOIN customer_orders co ON co.customer_id=c.id AND co.deleted_at IS NULL
+    LEFT JOIN order_stages os_due ON os_due.user_id=co.user_id AND os_due.name=co.stage
+    LEFT JOIN users u ON u.id=c.assigned_to
+    WHERE c.user_id=$1${visClause}
+    GROUP BY c.id, u.name
+  `;
+}
+
+// Search/stage/date filters, applied on top of the agg CTE above (they key
+// off latest_order_stage / latest_order_stage_changed_at, which only exist
+// post-aggregation). Mirrors the page's old client-side `filtered` useMemo.
+function buildCustomerFilterClause(query, startIndex) {
+  const { search, stage, dateFrom, dateTo } = query;
+  const conditions = [];
+  const params = [];
+  let idx = startIndex;
+  if (search && search.trim()) {
+    params.push(`%${search.trim()}%`);
+    const p = `$${idx}`;
+    idx++;
+    conditions.push(`(name ILIKE ${p} OR phone ILIKE ${p} OR email ILIKE ${p} OR latest_order_tracking_id ILIKE ${p})`);
+  }
+  if (stage) {
+    params.push(stage);
+    conditions.push(`latest_order_stage=$${idx}`);
+    idx++;
+  }
+  // With a stage picked, the date range means "entered that stage on this
+  // date" — without one, it falls back to when the customer was enrolled.
+  const dateBasisCol = stage ? "latest_order_stage_changed_at" : "created_at";
+  if (dateFrom) {
+    params.push(dateFrom);
+    conditions.push(`${dateBasisCol}::date >= $${idx}`);
+    idx++;
+  }
+  if (dateTo) {
+    params.push(dateTo);
+    conditions.push(`${dateBasisCol}::date <= $${idx}`);
+    idx++;
+  }
+  return { where: conditions.length ? conditions.join(" AND ") : "TRUE", params, nextIndex: idx };
+}
+
+// GET one page of customers matching the current filters — replaces the old
+// full-table fetch (GET /) that shipped every customer on every load.
+router.get("/paged", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
   try {
-    // Collected/due figures now come from each customer's Orders (Prepaid is
-    // collected in full at fulfillment; COD tracks advance_paid vs balance)
-    // instead of the old standalone payments ledger.
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize) || 25));
     const vis = visibilityClause(req, 2);
+    const { where, params: filterParams, nextIndex } = buildCustomerFilterClause(req.query, 2 + vis.params.length);
+    const params = [req.tenantId, ...vis.params, ...filterParams, pageSize, (page - 1) * pageSize];
     const result = await pool.query(
-      `SELECT c.*, u.name AS assigned_to_name,
-        -- Cancelled/returned orders (stage flagged excludes_dues) no longer
-        -- count as a real sale at all — excluded from order value and
-        -- collected the same way they're already excluded from what's
-        -- still owed, so Total = Collected + Pending always reconciles
-        -- instead of a cancelled order's value silently inflating Total.
-        COALESCE(SUM(CASE WHEN NOT COALESCE(os_due.excludes_dues,false) THEN co.advance_paid ELSE 0 END),0) AS total_collected,
-        COALESCE(SUM(CASE WHEN NOT COALESCE(os_due.excludes_dues,false) THEN co.amount ELSE 0 END),0) AS total_order_value,
-        COALESCE(SUM(CASE WHEN co.payment_type='cod' AND NOT COALESCE(os_due.excludes_dues,false) THEN co.amount - COALESCE(co.advance_paid,0) ELSE 0 END),0) AS total_due_amount,
-        -- Surfaced separately so cancelled money isn't just silently
-        -- dropped from the totals above — it's visible as its own figure.
-        COALESCE(SUM(CASE WHEN COALESCE(os_due.excludes_dues,false) THEN co.amount ELSE 0 END),0) AS cancelled_amount,
-        COALESCE(COUNT(CASE WHEN COALESCE(os_due.excludes_dues,false) THEN 1 END),0) AS cancelled_order_count,
-        (SELECT MIN(co2.next_due_date) FROM customer_orders co2
-         LEFT JOIN order_stages os2 ON os2.user_id=co2.user_id AND os2.name=co2.stage
-         WHERE co2.customer_id=c.id AND co2.payment_type='cod' AND co2.deleted_at IS NULL
-           AND NOT COALESCE(os2.excludes_dues,false)
-           AND (co2.amount - COALESCE(co2.advance_paid,0)) > 0) AS next_due_date,
-        -- Whichever is more recent — the customer being added, or their most
-        -- recent order — is what "just happened" for this customer, and
-        -- what the list is sorted by so new activity always floats to top.
-        GREATEST(c.created_at, COALESCE(MAX(co.created_at), c.created_at)) AS last_activity_at,
-        (SELECT co3.id FROM customer_orders co3
-         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
-         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_id,
-        (SELECT co3.stage FROM customer_orders co3
-         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
-         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_stage,
-        (SELECT COALESCE(co3.stage_changed_at, co3.created_at) FROM customer_orders co3
-         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
-         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_stage_changed_at,
-        (SELECT co3.amount FROM customer_orders co3
-         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
-         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_amount,
-        (SELECT co3.payment_type FROM customer_orders co3
-         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
-         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_payment_type,
-        (SELECT co3.tracking_id FROM customer_orders co3
-         WHERE co3.customer_id=c.id AND co3.deleted_at IS NULL
-         ORDER BY co3.created_at DESC LIMIT 1) AS latest_order_tracking_id,
-        (SELECT COUNT(*) FROM customer_orders co4
-         WHERE co4.customer_id=c.id AND co4.deleted_at IS NULL) AS order_count
-       FROM customers c
-       LEFT JOIN customer_orders co ON co.customer_id=c.id AND co.deleted_at IS NULL
-       LEFT JOIN order_stages os_due ON os_due.user_id=co.user_id AND os_due.name=co.stage
-       LEFT JOIN users u ON u.id=c.assigned_to
-       WHERE c.user_id=$1${vis.clause} GROUP BY c.id, u.name ORDER BY last_activity_at DESC`,
-      [req.tenantId, ...vis.params],
+      `WITH agg AS (${customerAggCTE(vis.clause)})
+       SELECT *, COUNT(*) OVER() AS total_count FROM agg
+       WHERE ${where}
+       ORDER BY last_activity_at DESC
+       LIMIT $${nextIndex} OFFSET $${nextIndex + 1}`,
+      params,
     );
-    res.json(result.rows);
+    const total = result.rows[0]?.total_count ? parseInt(result.rows[0].total_count) : 0;
+    const rows = result.rows.map(({ total_count, ...rest }) => rest);
+    res.json({ rows, total });
   } catch (e) {
-    console.error(e.message);
+    console.error("customers/paged failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET aggregate counts/sums for the current filters — called twice by the
+// page: once with no params (header's overall total + overdue badge), once
+// with the active search/stage/date filters (the summary cards, which are
+// meant to reflect what's currently filtered, not the whole tenant).
+router.get("/stats", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
+  try {
+    const vis = visibilityClause(req, 2);
+    const { where, params: filterParams } = buildCustomerFilterClause(req.query, 2 + vis.params.length);
+    const params = [req.tenantId, ...vis.params, ...filterParams];
+    const result = await pool.query(
+      `WITH agg AS (${customerAggCTE(vis.clause)})
+       SELECT COUNT(*)::int AS total,
+         COALESCE(SUM(total_order_value),0) AS total_order_value,
+         COALESCE(SUM(total_collected),0) AS total_collected,
+         COALESCE(SUM(total_due_amount),0) AS total_due,
+         COALESCE(SUM(cancelled_amount),0) AS total_cancelled,
+         COALESCE(SUM(cancelled_order_count),0)::int AS cancelled_order_count,
+         COUNT(*) FILTER (WHERE next_due_date IS NOT NULL AND next_due_date::date < CURRENT_DATE)::int AS overdue_count
+       FROM agg WHERE ${where}`,
+      params,
+    );
+    res.json(result.rows[0]);
+  } catch (e) {
+    console.error("customers/stats failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET ids matching the current filters — powers "select all" without the
+// browser ever holding the full customer list client-side.
+router.get("/matching-ids", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("view_customers"), async (req, res) => {
+  try {
+    const vis = visibilityClause(req, 2);
+    const { where, params: filterParams } = buildCustomerFilterClause(req.query, 2 + vis.params.length);
+    const params = [req.tenantId, ...vis.params, ...filterParams];
+    const result = await pool.query(
+      `WITH agg AS (${customerAggCTE(vis.clause)}) SELECT id FROM agg WHERE ${where}`,
+      params,
+    );
+    res.json(result.rows.map((r) => r.id));
+  } catch (e) {
+    console.error("customers/matching-ids failed:", e.message);
     res.status(500).json({ error: "Server error" });
   }
 });
