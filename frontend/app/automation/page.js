@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import { WhatsAppGlyph, GoogleAdsGlyph } from "../../components/BrandIcons";
+import WhatsAppEmbeddedSignup from "../../components/WhatsAppEmbeddedSignup";
 
 const TRIGGER_DEFS = [
   {
@@ -776,6 +777,7 @@ export default function AutomationPage() {
                       ℹ️ {helpText}
                     </div>
                   )}
+                  {key === "whatsapp" && <WhatsAppEmbeddedSignup onConnected={() => load()} />}
                   {fields.map(({ k, l, ph, type }) => (
                     <div
                       key={k}

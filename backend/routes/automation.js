@@ -11,6 +11,7 @@ const {
   deleteTemplate,
   sendTemplateMessage,
 } = require("../utils/whatsapp-templates");
+const { exchangeSignupCode, subscribeAppToWaba, getPhoneNumberDisplay } = require("../utils/meta-embedded-signup");
 
 const router = express.Router();
 
@@ -146,6 +147,66 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ── POST complete a Meta WhatsApp Embedded Signup ──────────────────────
+// Called by the frontend right after the Facebook login popup finishes.
+// `code` is the one-time authorization code from FB.login()'s callback;
+// `waba_id`/`phone_number_id` come from the "WA_EMBEDDED_SIGNUP" message
+// event the popup posts to the page during the flow (Meta hands these back
+// directly — this route doesn't have to derive them from the code). Saves
+// the tenant's automation_credentials using this app's own shared
+// META_SYSTEM_USER_TOKEN (Tech Provider model — one token manages every
+// connected WABA, nothing per-tenant to store), then subscribes this app
+// to the WABA so its webhook events actually start arriving.
+router.post("/whatsapp/embedded-signup", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  const { code, waba_id, phone_number_id } = req.body;
+  if (!code?.trim() || !waba_id?.trim() || !phone_number_id?.trim()) {
+    return res.status(400).json({ error: "code, waba_id and phone_number_id are all required" });
+  }
+  const systemUserToken = process.env.META_SYSTEM_USER_TOKEN;
+  if (!systemUserToken) {
+    return res.status(500).json({ error: "This server isn't configured for Embedded Signup yet (missing META_SYSTEM_USER_TOKEN)" });
+  }
+
+  try {
+    // Confirms the code is genuine and tied to this app — the resulting
+    // token itself isn't stored/used going forward (see meta-embedded-signup.js).
+    await exchangeSignupCode(code.trim());
+  } catch (e) {
+    console.error("Embedded signup code exchange failed:", e.message);
+    return res.status(400).json({ error: e.message || "Meta rejected this signup — please try connecting again" });
+  }
+
+  try {
+    await subscribeAppToWaba(waba_id.trim());
+  } catch (e) {
+    // Not fatal — the WABA is still connected and usable, just won't
+    // receive webhooks until this is retried (e.g. via a "Retry webhook
+    // subscription" action later). Surfaced as a warning, not a hard failure.
+    console.error("WABA webhook subscription failed:", e.message);
+  }
+
+  const phoneInfo = await getPhoneNumberDisplay(phone_number_id.trim());
+
+  try {
+    await pool.query(
+      `INSERT INTO automation_credentials (user_id, whatsapp_enabled, wa_account_sid, wa_auth_token, wa_from, updated_at)
+       VALUES ($1, true, $2, $3, $4, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET whatsapp_enabled=true, wa_account_sid=$2, wa_auth_token=$3, wa_from=$4, updated_at=NOW()`,
+      [req.tenantId, phone_number_id.trim(), systemUserToken, waba_id.trim()],
+    );
+    res.json({
+      success: true,
+      waba_id: waba_id.trim(),
+      phone_number_id: phone_number_id.trim(),
+      display_phone_number: phoneInfo?.display_phone_number || null,
+      verified_name: phoneInfo?.verified_name || null,
+    });
+  } catch (e) {
+    console.error("Saving embedded signup credentials failed:", e.message);
+    res.status(500).json({ error: "Connected to Meta but could not save to your account — please try again" });
   }
 });
 
