@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 require('dotenv').config();
 
@@ -27,6 +28,12 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
+// Every JSON response gets gzipped before it leaves the server — a big win
+// specifically for the full-table-fetch endpoints (e.g. GET /leads on a
+// tenant with 1000+ rows), since JSON text (repeated field names, similar
+// values) compresses 70-80%+, cutting transfer time without touching any
+// query or changing what data is sent.
+app.use(compression());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
