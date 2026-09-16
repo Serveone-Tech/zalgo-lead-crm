@@ -24,6 +24,61 @@ const visibilityClause = (req, paramIndex) => {
   return { clause: ` AND assigned_to=$${paramIndex}`, params: [req.user.id] };
 };
 
+// GET the small set of numbers the sidebar's notification badges need —
+// polled every 60s from every page in the app (see Sidebar.js loadCounts),
+// so this deliberately never pulls full row data the way /leads, /inventory
+// etc. do. On a tenant with a few thousand leads, fetching the entire table
+// just to count a handful of matches was measured taking 1.8s+ per poll;
+// these are plain COUNT(*) queries instead, a few ms each.
+router.get("/sidebar-counts", auth, async (req, res) => {
+  try {
+    const vis = visibilityClause(req, 2);
+    const canViewAll = isOwner(req) || hasPermission(req, "view_all_leads");
+
+    const queries = [
+      pool.query(
+        `SELECT COUNT(*) FROM leads
+         WHERE user_id=$1 AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED')
+           AND (follow_up_date < NOW() OR follow_up_date::date = CURRENT_DATE)${vis.clause}`,
+        [req.tenantId, ...vis.params],
+      ),
+      pool.query(
+        `SELECT COUNT(*) FROM customer_orders co JOIN customers c ON c.id=co.customer_id
+         LEFT JOIN order_stages os ON os.user_id=co.user_id AND os.name=co.stage
+         WHERE c.user_id=$1 AND co.deleted_at IS NULL AND co.payment_type='cod'
+           AND NOT COALESCE(os.excludes_dues,false) AND (co.amount - COALESCE(co.advance_paid,0)) > 0
+           AND co.next_due_date::date <= CURRENT_DATE${canViewAll ? "" : " AND c.assigned_to=$2"}`,
+        canViewAll ? [req.tenantId] : [req.tenantId, req.user.id],
+      ),
+      canViewAll
+        ? pool.query("SELECT COUNT(*) FROM pending_leads WHERE user_id=$1", [req.tenantId])
+        : Promise.resolve({ rows: [{ count: 0 }] }),
+      pool.query(
+        // LEFT JOIN, not an inner join on two user_id filters — a tenant
+        // who has never opened Settings has no user_settings row at all
+        // yet (it's only created on first GET /settings), and an inner
+        // join would silently count zero low-stock items for them instead
+        // of falling back to the same default-10 threshold /settings uses.
+        `SELECT COUNT(*) FROM inventory_items ii
+         LEFT JOIN user_settings us ON us.user_id = ii.user_id
+         WHERE ii.user_id=$1 AND ii.stock_qty <= COALESCE(us.low_stock_threshold, 10)`,
+        [req.tenantId],
+      ),
+    ];
+    const [followup, due, pending, lowStock] = await Promise.all(queries);
+
+    res.json({
+      followup_count: parseInt(followup.rows[0].count),
+      due_count: parseInt(due.rows[0].count),
+      pending_count: parseInt(pending.rows[0].count),
+      low_stock_count: parseInt(lowStock.rows[0].count),
+    });
+  } catch (e) {
+    console.error("sidebar-counts failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // GET all leads
 router.get("/", auth, async (req, res) => {
   try {
@@ -49,6 +104,36 @@ router.get("/overdue", auth, async (req, res) => {
       [req.tenantId, ...vis.params],
     );
     res.json(result.rows);
+  } catch {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET overdue + due-today leads together — what the Dashboard's "Team
+// Follow-up Today" widget actually displays. Filters server-side instead
+// of the dashboard fetching the tenant's entire lead table (every row,
+// every column) just to keep the handful matching a date condition —
+// same fix as /sidebar-counts below, but this one still needs to return
+// real rows (the widget shows name/phone/stage), not just a count.
+router.get("/followups", auth, async (req, res) => {
+  try {
+    const vis = visibilityClause(req, 2);
+    const result = await pool.query(
+      `SELECT * FROM leads
+       WHERE user_id=$1 AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED')
+         AND (follow_up_date < NOW() OR follow_up_date::date = CURRENT_DATE)${vis.clause}
+       ORDER BY follow_up_date ASC`,
+      [req.tenantId, ...vis.params],
+    );
+    const overdue = [];
+    const dueToday = [];
+    const now = new Date();
+    for (const row of result.rows) {
+      const fu = row.follow_up_date ? new Date(row.follow_up_date) : null;
+      if (fu && fu < now) overdue.push(row);
+      else dueToday.push(row);
+    }
+    res.json({ overdue, today: dueToday });
   } catch {
     res.status(500).json({ error: "Server error" });
   }

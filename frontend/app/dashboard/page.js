@@ -94,21 +94,14 @@ export default function DashboardPage() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [s, l, dp] = await Promise.all([
+      const [s, f, dp] = await Promise.all([
         api.get("/leads/stats"),
-        api.get("/leads"),
+        api.get("/leads/followups"),
         api.get("/customers/due/upcoming").catch(() => ({ data: [] })),
       ]);
       setStats(s.data);
-      const leads = l.data;
-      setOverdue(
-        leads.filter(
-          (x) =>
-            isOverdue(x.follow_up_date) &&
-            !["CLOSED", "LOST", "CONVERTED"].includes((x.stage || "").toUpperCase()),
-        ),
-      );
-      setToday(leads.filter((x) => isToday(x.follow_up_date)));
+      setOverdue(f.data.overdue);
+      setToday(f.data.today);
       setDuePay(
         dp.data.filter((p) => {
           const d = (p.due_date || p.payment_date || "").split("T")[0];
@@ -312,7 +305,7 @@ export default function DashboardPage() {
                           <div style={{ padding: "8px 16px 4px", fontSize: 10, fontWeight: 700, color: "var(--danger)", letterSpacing: "0.07em", textTransform: "uppercase" }}>
                             Overdue Follow-ups
                           </div>
-                          {overdue.map((lead) => (
+                          {overdue.slice(0, 15).map((lead) => (
                             <div
                               key={`o-${lead.id}`}
                               onClick={() => { setNotifOpen(false); router.push(`/notifications?lead=${lead.id}`); }}
@@ -631,7 +624,12 @@ export default function DashboardPage() {
           accent="var(--danger)"
           accentDim="var(--danger-dim)"
         >
-          <LeadTable leads={overdue} onEdit={openEdit} />
+          <LeadTable leads={overdue.slice(0, 20)} onEdit={openEdit} />
+          {overdue.length > 20 && (
+            <div style={{ padding: "10px 16px", fontSize: 12, color: "var(--text-muted)", textAlign: "center", borderTop: "1px solid var(--border)" }}>
+              Showing the 20 most overdue of {overdue.length} — see the Leads page for the full list.
+            </div>
+          )}
         </Section>
       )}
 
