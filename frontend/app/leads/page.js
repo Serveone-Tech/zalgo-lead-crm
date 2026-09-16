@@ -52,9 +52,18 @@ function fmtDate(d) {
 function LeadsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [leads, setLeads] = useState([]);
+  // `rows` is just the current page from the server now — the full tenant
+  // table is never fetched for the table view. `total` is the count
+  // matching the current filters (for pagination), `stats` is the
+  // tenant-wide (unfiltered) totals shown in the header, fetched once and
+  // refreshed after anything that could change the counts.
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState(null);
+  const [platformOptions, setPlatformOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [stageF, setStageF] = useState("");
   const [platformF, setPlatformF] = useState("");
   const [dateF, setDateF] = useState("");
@@ -77,6 +86,9 @@ function LeadsContent() {
   const [chatLead, setChatLead] = useState(null);
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [sub, setSub] = useState(null);
+  const [kanbanLeads, setKanbanLeads] = useState([]);
+  const [kanbanLoading, setKanbanLoading] = useState(false);
+  const [selectingAll, setSelectingAll] = useState(false);
 
   // Bulk action state
   const [selected, setSelected] = useState(new Set());
@@ -85,6 +97,9 @@ function LeadsContent() {
   const [bulkStageTo, setBulkStageTo] = useState("");
   const [bulkApplying, setBulkApplying] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -105,7 +120,11 @@ function LeadsContent() {
     refreshUser().then((fresh) => {
       if (fresh) setUser(fresh);
     });
-    load();
+    loadStats();
+    api
+      .get("/leads/platforms")
+      .then((r) => setPlatformOptions(r.data))
+      .catch(() => {});
     api
       .get("/employees/list")
       .then((r) => setEmployees(r.data))
@@ -137,11 +156,39 @@ function LeadsContent() {
     [employees],
   );
 
+  // The search box debounces before it actually triggers a fetch — every
+  // other filter (dropdowns, dates) is instant, but re-querying the server
+  // on every keystroke would be wasteful and janky.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const filterParams = {
+    search: debouncedSearch || undefined,
+    stage: stageF || undefined,
+    platform: platformF || undefined,
+    dateFilter: dateF || undefined,
+    assignee: assigneeF || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  };
+  const filterKey = JSON.stringify(filterParams);
+
+  // Any filter changing snaps back to page 1 — a stale page 5 after a
+  // search narrows the result set down to one page would just show "no
+  // results" even though there are matches on page 1.
+  useEffect(() => {
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterKey]);
+
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/leads");
-      setLeads(data);
+      const { data } = await api.get("/leads/paged", { params: { page, pageSize, ...filterParams } });
+      setRows(data.rows);
+      setTotal(data.total);
     } catch {
       router.push("/login");
     } finally {
@@ -149,60 +196,36 @@ function LeadsContent() {
     }
   };
 
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, filterKey]);
+
+  const loadStats = async () => {
+    try {
+      const { data } = await api.get("/leads/stats");
+      setStats(data);
+    } catch {}
+  };
+
+  // Kanban shows every matching card grouped by stage — it can't work off
+  // just one page, so it's fetched separately (and only) when that view is
+  // actually open, instead of the table view paying for it up front.
+  useEffect(() => {
+    if (view !== "kanban") return;
+    setKanbanLoading(true);
+    api
+      .get("/leads/filtered-all", { params: filterParams })
+      .then((r) => setKanbanLeads(r.data))
+      .catch(() => {})
+      .finally(() => setKanbanLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, filterKey]);
+
   const showToast = (msg, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3000);
   };
-
-  const filtered = useMemo(
-    () =>
-      leads.filter((l) => {
-        const q = search.toLowerCase();
-        if (
-          q &&
-          !l.name.toLowerCase().includes(q) &&
-          !l.last_message?.toLowerCase().includes(q) &&
-          !l.notes?.toLowerCase().includes(q) &&
-          !l.platform?.toLowerCase().includes(q) &&
-          !l.phone?.toLowerCase().includes(q)
-        )
-          return false;
-        if (stageF && l.stage !== stageF) return false;
-        if (platformF && l.platform !== platformF) return false;
-        if (dateF === "overdue" && !isOverdue(l.follow_up_date)) return false;
-        if (dateF === "today" && !isToday(l.follow_up_date)) return false;
-        if (assigneeF === "__unassigned__" && l.assigned_to) return false;
-        if (
-          assigneeF &&
-          assigneeF !== "__unassigned__" &&
-          String(l.assigned_to) !== assigneeF
-        )
-          return false;
-        const createdDate = l.created_at ? l.created_at.split("T")[0] : null;
-        if (dateFrom && (!createdDate || createdDate < dateFrom)) return false;
-        if (dateTo && (!createdDate || createdDate > dateTo)) return false;
-        return true;
-      }),
-    [leads, search, stageF, platformF, dateF, assigneeF, dateFrom, dateTo],
-  );
-
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  useEffect(() => {
-    setPage(1);
-  }, [search, stageF, platformF, dateF, assigneeF, dateFrom, dateTo]);
-  const paged = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
-  );
-
-  // Built from whatever platform values actually exist on this tenant's
-  // leads — covers every capture source (WhatsApp, LinkedIn, Google Ads,
-  // Phone Call, manually-typed ones, etc.) without a hardcoded list.
-  const platformOptions = useMemo(
-    () => [...new Set(leads.map((l) => l.platform).filter(Boolean))].sort(),
-    [leads],
-  );
 
   const openAdd = () => {
     setEditLead(null);
@@ -224,6 +247,7 @@ function LeadsContent() {
     else await api.post("/leads", form);
     closeModal();
     load();
+    loadStats();
     if (wasConverted) showToast("✓ Lead converted! Added to Customers.");
   };
 
@@ -233,12 +257,14 @@ function LeadsContent() {
     await api.delete(`/leads/${id}`);
     setDeleting(null);
     load();
+    loadStats();
   };
 
   const changeStage = async (lead, stage) => {
     const wasConverted = lead.stage !== "Converted" && stage === "Converted";
     await api.put(`/leads/${lead.id}`, { ...lead, stage });
     load();
+    loadStats();
     if (wasConverted) showToast("✓ Lead converted! Added to Customers.");
   };
 
@@ -269,11 +295,23 @@ function LeadsContent() {
     });
   };
 
-  const toggleSelectAll = () => {
-    if (selected.size === filtered.length) {
+  // "Select all" now means "every lead matching the current filters", not
+  // just the current page — the browser only holds one page of rows, so
+  // this asks the server for the full matching id list instead of deriving
+  // it from an array that no longer exists client-side.
+  const toggleSelectAll = async () => {
+    if (selected.size > 0) {
       setSelected(new Set());
-    } else {
-      setSelected(new Set(filtered.map((l) => l.id)));
+      return;
+    }
+    setSelectingAll(true);
+    try {
+      const { data: ids } = await api.get("/leads/matching-ids", { params: filterParams });
+      setSelected(new Set(ids));
+    } catch {
+      showToast("Could not select all matching leads", "error");
+    } finally {
+      setSelectingAll(false);
     }
   };
 
@@ -309,6 +347,7 @@ function LeadsContent() {
       showToast(`✓ ${results.join(" · ")}`);
       clearSelection();
       load();
+      loadStats();
     } catch {
       showToast("Failed to apply changes. Please try again.", "error");
     } finally {
@@ -334,6 +373,7 @@ function LeadsContent() {
       );
       clearSelection();
       load();
+      loadStats();
     } catch {
       showToast("Failed to delete leads. Please try again.", "error");
     } finally {
@@ -341,12 +381,7 @@ function LeadsContent() {
     }
   };
 
-  const terminalStages = dynamicStages.length
-    ? dynamicStages.slice(-2).map((s) => s.name)
-    : ["Converted", "Closed"];
-  const overdueCount = leads.filter(
-    (l) => isOverdue(l.follow_up_date) && !terminalStages.includes(l.stage),
-  ).length;
+  const overdueCount = stats?.overdue ?? 0;
 
   const hasFilters =
     search || stageF || platformF || dateF || assigneeF || dateFrom || dateTo;
@@ -397,7 +432,7 @@ function LeadsContent() {
             Leads
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
-            {leads.length} total lead{leads.length !== 1 ? "s" : ""}
+            {stats?.total ?? 0} total lead{(stats?.total ?? 0) !== 1 ? "s" : ""}
             {overdueCount > 0 && (
               <span style={{ color: "var(--danger)", marginLeft: 10 }}>
                 • {overdueCount} overdue
@@ -804,7 +839,7 @@ function LeadsContent() {
 
       {/* Table or Kanban */}
       {view === "kanban" ? (
-        loading ? (
+        kanbanLoading ? (
           <div
             style={{
               padding: 48,
@@ -816,7 +851,7 @@ function LeadsContent() {
           </div>
         ) : (
           <KanbanBoard
-            leads={filtered}
+            leads={kanbanLeads}
             stages={dynamicStages}
             onStageChange={(lead, stage) => changeStage(lead, stage)}
             onEdit={openEdit}
@@ -844,7 +879,7 @@ function LeadsContent() {
             >
               Loading leads...
             </div>
-          ) : filtered.length === 0 ? (
+          ) : rows.length === 0 ? (
             <div style={{ padding: 48, textAlign: "center" }}>
               <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
               <div
@@ -855,10 +890,10 @@ function LeadsContent() {
                   marginBottom: 6,
                 }}
               >
-                {leads.length === 0 ? "No leads yet" : "No matching leads"}
+                {stats?.total === 0 ? "No leads yet" : "No matching leads"}
               </div>
               <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
-                {leads.length === 0
+                {stats?.total === 0
                   ? 'Click "+ Add Lead" to get started'
                   : "Try adjusting your filters"}
               </div>
@@ -879,8 +914,8 @@ function LeadsContent() {
                         <input
                           type="checkbox"
                           checked={
-                            selected.size === filtered.length &&
-                            filtered.length > 0
+                            selected.size === total &&
+                            total > 0
                           }
                           onChange={toggleSelectAll}
                           style={{
@@ -909,7 +944,7 @@ function LeadsContent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paged.map((lead, i) => {
+                  {rows.map((lead, i) => {
                     const over =
                       isOverdue(lead.follow_up_date) &&
                       !["CLOSED", "LOST", "CONVERTED"].includes((lead.stage || "").toUpperCase());
@@ -1336,11 +1371,11 @@ function LeadsContent() {
         </div>
       )}
 
-      {!loading && filtered.length > 0 && view === "table" && (
-        <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} total={filtered.length} />
+      {!loading && total > 0 && view === "table" && (
+        <Pagination page={page} setPage={setPage} pageSize={pageSize} setPageSize={setPageSize} total={total} />
       )}
 
-      {!loading && filtered.length > 0 && view === "table" && (
+      {!loading && total > 0 && view === "table" && (
         <div
           style={{
             marginTop: 12,
@@ -1349,7 +1384,7 @@ function LeadsContent() {
             textAlign: "right",
           }}
         >
-          Showing {filtered.length} of {leads.length} leads
+          Showing {total} of {stats?.total ?? 0} leads
           {selected.size > 0 && (
             <span
               style={{
@@ -1374,7 +1409,13 @@ function LeadsContent() {
         />
       )}
       {bulkOpen && (
-        <BulkUploadModal onClose={() => setBulkOpen(false)} onSuccess={load} />
+        <BulkUploadModal
+          onClose={() => setBulkOpen(false)}
+          onSuccess={() => {
+            load();
+            loadStats();
+          }}
+        />
       )}
       {fulfillLead && (
         <OrderFulfillmentModal

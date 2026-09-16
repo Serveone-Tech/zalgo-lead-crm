@@ -24,6 +24,128 @@ const visibilityClause = (req, paramIndex) => {
   return { clause: ` AND assigned_to=$${paramIndex}`, params: [req.user.id] };
 };
 
+// Builds the WHERE clause + params shared by /paged and /matching-ids —
+// mirrors exactly the filtering the Leads page used to do client-side over
+// the full fetched table (search across name/phone/last_message/notes/
+// platform, stage, platform, overdue/today, assignee, created_at range),
+// just expressed in SQL instead of a JS .filter(). Kept as one function so
+// the two routes can never silently drift out of sync with each other.
+function buildLeadFilterClause(req, query, startIndex) {
+  const { search, stage, platform, dateFilter, assignee, dateFrom, dateTo } = query;
+  const vis = visibilityClause(req, startIndex);
+  const conditions = [`user_id=$1${vis.clause}`];
+  const params = [req.tenantId, ...vis.params];
+
+  if (search?.trim()) {
+    params.push(`%${search.trim()}%`);
+    const p = `$${params.length}`;
+    conditions.push(`(name ILIKE ${p} OR phone ILIKE ${p} OR last_message ILIKE ${p} OR notes ILIKE ${p} OR platform ILIKE ${p})`);
+  }
+  if (stage) {
+    params.push(stage);
+    conditions.push(`stage=$${params.length}`);
+  }
+  if (platform) {
+    params.push(platform);
+    conditions.push(`platform=$${params.length}`);
+  }
+  if (dateFilter === "overdue") {
+    conditions.push(`follow_up_date < NOW()`);
+  } else if (dateFilter === "today") {
+    conditions.push(`follow_up_date::date = CURRENT_DATE AND follow_up_date >= NOW()`);
+  }
+  if (assignee === "__unassigned__") {
+    conditions.push(`assigned_to IS NULL`);
+  } else if (assignee) {
+    params.push(parseInt(assignee));
+    conditions.push(`assigned_to=$${params.length}`);
+  }
+  if (dateFrom) {
+    params.push(dateFrom);
+    conditions.push(`created_at::date >= $${params.length}`);
+  }
+  if (dateTo) {
+    params.push(dateTo);
+    conditions.push(`created_at::date <= $${params.length}`);
+  }
+  return { where: conditions.join(" AND "), params, nextIndex: params.length + 1 };
+}
+
+// GET a page of leads matching the current filters — the actual fix for
+// the Leads page fetching its tenant's entire table (SELECT * with no
+// LIMIT) on every visit. Search/stage/platform/date/assignee filtering all
+// happens in SQL now instead of over the full array in the browser.
+// Returns the total matching count via a window function so pagination
+// controls work without a second round trip.
+router.get("/paged", auth, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize) || 25));
+    const { where, params, nextIndex } = buildLeadFilterClause(req, req.query, 2);
+    params.push(pageSize, (page - 1) * pageSize);
+
+    const result = await pool.query(
+      `SELECT *, COUNT(*) OVER() AS total_count FROM leads
+       WHERE ${where} ORDER BY created_at DESC
+       LIMIT $${nextIndex} OFFSET $${nextIndex + 1}`,
+      params,
+    );
+    const total = result.rows[0]?.total_count ? parseInt(result.rows[0].total_count) : 0;
+    const rows = result.rows.map(({ total_count, ...rest }) => rest);
+    res.json({ rows, total });
+  } catch (e) {
+    console.error("leads/paged failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET every lead matching the current filters, unpaginated — the Kanban
+// board groups cards by stage across the *whole* matching set, so (unlike
+// the table view) it genuinely can't work against just one page. Only
+// fetched when the user actually switches to Kanban view, so the default
+// (table) experience never pays this cost.
+router.get("/filtered-all", auth, async (req, res) => {
+  try {
+    const { where, params } = buildLeadFilterClause(req, req.query, 2);
+    const result = await pool.query(`SELECT * FROM leads WHERE ${where} ORDER BY created_at DESC`, params);
+    res.json(result.rows);
+  } catch (e) {
+    console.error("leads/filtered-all failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET just the ids matching the current filters — powers "select all N
+// matching" for bulk actions, since with server-side pagination the
+// browser no longer holds every matching row (just the current page) to
+// derive that list from client-side the way it used to.
+router.get("/matching-ids", auth, async (req, res) => {
+  try {
+    const { where, params } = buildLeadFilterClause(req, req.query, 2);
+    const result = await pool.query(`SELECT id FROM leads WHERE ${where}`, params);
+    res.json(result.rows.map((r) => r.id));
+  } catch (e) {
+    console.error("leads/matching-ids failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET the distinct platform values used across this tenant's leads — powers
+// the "All Platforms" filter dropdown, which used to be derived client-side
+// from the full fetched table (new Set(leads.map(l => l.platform))).
+router.get("/platforms", auth, async (req, res) => {
+  try {
+    const vis = visibilityClause(req, 2);
+    const result = await pool.query(
+      `SELECT DISTINCT platform FROM leads WHERE user_id=$1 AND platform IS NOT NULL AND platform <> ''${vis.clause} ORDER BY platform`,
+      [req.tenantId, ...vis.params],
+    );
+    res.json(result.rows.map((r) => r.platform));
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // GET the small set of numbers the sidebar's notification badges need —
 // polled every 60s from every page in the app (see Sidebar.js loadCounts),
 // so this deliberately never pulls full row data the way /leads, /inventory
