@@ -505,7 +505,7 @@ export default function NotificationsPage() {
                                 : "rgba(100,100,100,0.13)",
                       color:
                         lead.stage === "Active"
-                          ? "#00a8ad"
+                          ? "#0092f7"
                           : lead.stage === "New"
                             ? "#52b88a"
                             : lead.stage === "Follow-up"

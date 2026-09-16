@@ -528,17 +528,17 @@ export default function Sidebar() {
               fontFamily: "var(--font-main)",
               fontSize: 15,
             }}
-            title="Zalgo Infotech"
+            title="LeadLo"
           >
-            Z
+            L
           </div>
         ) : (
           <>
             <Image
               src={theme === "light" ? "/logo_light.png" : "/logo_dark.png"}
-              alt="Zalgo Infotech"
+              alt="LeadLo"
               width={150}
-              height={45}
+              height={60}
               style={{ objectFit: "contain", objectPosition: "left" }}
               priority
             />

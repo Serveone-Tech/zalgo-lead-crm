@@ -124,7 +124,7 @@ export default function PlansPage() {
         order_id: order.order_id,
         name: "Zalgo CRM",
         description: `${order.plan_name} Plan — ${order.billing_cycle}`,
-        theme: { color: "#00868a" },
+        theme: { color: "#0066cc" },
         handler: async (response) => {
           try {
             await axios.post(`${BASE}/payments/verify`, response, { headers: authHeaders() });

@@ -29,7 +29,7 @@ function fmtTime(d) {
   return dt.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
 }
 
-const AVATAR_COLORS = ["#00868a", "#0891b2", "#7c3aed", "#c026d3", "#dc2626", "#d97706", "#059669", "#2563eb"];
+const AVATAR_COLORS = ["#0066cc", "#0891b2", "#7c3aed", "#c026d3", "#dc2626", "#d97706", "#059669", "#2563eb"];
 function avatarColor(seed) {
   let h = 0;
   for (let i = 0; i < (seed || "").length; i++) h = (h * 31 + seed.charCodeAt(i)) % AVATAR_COLORS.length;

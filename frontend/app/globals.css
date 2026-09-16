@@ -9,10 +9,14 @@
   --bg-card: #222222;
   --bg-hover: #2a2a2a;
   --bg-input: #181818;
-  --teal: #00868a;
-  --teal-light: #00a8ad;
-  --teal-dim: rgba(0,134,138,0.12);
-  --teal-dim2: rgba(0,134,138,0.2);
+  /* LeadLo brand blue — sampled directly from the logo's arrow/wordmark
+     gradient (bright cyan #00b4fb through mid blue #0066cc to navy
+     #012e66), so every accented element in the app (buttons, active nav,
+     focus rings, badges) reads as the same brand as the logo itself. */
+  --teal: #0066cc;
+  --teal-light: #0092f7;
+  --teal-dim: rgba(0,102,204,0.12);
+  --teal-dim2: rgba(0,102,204,0.2);
   --text-primary: #ebebeb;
   --text-secondary: #999;
   --text-muted: #666;
@@ -36,8 +40,8 @@
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.24);
   --shadow-md: 0 6px 20px rgba(0,0,0,0.32);
   --shadow-lg: 0 16px 40px rgba(0,0,0,0.42);
-  --shadow-glow: 0 0 0 1px rgba(0,134,138,0.4), 0 8px 24px rgba(0,134,138,0.18);
-  --gradient-accent: linear-gradient(135deg, #00a8ad 0%, #00868a 55%, #006367 100%);
+  --shadow-glow: 0 0 0 1px rgba(0,102,204,0.4), 0 8px 24px rgba(0,102,204,0.18);
+  --gradient-accent: linear-gradient(135deg, #00b4fb 0%, #0066cc 55%, #012e66 100%);
 }
 
 :root[data-theme="light"] {
@@ -46,10 +50,13 @@
   --bg-card: #ffffff;
   --bg-hover: #eef1f2;
   --bg-input: #f2f3f5;
-  --teal: #00868a;
-  --teal-light: #007377;
-  --teal-dim: rgba(0,134,138,0.08);
-  --teal-dim2: rgba(0,134,138,0.16);
+  /* Same LeadLo brand blue as dark theme (see above), with --teal-light
+     deepened for legible contrast against a white/light background
+     instead of the brighter cyan dark mode uses. */
+  --teal: #0066cc;
+  --teal-light: #0052a8;
+  --teal-dim: rgba(0,102,204,0.08);
+  --teal-dim2: rgba(0,102,204,0.16);
   --text-primary: #1c1f22;
   --text-secondary: #565d63;
   --text-muted: #8a9097;
@@ -73,8 +80,8 @@
   --shadow-sm: 0 1px 2px rgba(20,30,35,0.05);
   --shadow-md: 0 6px 20px rgba(20,30,35,0.08);
   --shadow-lg: 0 16px 40px rgba(20,30,35,0.12);
-  --shadow-glow: 0 0 0 1px rgba(0,134,138,0.18), 0 8px 24px rgba(0,134,138,0.1);
-  --gradient-accent: linear-gradient(135deg, #00a8ad 0%, #00868a 55%, #006367 100%);
+  --shadow-glow: 0 0 0 1px rgba(0,102,204,0.18), 0 8px 24px rgba(0,102,204,0.1);
+  --gradient-accent: linear-gradient(135deg, #00b4fb 0%, #0066cc 55%, #012e66 100%);
 }
 
 html, body { height: 100%; background: var(--bg-base); color: var(--text-primary); font-family: var(--font-body); font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; font-feature-settings: 'cv02','cv03','cv04','cv11'; transition: background-color 0.2s ease, color 0.2s ease; }

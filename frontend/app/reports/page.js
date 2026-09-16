@@ -83,7 +83,7 @@ export default function ReportsPage() {
     New: { bg: "rgba(91,163,217,0.15)", color: "#5ba3d9" },
     Active: { bg: "rgba(0,200,154,0.15)", color: "#00c89a" },
     Booked: { bg: "rgba(139,92,246,0.15)", color: "#8b5cf6" },
-    Converted: { bg: "rgba(0,134,138,0.15)", color: "#00868a" },
+    Converted: { bg: "rgba(0,134,138,0.15)", color: "#0066cc" },
     Closed: { bg: "rgba(120,120,140,0.15)", color: "#78788c" },
   };
 

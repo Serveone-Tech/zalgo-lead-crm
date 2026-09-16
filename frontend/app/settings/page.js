@@ -7,7 +7,7 @@ import { loadRazorpayScript } from '../../lib/razorpay';
 import { Pencil, Trash2, Plus, GripVertical, Check, X } from 'lucide-react';
 
 const COLOR_PALETTE = [
-  '#2f9e6f', '#00868a', '#b06a00', '#2a6fb0',
+  '#2f9e6f', '#0066cc', '#b06a00', '#2a6fb0',
   '#7b5ea7', '#c8372f', '#6b6b6b', '#b0548c',
   '#3a8fd9', '#e06b3f', '#1e7d5c', '#8a6d00',
 ];
@@ -42,7 +42,7 @@ export default function SettingsPage() {
   const [stages, setStages]            = useState([]);
   const [stagesLoading, setStagesLoading] = useState(true);
   const [editingStage, setEditingStage]   = useState(null);
-  const [newStage, setNewStage]           = useState({ name: '', color: '#00868a' });
+  const [newStage, setNewStage]           = useState({ name: '', color: '#0066cc' });
   const [addingStage, setAddingStage]     = useState(false);
   const [stageError, setStageError]       = useState('');
   const [stageSaving, setStageSaving]     = useState(false);
@@ -51,7 +51,7 @@ export default function SettingsPage() {
   const [orderStages, setOrderStages]            = useState([]);
   const [orderStagesLoading, setOrderStagesLoading] = useState(true);
   const [editingOrderStage, setEditingOrderStage]   = useState(null);
-  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false });
+  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#0066cc', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false });
   const [addingOrderStage, setAddingOrderStage]     = useState(false);
   const [orderStageError, setOrderStageError]       = useState('');
   const [orderStageSaving, setOrderStageSaving]     = useState(false);
@@ -144,7 +144,7 @@ export default function SettingsPage() {
         order_id: order.order_id,
         name: 'Zalgo CRM',
         description: `+${order.seats} employee seats`,
-        theme: { color: '#00868a' },
+        theme: { color: '#0066cc' },
         handler: async (response) => {
           try {
             const { data } = await api.post('/payments/addon/verify', response);
@@ -209,7 +209,7 @@ export default function SettingsPage() {
   // ── Stage CRUD ──────────────────────────────────────────────────
   const startEditStage = (s) => { setEditingStage({ id: s.id, name: s.name, color: s.color }); setStageError(''); };
   const cancelEdit = () => { setEditingStage(null); setStageError(''); };
-  const cancelAdd  = () => { setAddingStage(false); setNewStage({ name: '', color: '#00868a' }); setStageError(''); };
+  const cancelAdd  = () => { setAddingStage(false); setNewStage({ name: '', color: '#0066cc' }); setStageError(''); };
 
   const saveEditStage = async () => {
     if (!editingStage.name.trim()) { setStageError('Name is required'); return; }
@@ -228,7 +228,7 @@ export default function SettingsPage() {
     try {
       await api.post('/stages', { name: newStage.name.trim(), color: newStage.color, sort_order: stages.length });
       setAddingStage(false);
-      setNewStage({ name: '', color: '#00868a' });
+      setNewStage({ name: '', color: '#0066cc' });
       await loadStages();
     } catch (err) { setStageError(err.response?.data?.error || 'Failed to save'); }
     setStageSaving(false);
@@ -255,7 +255,7 @@ export default function SettingsPage() {
   // ── Order Stage CRUD ────────────────────────────────────────────
   const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, stock_action: s.stock_action || 'none', is_default: s.is_default, excludes_dues: s.excludes_dues, is_delivered: s.is_delivered }); setOrderStageError(''); };
   const cancelEditOrderStage = () => { setEditingOrderStage(null); setOrderStageError(''); };
-  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false }); setOrderStageError(''); };
+  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#0066cc', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false }); setOrderStageError(''); };
 
   const saveEditOrderStage = async () => {
     if (!editingOrderStage.name.trim()) { setOrderStageError('Name is required'); return; }
@@ -289,7 +289,7 @@ export default function SettingsPage() {
         is_delivered: newOrderStage.is_delivered,
       });
       setAddingOrderStage(false);
-      setNewOrderStage({ name: '', color: '#00868a', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false });
+      setNewOrderStage({ name: '', color: '#0066cc', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false });
       await loadOrderStages();
     } catch (err) { setOrderStageError(err.response?.data?.error || 'Failed to save'); }
     setOrderStageSaving(false);

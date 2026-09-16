@@ -3,7 +3,7 @@ export const STAGES = ["New", "Active", "Follow-up", "Booked", "Converted", "Clo
 
 export const STAGE_COLORS = {
   New:        { bg: "rgba(82,184,138,0.16)",  color: "#2f9e6f" },
-  Active:     { bg: "rgba(0,168,173,0.18)",   color: "#00868a" },
+  Active:     { bg: "rgba(0,168,173,0.18)",   color: "#0066cc" },
   "Follow-up":{ bg: "rgba(224,160,80,0.2)",   color: "#b06a00" },
   Booked:     { bg: "rgba(91,163,217,0.2)",   color: "#2a6fb0" },
   Converted:  { bg: "rgba(82,184,138,0.26)",  color: "#1f8a5c" },

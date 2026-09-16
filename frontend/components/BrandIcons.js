@@ -97,7 +97,7 @@ export function PhoneCallGlyph({ size = 28 }) {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        color: "#00868a",
+        color: "#0066cc",
         flexShrink: 0,
       }}
     >
