@@ -146,6 +146,27 @@ router.get("/platforms", auth, async (req, res) => {
   }
 });
 
+// GET the WhatsApp inbox's conversation list — id/name/phone/last_message/
+// updated_at only, leads with a phone number, newest activity first. The
+// inbox page polls this every 4s for live updates; polling the full /leads
+// table (every column, every lead) that often was by far the single
+// heaviest recurring cost in the app — this trims both the row set (phone
+// IS NOT NULL) and the column set down to only what the chat list renders.
+router.get("/whatsapp-inbox", auth, async (req, res) => {
+  try {
+    const vis = visibilityClause(req, 2);
+    const result = await pool.query(
+      `SELECT id, name, phone, last_message, stage, updated_at, created_at FROM leads
+       WHERE user_id=$1 AND phone IS NOT NULL AND phone <> ''${vis.clause}
+       ORDER BY COALESCE(updated_at, created_at) DESC`,
+      [req.tenantId, ...vis.params],
+    );
+    res.json(result.rows);
+  } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // GET the small set of numbers the sidebar's notification badges need —
 // polled every 60s from every page in the app (see Sidebar.js loadCounts),
 // so this deliberately never pulls full row data the way /leads, /inventory

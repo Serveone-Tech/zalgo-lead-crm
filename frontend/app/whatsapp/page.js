@@ -73,8 +73,8 @@ export default function WhatsAppInboxPage() {
   const load = async (silent) => {
     if (!silent) setLoading(true);
     try {
-      const { data } = await api.get("/leads");
-      setLeads(data.filter((l) => l.phone));
+      const { data } = await api.get("/leads/whatsapp-inbox");
+      setLeads(data);
     } catch {
       // next poll retries
     } finally {

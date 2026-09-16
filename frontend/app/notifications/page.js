@@ -99,8 +99,8 @@ export default function NotificationsPage() {
   const load = async (leadParam) => {
     setLoad(true);
     try {
-      const { data } = await api.get("/leads");
-      setLeads(data);
+      const { data } = await api.get("/leads/followups");
+      setLeads([...data.overdue, ...data.today]);
       if (leadParam) {
         setTimeout(() => {
           const el = document.getElementById(`notif-${leadParam}`);
