@@ -228,7 +228,7 @@ export default function CustomerJourney() {
               ))}
             </div>
             <a
-              href="/register"
+              href="https://lead-management.zalgostore.com/register"
               style={{
                 display: "inline-flex",
                 alignItems: "center",

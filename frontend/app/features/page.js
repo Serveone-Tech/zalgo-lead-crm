@@ -168,7 +168,7 @@ export default function FeaturesPage() {
             <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.8)" }}>Book a free demo and we&apos;ll walk you through it.</div>
           </div>
           <button
-            onClick={() => router.push("/register")}
+            onClick={() => router.push("https://lead-management.zalgostore.com/register")}
             style={{
               display: "flex",
               alignItems: "center",

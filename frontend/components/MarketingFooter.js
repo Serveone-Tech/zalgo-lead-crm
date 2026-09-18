@@ -1,210 +1,312 @@
 "use client";
 import Image from "next/image";
-import { Mail, ArrowUpRight } from "lucide-react";
-import { teal, tealLight } from "../lib/marketing-theme";
+import { Mail, Phone, MapPin, ArrowUpRight } from "lucide-react";
+
+/* LeadLo footer tokens */
+const navy = "#0a1f4e";
+const navyDeep = "#061538";
+const blue = "#1a5cff";
+const blueLight = "#3d7bff";
+const orange = "#f59a23";
+const textSoft = "rgba(255,255,255,0.72)";
+const line = "rgba(255,255,255,0.14)";
 
 const COLUMNS = [
   {
     heading: "Product",
     links: [
       { label: "Features", href: "/features" },
-      { label: "Solutions", href: "/solutions" },
-      { label: "Automation", href: "/automation-suite" },
       { label: "Pricing", href: "/pricing" },
+      { label: "Shared WhatsApp", href: "/solutions" },
+      { label: "Automation", href: "/automation-suite" },
+      { label: "Orders & Delivery", href: "/features#orders" },
     ],
   },
   {
-    heading: "Company",
+    heading: "Resources",
     links: [
-      { label: "Resources", href: "/resources" },
+      { label: "About Us", href: "/about" },
       { label: "Documentation", href: "/docs" },
-      { label: "Contact Us", href: "/contact" },
+      { label: "FAQs", href: "/#faq" },
+      { label: "Privacy Policy", href: "/privacy" },
+      { label: "Terms & Conditions", href: "/terms" },
     ],
   },
+];
+
+const CONTACT = [
   {
-    heading: "Legal",
-    links: [
-      { label: "Terms & Conditions", href: "/terms" },
-      { label: "Privacy Policy", href: "/privacy" },
-      { label: "Refund & Cancellation Policy", href: "/refund-policy" },
-    ],
+    icon: Mail,
+    text: "sales@zalgoinfotech.com",
+    href: "mailto:sales@zalgoinfotech.com",
+  },
+  { icon: Phone, text: "+91 92442 13326", href: "tel:+919244213326" },
+  {
+    icon: MapPin,
+    text: "1/65, vinay nagar sec 3, 100 feet road, s. p. ashram, gwalior, madhya pradesh, india - 474012",
   },
 ];
 
 export default function MarketingFooter() {
   return (
-    <div
+    <footer
       style={{
-        background: "#0e1416",
+        background: `linear-gradient(135deg, ${navy} 0%, ${navyDeep} 100%)`,
+        color: "#fff",
         position: "relative",
         overflow: "hidden",
       }}
     >
-      <div
-        style={{
-          position: "absolute",
-          top: -140,
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: 620,
-          height: 320,
-          borderRadius: "50%",
-          background:
-            "radial-gradient(circle, rgba(0,168,173,0.16) 0%, rgba(0,168,173,0) 70%)",
-          pointerEvents: "none",
-        }}
-      />
+      {/* decorative blue circles, top-right (as in the design) */}
+      {[
+        { size: 420, top: -220, right: -140, o: 0.55 },
+        { size: 260, top: 150, right: -120, o: 0.45 },
+      ].map((c, i) => (
+        <div
+          key={i}
+          aria-hidden
+          style={{
+            position: "absolute",
+            top: c.top,
+            right: c.right,
+            width: c.size,
+            height: c.size,
+            borderRadius: "50%",
+            background: `radial-gradient(circle at 30% 30%, ${blueLight} 0%, ${blue} 45%, rgba(26,92,255,0) 72%)`,
+            opacity: c.o,
+            pointerEvents: "none",
+          }}
+        />
+      ))}
 
-      {/* CTA strip */}
       <div
+        className="mk-footer-grid"
         style={{
-          maxWidth: 1180,
+          maxWidth: 1400,
           margin: "0 auto",
-          padding: "56px 48px 40px",
+          padding: "64px 48px 48px",
+          display: "grid",
+          gridTemplateColumns: "1.35fr 1fr 1fr 1.25fr",
           position: "relative",
         }}
       >
-        {/* <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: 20,
-            paddingBottom: 44,
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-            marginBottom: 44,
-          }}
+        {/* Brand column */}
+        <div
+          className="mk-footer-col"
+          style={{ paddingRight: 40, borderRight: `1px solid ${line}` }}
         >
-          <div>
-            <div
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              background: "#fff",
+              borderRadius: 18,
+              padding: "14px 22px",
+              marginBottom: 28,
+              boxShadow: "0 16px 40px rgba(0,0,0,0.25)",
+            }}
+          >
+            <Image
+              src="/logo_light.png"
+              alt="LeadLo"
+              width={220}
+              height={72}
               style={{
-                fontSize: 22,
-                fontWeight: 800,
-                color: "#fff",
-                letterSpacing: "-0.01em",
-                marginBottom: 6,
+                height: 58,
+                width: "auto",
+                objectFit: "contain",
+                display: "block",
               }}
-            >
-              Ready to stop losing leads?
+            />
+          </div>
+          <div
+            style={{
+              fontSize: 26,
+              fontWeight: 800,
+              lineHeight: 1.2,
+              marginBottom: 12,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            Leads. Conversations.
+            <br />
+            Orders.
+          </div>
+          <div
+            style={{
+              fontSize: 17,
+              color: textSoft,
+              lineHeight: 1.5,
+              maxWidth: 300,
+              marginBottom: 36,
+            }}
+          >
+            One connected workspace for your sales team.
+          </div>
+          <div style={{ fontSize: 15, color: textSoft, marginBottom: 4 }}>
+            A product of
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>
+            Zalgo Infotech Pvt. Ltd.
+          </div>
+        </div>
+
+        {/* Link columns */}
+        {COLUMNS.map((col) => (
+          <div
+            key={col.heading}
+            className="mk-footer-col"
+            style={{ padding: "0 40px", borderRight: `1px solid ${line}` }}
+          >
+            <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 26 }}>
+              {col.heading}
             </div>
-            <div style={{ fontSize: 13.5, color: "rgba(255,255,255,0.55)" }}>
-              Start free — no card required, cancel anytime.
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              {col.links.map((l) => (
+                <a
+                  key={l.label}
+                  href={l.href}
+                  className="mk-footer-link"
+                  style={{
+                    fontSize: 18,
+                    color: textSoft,
+                    textDecoration: "none",
+                  }}
+                >
+                  {l.label}
+                </a>
+              ))}
             </div>
           </div>
+        ))}
+
+        {/* Contact column */}
+        <div className="mk-footer-col" style={{ paddingLeft: 40 }}>
+          <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 26 }}>
+            Contact
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            {CONTACT.map(({ icon: Icon, text, href }) => {
+              const inner = (
+                <>
+                  <span
+                    style={{
+                      width: 50,
+                      height: 50,
+                      borderRadius: "50%",
+                      background: "rgba(255,255,255,0.10)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Icon size={20} />
+                  </span>
+                  <span style={{ fontSize: 18 }}>{text}</span>
+                </>
+              );
+              return href ? (
+                <a
+                  key={text}
+                  href={href}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 18,
+                    color: "#fff",
+                    textDecoration: "none",
+                  }}
+                >
+                  {inner}
+                </a>
+              ) : (
+                <div
+                  key={text}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 18,
+                    color: textSoft,
+                  }}
+                >
+                  {inner}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ height: 1, background: line, margin: "28px 0 22px" }} />
           <a
-            href="/register"
+            href="https://zalgoinfotech.com"
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              background: teal,
-              color: "#fff",
-              borderRadius: 9,
-              padding: "12px 22px",
-              fontSize: 13.5,
+              color: blueLight,
+              fontSize: 18,
               fontWeight: 700,
               textDecoration: "none",
-              boxShadow: "0 12px 28px rgba(0,134,138,0.35)",
-              whiteSpace: "nowrap",
             }}
           >
-            Book a Free Demo <ArrowUpRight size={15} />
+            Visit Zalgo Infotech <ArrowUpRight size={20} />
           </a>
-        </div> */}
-
-        {/* Columns */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1.4fr 1fr 1fr 1fr",
-            gap: 32,
-          }}
-        >
-          <div>
-            <Image
-              src="/logo_dark.png"
-              alt="Zalgo Infotech"
-              width={140}
-              height={40}
-              style={{ objectFit: "contain", marginBottom: 14 }}
-            />
-            <div
-              style={{
-                fontSize: 13,
-                color: "rgba(255,255,255,0.5)",
-                lineHeight: 1.6,
-                maxWidth: 260,
-                marginBottom: 14,
-              }}
-            >
-              Lead &amp; customer management, built for teams that sell fast —
-              from first enquiry to delivered order.
-            </div>
-            <a
-              href="mailto:sales@zalgoinfotech.com"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 7,
-                fontSize: 13,
-                color: tealLight,
-                fontWeight: 600,
-                textDecoration: "none",
-              }}
-            >
-              <Mail size={13} /> sales@zalgoinfotech.com
-            </a>
-          </div>
-
-          {COLUMNS.map((col) => (
-            <div key={col.heading}>
-              <div
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: "rgba(255,255,255,0.85)",
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  marginBottom: 16,
-                }}
-              >
-                {col.heading}
-              </div>
-              <div
-                style={{ display: "flex", flexDirection: "column", gap: 12 }}
-              >
-                {col.links.map((l) => (
-                  <a
-                    key={l.href}
-                    href={l.href}
-                    style={{
-                      fontSize: 13.5,
-                      color: "rgba(255,255,255,0.55)",
-                      textDecoration: "none",
-                    }}
-                  >
-                    {l.label}
-                  </a>
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
 
+      {/* bottom bar */}
       <div
         style={{
-          borderTop: "1px solid rgba(255,255,255,0.08)",
-          padding: "18px 48px",
-          textAlign: "center",
-          fontSize: 12,
-          color: "rgba(255,255,255,0.35)",
+          maxWidth: 1400,
+          margin: "0 auto",
+          padding: "0 48px",
           position: "relative",
         }}
       >
-        © {new Date().getFullYear()} Zalgo Infotech. All rights reserved.
+        <div
+          style={{
+            borderTop: `1px solid ${line}`,
+            padding: "26px 0 32px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
+          <div style={{ fontSize: 16, color: textSoft }}>
+            © {new Date().getFullYear()} Zalgo Infotech Pvt. Ltd. All rights
+            reserved.
+          </div>
+          <a
+            href="https://lead-management.zalgostore.com/login"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              color: "#fff",
+              fontSize: 17,
+              fontWeight: 700,
+              textDecoration: "none",
+            }}
+          >
+            LeadLo CRM <ArrowUpRight size={18} color={orange} />
+          </a>
+        </div>
       </div>
-    </div>
+
+      <style>{`
+        .mk-footer-link { transition: color .2s ease; }
+        .mk-footer-link:hover { color: #fff !important; }
+        @media (max-width: 1024px) {
+          .mk-footer-grid { grid-template-columns: 1fr 1fr !important; row-gap: 40px; }
+          .mk-footer-col { border-right: none !important; padding: 0 !important; }
+        }
+        @media (max-width: 640px) {
+          .mk-footer-grid { grid-template-columns: 1fr !important; padding-left: 24px !important; padding-right: 24px !important; }
+        }
+      `}</style>
+    </footer>
   );
 }
