@@ -10,7 +10,7 @@ export default function SectionHeading({ children, subtitle, align = "center", e
           style={{
             fontSize: 11.5,
             fontWeight: 700,
-            color: "#00868a",
+            color: "#1a5cff",
             letterSpacing: "0.14em",
             textTransform: "uppercase",
             marginBottom: 8,
