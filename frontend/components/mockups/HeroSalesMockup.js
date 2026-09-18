@@ -1,152 +1,542 @@
 "use client";
-import { Home, Users, Package, Boxes, Truck, Settings, HelpCircle, Search, Bell, TrendingUp } from "lucide-react";
-import { teal, border, muted, sub, ink } from "../../lib/marketing-theme";
-import { WhatsAppGlyph } from "../BrandIcons";
+import {
+  Search,
+  Bell,
+  ChevronDown,
+  Home,
+  Users2,
+  MessageCircle,
+  Zap,
+  ClipboardList,
+  Boxes,
+  Truck,
+  Settings,
+  HelpCircle,
+  Users,
+  PhoneCall,
+  Package,
+  TrendingUp,
+  ArrowRight,
+} from "lucide-react";
 
-const NAV = [
-  { icon: <Home size={11} />, label: "Dashboard", active: false },
-  { icon: <Users size={11} />, label: "Leads", active: true },
-  { icon: <WhatsAppGlyph size={11} />, label: "WhatsApp", active: false },
-  { icon: <TrendingUp size={11} />, label: "Automation", active: false },
-  { icon: <Package size={11} />, label: "Orders", active: false },
-  { icon: <Boxes size={11} />, label: "Inventory", active: false },
-  { icon: <Truck size={11} />, label: "Delivery", active: false },
+/* ─── tokens (self-contained so the mockup never depends on theme drift) ─── */
+const blue = "#1a5cff";
+const navy = "#0b1f4a";
+const navyDeep = "#07163a";
+const ink = "#0f1b33";
+const sub = "#4a5670";
+const muted = "#8a94a8";
+const border = "#e3e9f5";
+const green = "#1f8a5c";
+
+const navItems = [
+  { icon: Home, label: "Dashboard" },
+  { icon: Users2, label: "Leads", active: true },
+  { icon: MessageCircle, label: "WhatsApp" },
+  { icon: Zap, label: "Automation" },
+  { icon: ClipboardList, label: "Orders" },
+  { icon: Boxes, label: "Inventory" },
+  { icon: Truck, label: "Delivery" },
 ];
 
-const STATS = [
-  { l: "New leads", v: "24", delta: "+20%", icon: <Users size={13} color={teal} /> },
-  { l: "Follow-ups", v: "08", delta: "+14%", icon: <WhatsAppGlyph size={13} /> },
-  { l: "Orders", v: "12", delta: "+33%", icon: <Package size={13} color={teal} /> },
+const stats = [
+  {
+    icon: Users,
+    label: "New leads",
+    value: "24",
+    delta: "+20%",
+    tint: "#e4ecff",
+    color: blue,
+  },
+  {
+    icon: PhoneCall,
+    label: "Follow-ups",
+    value: "08",
+    delta: "+14%",
+    tint: "#e4ecff",
+    color: blue,
+  },
+  {
+    icon: Package,
+    label: "Orders",
+    value: "12",
+    delta: "+33%",
+    tint: "#e4f5ec",
+    color: green,
+  },
 ];
 
-const ROWS = [
-  { n: "Rahul Sharma", src: "Meta Ads", p: "+91 98765 43210", s: "New", sc: "#2a6fb0", d: "9 Sep 2024" },
-  { n: "Priya Verma", src: "Facebook Form", p: "+91 91234 56789", s: "Follow-up", sc: "#b06a00", d: "9 Sep 2024" },
-  { n: "Vivek Singh", src: "WhatsApp", p: "+91 99876 54321", s: "Order confirmed", sc: "#1f8a5c", d: "8 Sep 2024" },
-  { n: "Anjali Mehta", src: "Instagram Form", p: "+91 97654 32109", s: "Follow-up", sc: "#b06a00", d: "8 Sep 2024" },
-  { n: "Suresh Patel", src: "Meta Ads", p: "+91 90987 65432", s: "New", sc: "#2a6fb0", d: "7 Sep 2024" },
+const leads = [
+  ["Rahul Sharma", "Meta Ads", "+91 98765 43210", "New", "9 Sep 2024"],
+  [
+    "Priya Verma",
+    "Facebook Form",
+    "+91 91234 56789",
+    "Follow-up",
+    "9 Sep 2024",
+  ],
+  [
+    "Vivek Singh",
+    "WhatsApp",
+    "+91 99876 54321",
+    "Order confirmed",
+    "8 Sep 2024",
+  ],
+  [
+    "Anjali Mehta",
+    "Instagram Form",
+    "+91 97654 32109",
+    "Follow-up",
+    "8 Sep 2024",
+  ],
+  ["Suresh Patel", "Meta Ads", "+91 90987 65432", "New", "7 Sep 2024"],
 ];
 
-// Sparkline — a tiny decorative up-trend line, matching the little chart
-// under each stat card in the reference design.
-function Spark() {
+const statusStyle = {
+  New: { bg: "#e4ecff", fg: blue },
+  "Follow-up": { bg: "#fff1d6", fg: "#b86a00" },
+  "Order confirmed": { bg: "#e4f5ec", fg: green },
+};
+
+/** Tiny sparkline so each stat card gets a trend curve. */
+function Spark({ color }) {
   return (
-    <svg width="46" height="16" viewBox="0 0 46 16" fill="none">
-      <path d="M1 13 L10 9 L18 11 L27 5 L36 7 L45 2" stroke={teal} strokeWidth="1.4" strokeLinecap="round" fill="none" />
+    <svg width="54" height="22" viewBox="0 0 54 22" aria-hidden>
+      <path
+        d="M1 17 C 9 15, 12 8, 19 11 S 30 18, 36 9 S 48 4, 53 6"
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
-// The "Sales overview" screenshot in the hero — a bespoke mockup (not
-// MockupShell, which other marketing pages share) so this one can match
-// the reference design's exact sidebar/stat/table content without
-// affecting mockups used elsewhere on the site.
-export default function HeroSalesMockup() {
+/**
+ * Hero dashboard mockup.
+ * @param {{ logoSrc?: string }} props  logoSrc — path of the LeadLo logo used in the nav (default /logo_light.png)
+ */
+export default function HeroSalesMockup({ logoSrc = "/logo_light.png" }) {
   return (
     <div
       style={{
-        background: "#fff",
+        display: "grid",
+        gridTemplateColumns: "176px 1fr",
+        width: "100%",
+        maxWidth: 760,
+        margin: "0 auto",
         borderRadius: 18,
-        border: `1px solid ${border}`,
-        boxShadow: "0 30px 70px rgba(20,30,35,0.16)",
         overflow: "hidden",
+        background: "#f7f9fe",
+        boxShadow:
+          "0 40px 90px rgba(11,31,74,0.22), 0 0 0 1px rgba(11,31,74,0.06)",
+        fontFamily: "inherit",
+        transform: "perspective(1600px) rotateY(-4deg) rotateX(2deg)",
+        transformOrigin: "center",
       }}
     >
-      <div style={{ display: "flex" }}>
-        <div style={{ width: 128, background: "#14181b", padding: "16px 10px", flexShrink: 0 }}>
-          <div style={{ color: "#fff", fontSize: 12, fontWeight: 800, letterSpacing: "0.03em", marginBottom: 2, paddingLeft: 4 }}>
-            ZALGO
+      {/* ── Sidebar ── */}
+      <aside
+        style={{
+          background: `linear-gradient(180deg, ${navy} 0%, ${navyDeep} 100%)`,
+          color: "#fff",
+          padding: "20px 14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        <div style={{ padding: "0 6px 4px" }}>
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 8,
+              padding: "6px 10px",
+              display: "inline-flex",
+              alignItems: "center",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoSrc}
+              alt="LeadLo"
+              style={{ height: 22, width: "auto", display: "block" }}
+            />
           </div>
-          <div style={{ color: teal, fontSize: 6, fontWeight: 700, letterSpacing: "0.1em", marginBottom: 8, paddingLeft: 4 }}>
-            INFOTECH
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              marginTop: 8,
+              opacity: 0.9,
+            }}
+          >
+            CRM
           </div>
-          <div style={{ fontSize: 6, color: "rgba(255,255,255,0.35)", padding: "0 8px 10px" }}>Sample workspace</div>
-          {NAV.map((item) => (
-            <div
-              key={item.label}
+          <div
+            style={{
+              marginTop: 10,
+              fontSize: 10.5,
+              color: "rgba(255,255,255,0.65)",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            Sample workspace <ChevronDown size={11} />
+          </div>
+        </div>
+        <div
+          style={{
+            height: 1,
+            background: "rgba(255,255,255,0.1)",
+            margin: "6px 0 8px",
+          }}
+        />
+
+        {navItems.map(({ icon: Icon, label, active }) => (
+          <div
+            key={label}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 9,
+              fontSize: 11.5,
+              fontWeight: active ? 700 : 500,
+              padding: "8px 10px",
+              borderRadius: 9,
+              background: active ? blue : "transparent",
+              color: active ? "#fff" : "rgba(255,255,255,0.78)",
+              boxShadow: active ? "0 8px 18px rgba(26,92,255,0.45)" : "none",
+            }}
+          >
+            <Icon size={14} /> {label}
+          </div>
+        ))}
+
+        <div
+          style={{
+            height: 1,
+            background: "rgba(255,255,255,0.1)",
+            margin: "8px 0",
+          }}
+        />
+        {[
+          { icon: Settings, label: "Settings" },
+          { icon: HelpCircle, label: "Help" },
+        ].map(({ icon: Icon, label }) => (
+          <div
+            key={label}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 9,
+              fontSize: 11,
+              padding: "6px 10px",
+              color: "rgba(255,255,255,0.7)",
+            }}
+          >
+            <Icon size={13} /> {label}
+          </div>
+        ))}
+      </aside>
+
+      {/* ── Main ── */}
+      <main style={{ padding: "16px 18px 18px", minWidth: 0 }}>
+        {/* top bar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: "#fff",
+              border: `1px solid ${border}`,
+              borderRadius: 999,
+              padding: "7px 12px",
+              fontSize: 10.5,
+              color: muted,
+            }}
+          >
+            <Search size={12} /> Search leads, orders, customers…
+          </div>
+          <div style={{ position: "relative", color: sub }}>
+            <Bell size={15} />
+            <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 8.5,
-                color: item.active ? "#fff" : "rgba(255,255,255,0.55)",
-                background: item.active ? teal : "transparent",
-                borderRadius: 5,
-                padding: "5px 8px",
-                marginBottom: 2,
-                fontWeight: item.active ? 700 : 500,
+                position: "absolute",
+                top: -2,
+                right: -2,
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "#ff4d4f",
+              }}
+            />
+          </div>
+          <div
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: "50%",
+              background: blue,
+              color: "#fff",
+              fontSize: 9.5,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            AS
+          </div>
+        </div>
+
+        {/* heading */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-end",
+            marginBottom: 12,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 18,
+                fontWeight: 800,
+                color: ink,
+                letterSpacing: "-0.01em",
               }}
             >
-              {item.icon} {item.label}
+              Sales overview
+            </div>
+            <div style={{ fontSize: 10, color: muted, marginTop: 2 }}>
+              Track your leads, follow-ups and deliveries in real time.
+            </div>
+          </div>
+          <div
+            style={{
+              fontSize: 9.5,
+              color: sub,
+              background: "#fff",
+              border: `1px solid ${border}`,
+              borderRadius: 7,
+              padding: "5px 9px",
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+            }}
+          >
+            Last 30 days <ChevronDown size={10} />
+          </div>
+        </div>
+
+        {/* stat cards */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3,1fr)",
+            gap: 10,
+            marginBottom: 12,
+          }}
+        >
+          {stats.map(({ icon: Icon, label, value, delta, tint, color }) => (
+            <div
+              key={label}
+              style={{
+                background: "#fff",
+                border: `1px solid ${border}`,
+                borderRadius: 12,
+                padding: "10px 12px",
+                display: "flex",
+                gap: 10,
+              }}
+            >
+              <span
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  background: tint,
+                  color,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <Icon size={15} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 9.5, color: muted }}>{label}</div>
+                <div
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 800,
+                    color: ink,
+                    lineHeight: 1.1,
+                  }}
+                >
+                  {value}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginTop: 2,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      color: green,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 2,
+                    }}
+                  >
+                    <TrendingUp size={9} /> {delta}
+                  </span>
+                  <Spark color={green} />
+                </div>
+              </div>
             </div>
           ))}
-          <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "8px 0" }} />
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 8.5, color: "rgba(255,255,255,0.45)", padding: "5px 8px" }}>
-            <Settings size={11} /> Settings
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 8.5, color: "rgba(255,255,255,0.45)", padding: "5px 8px" }}>
-            <HelpCircle size={11} /> Help
-          </div>
         </div>
 
-        <div style={{ flex: 1, padding: "14px 18px", minWidth: 0, background: "#fafbfb" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", border: `1px solid ${border}`, borderRadius: 7, padding: "5px 10px", flex: 1, maxWidth: 220 }}>
-              <Search size={10} color={muted} />
-              <span style={{ fontSize: 8, color: muted }}>Search leads, orders, customers...</span>
+        {/* recent leads */}
+        <div
+          style={{
+            background: "#fff",
+            border: `1px solid ${border}`,
+            borderRadius: 12,
+            padding: "10px 12px 6px",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 8,
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 700, color: ink }}>
+              Recent Leads
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Bell size={13} color={sub} />
-              <div style={{ width: 20, height: 20, borderRadius: "50%", background: teal, color: "#fff", fontSize: 7, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                AS
-              </div>
+            <div
+              style={{
+                fontSize: 9.5,
+                fontWeight: 700,
+                color: blue,
+                display: "flex",
+                alignItems: "center",
+                gap: 3,
+              }}
+            >
+              View all <ArrowRight size={10} />
             </div>
           </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: ink }}>Sales overview</div>
-              <div style={{ fontSize: 8, color: muted, marginTop: 2 }}>Track your leads, follow-ups and deliveries in real time.</div>
-            </div>
-            <div style={{ fontSize: 7.5, color: sub, border: `1px solid ${border}`, borderRadius: 6, padding: "4px 8px" }}>Last 30 days ▾</div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 }}>
-            {STATS.map((s) => (
-              <div key={s.l} style={{ border: `1px solid ${border}`, borderRadius: 9, padding: "9px 10px", background: "#fff" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ width: 20, height: 20, borderRadius: 6, background: "rgba(0,134,138,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {s.icon}
-                  </div>
-                  <span style={{ fontSize: 7, fontWeight: 700, color: "#1f8a5c" }}>↑ {s.delta}</span>
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 800, color: ink, marginTop: 5 }}>{s.v}</div>
-                <div style={{ fontSize: 6.5, color: muted, marginBottom: 3 }}>{s.l}</div>
-                <Spark />
-              </div>
-            ))}
-          </div>
-
-          <div style={{ border: `1px solid ${border}`, borderRadius: 9, padding: 10, background: "#fff" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-              <div style={{ fontSize: 9, fontWeight: 700 }}>Recent Leads</div>
-              <span style={{ fontSize: 7, color: teal, fontWeight: 600 }}>View all →</span>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1.1fr 0.9fr 0.8fr", gap: 4, fontSize: 6, color: muted, padding: "0 2px 4px", borderBottom: `1px solid ${border}` }}>
-              <span>Name</span><span>Source</span><span>Phone</span><span>Status</span><span>Created</span>
-            </div>
-            {ROWS.map((r) => (
-              <div key={r.n} style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1.1fr 0.9fr 0.8fr", gap: 4, alignItems: "center", padding: "5px 2px", borderBottom: `1px solid ${border}` }}>
-                <span style={{ fontSize: 7, fontWeight: 600, color: ink }}>{r.n}</span>
-                <span style={{ fontSize: 6.5, color: sub }}>{r.src}</span>
-                <span style={{ fontSize: 6.5, color: sub }}>{r.p}</span>
-                <span style={{ fontSize: 6, fontWeight: 700, color: r.sc, background: `${r.sc}18`, borderRadius: 10, padding: "2px 5px", textAlign: "center", whiteSpace: "nowrap" }}>{r.s}</span>
-                <span style={{ fontSize: 6.5, color: muted }}>{r.d}</span>
-              </div>
-            ))}
-          </div>
+          <table
+            style={{ width: "100%", borderCollapse: "collapse", fontSize: 9.5 }}
+          >
+            <thead>
+              <tr style={{ color: muted, textAlign: "left" }}>
+                {["Name", "Source", "Phone", "Status", "Created"].map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      fontWeight: 600,
+                      padding: "6px 4px",
+                      borderBottom: `1px solid ${border}`,
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {leads.map(([name, source, phone, status, date]) => {
+                const s = statusStyle[status];
+                return (
+                  <tr
+                    key={name}
+                    style={{ borderBottom: `1px solid ${border}` }}
+                  >
+                    <td
+                      style={{
+                        padding: "6px 4px",
+                        fontWeight: 600,
+                        color: ink,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {name}
+                    </td>
+                    <td
+                      style={{
+                        padding: "6px 4px",
+                        color: sub,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {source}
+                    </td>
+                    <td
+                      style={{
+                        padding: "6px 4px",
+                        color: sub,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {phone}
+                    </td>
+                    <td style={{ padding: "6px 4px" }}>
+                      <span
+                        style={{
+                          fontSize: 8.5,
+                          fontWeight: 700,
+                          color: s.fg,
+                          background: s.bg,
+                          borderRadius: 999,
+                          padding: "2px 8px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {status}
+                      </span>
+                    </td>
+                    <td
+                      style={{
+                        padding: "6px 4px",
+                        color: muted,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {date}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

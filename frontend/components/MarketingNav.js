@@ -31,7 +31,7 @@ export default function MarketingNav() {
       }}
     >
       <a href="/">
-        <Image src="/logo_light.png" alt="Zalgo Infotech" width={150} height={42} style={{ objectFit: "contain" }} />
+        <Image src="/logo_light.png" alt="LeadLo" width={160} height={64} style={{ objectFit: "contain" }} />
       </a>
       <div style={{ display: "flex", gap: 32 }}>
         {NAV_LINKS.map((l) => (
