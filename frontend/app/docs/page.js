@@ -68,7 +68,11 @@ export default function DocsPage() {
         </h1>
         <p style={{ fontSize: 16, color: sub, maxWidth: 560, margin: "0 auto", lineHeight: 1.6 }}>
           A quick tour of how LeadLo's modules fit together — enough to get your whole team moving in an
-          afternoon.
+          afternoon. For step-by-step setup guides, see the full{" "}
+          <a href="/help-center" style={{ color: teal, fontWeight: 700 }}>
+            Help Center
+          </a>
+          .
         </p>
       </Reveal>
 

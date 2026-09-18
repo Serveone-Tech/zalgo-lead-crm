@@ -26,7 +26,7 @@ const COLUMNS = [
     heading: "Resources",
     links: [
       { label: "About Us", href: "/about" },
-      { label: "Documentation", href: "/docs" },
+      { label: "Documentation", href: "/help-center" },
       { label: "FAQs", href: "/#faq" },
       { label: "Privacy Policy", href: "/privacy" },
       { label: "Terms & Conditions", href: "/terms" },

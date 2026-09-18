@@ -7,7 +7,7 @@ const NO_SIDEBAR = [
   '/', '/login', '/register', '/onboarding', '/plans', '/superadmin',
   // Public marketing site — no auth, no in-app sidebar.
   '/features', '/solutions', '/automation-suite', '/pricing', '/resources', '/contact',
-  '/docs', '/terms', '/privacy', '/refund-policy',
+  '/docs', '/terms', '/privacy', '/refund-policy', '/help-center',
 ];
 
 export default function RootLayout({ children }) {
