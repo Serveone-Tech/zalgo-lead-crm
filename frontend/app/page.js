@@ -1,8 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { poppins } from "../lib/marketing-font";
-import MarketingStyles from "../components/MarketingStyles";
+import { Poppins } from "next/font/google";
 import {
   ArrowRight,
   Check,
@@ -28,7 +27,7 @@ import {
   FileText,
   MapPin,
 } from "lucide-react";
-import { teal, ink, sub, muted, border } from "../lib/marketing-theme";
+import { ink, sub, muted, border } from "../lib/marketing-theme";
 import {
   GoogleAdsGlyph,
   MetaGlyph,
@@ -45,20 +44,31 @@ import CustomerJourney from "../components/CustomerJourney";
 import FaqAccordion from "../components/FaqAccordion";
 import TrialSignupForm from "../components/TrialSignupForm";
 
-/* ─────────────────────────── design tokens ─────────────────────────── */
-const mint = "#eef8f7"; // light-teal section background (reference pages 4, 12, 14)
-const mintDeep = "#e3f2f0"; // darker mint used for icon tiles
-const tealSoft = "rgba(0,134,138,0.10)";
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  display: "swap",
+});
+
+/* ─────────────────────────── LeadLo brand tokens ─────────────────────────── */
+const blue = "#1a5cff"; // primary — buttons, headings accent, lines
+const blueDeep = "#0f47d6"; // hover / gradient end
+const orange = "#f59a23"; // accent on dark sections + small marks
+const navy = "#0b2a63"; // dark section base
+const mint = "#eef4ff"; // light-blue section background
+const mintDeep = "#dfe9ff"; // icon tiles / chips
+const tealSoft = "rgba(26,92,255,0.10)";
 const green = "#1f8a5c";
-const tealLight = "#7fd6d0"; // accent on dark sections
-const darkA = "linear-gradient(135deg, #0f4c4c 0%, #0a3a3b 100%)"; // "Close the sale"
-const darkB = "linear-gradient(135deg, #063a3a 0%, #032a2b 100%)"; // "Sale confirmed"
+const tealLight = orange; // accent word on dark headings (PDF uses orange)
+const darkA = "linear-gradient(135deg, #0d3277 0%, #071f52 100%)"; // "Close the sale"
+const darkB = "linear-gradient(135deg, #0a2a68 0%, #051a45 100%)"; // "Sale confirmed"
+const teal = blue; // keep the name so nothing else changes
 
 const ctaStyle = {
   display: "inline-flex",
   alignItems: "center",
   gap: 10,
-  background: teal,
+  background: `linear-gradient(180deg, ${blue} 0%, ${blueDeep} 100%)`,
   color: "#fff",
   border: "none",
   borderRadius: 10,
@@ -67,7 +77,7 @@ const ctaStyle = {
   fontWeight: 700,
   textDecoration: "none",
   cursor: "pointer",
-  boxShadow: "0 12px 28px rgba(0,134,138,0.28)",
+  boxShadow: "0 12px 28px rgba(26,92,255,0.28)",
   whiteSpace: "nowrap",
 };
 
@@ -93,7 +103,7 @@ function Blob({
   left,
   right,
   bottom,
-  color = "rgba(0,168,173,0.14)",
+  color = "rgba(26,92,255,0.14)",
 }) {
   return (
     <div
@@ -121,8 +131,8 @@ function CheckBadge({ size = 24, onDark = false }) {
         width: size,
         height: size,
         borderRadius: "50%",
-        background: onDark ? "rgba(255,255,255,0.16)" : tealSoft,
-        color: onDark ? tealLight : teal,
+        background: onDark ? "rgba(255,255,255,0.18)" : tealSoft,
+        color: onDark ? "#fff" : teal,
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
@@ -280,7 +290,7 @@ export default function HomePage() {
         style={{
           position: "relative",
           overflow: "hidden",
-          background: "#f7fbfb",
+          background: "#f4f8ff",
         }}
       >
         <Blob size={720} top={-260} right={-220} />
@@ -288,7 +298,7 @@ export default function HomePage() {
           size={520}
           bottom={-260}
           left={-200}
-          color="rgba(0,168,173,0.10)"
+          color="rgba(26,92,255,0.10)"
         />
         <div
           className="mk-wrap mk-2col"
@@ -355,7 +365,7 @@ export default function HomePage() {
                 flexWrap: "wrap",
               }}
             >
-              <button onClick={() => router.push("/register")} style={ctaStyle}>
+              <button onClick={() => router.push("https://lead-management.zalgostore.com/register")} style={ctaStyle}>
                 Get Your 15-Day Free Demo <ArrowRight size={18} />
               </button>
               <a
@@ -568,7 +578,7 @@ export default function HomePage() {
         style={{
           position: "relative",
           overflow: "hidden",
-          background: "#f9fcfc",
+          background: "#f5f8ff",
         }}
       >
         <Blob size={640} top={-200} left={-260} />
@@ -650,7 +660,7 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Four dotted animated lines converging into Zalgo CRM */}
+          {/* Four dotted animated lines converging into LeadLo CRM */}
           <svg
             className="mk-flow"
             viewBox="0 0 1000 90"
@@ -712,7 +722,7 @@ export default function HomePage() {
               <Inbox size={48} strokeWidth={1.8} />
               <div>
                 <div style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.1 }}>
-                  Zalgo CRM
+                  LeadLo CRM
                 </div>
                 <div style={{ fontSize: 17, opacity: 0.9, marginTop: 6 }}>
                   One <b>inbox</b>. Clear ownership. Timely follow-ups.
@@ -755,19 +765,19 @@ export default function HomePage() {
 
       {/* ═══════════════════════ HOW IT WORKS ═══════════════════════ */}
       <section style={{ position: "relative", overflow: "hidden" }}>
-        <Blob size={600} top={-160} left={-240} color="rgba(0,168,173,0.10)" />
+        <Blob size={600} top={-160} left={-240} color="rgba(26,92,255,0.10)" />
         <Blob
           size={600}
           bottom={-260}
           right={-240}
-          color="rgba(0,168,173,0.10)"
+          color="rgba(26,92,255,0.10)"
         />
         <div
           className="mk-wrap"
           style={{ padding: "80px 48px", position: "relative" }}
         >
           <SectionHeading
-            eyebrow="How Zalgo CRM Works"
+            eyebrow="How LeadLo CRM Works"
             subtitle="A clear next step for every lead — from capture to follow-up, order and delivery."
           >
             From First Enquiry to{" "}
@@ -835,7 +845,7 @@ export default function HomePage() {
                       justifyContent: "center",
                       fontWeight: 800,
                       fontSize: 22,
-                      boxShadow: "0 10px 22px rgba(0,134,138,0.32)",
+                      boxShadow: "0 10px 22px rgba(26,92,255,0.32)",
                     }}
                   >
                     0{i + 1}
@@ -916,7 +926,7 @@ export default function HomePage() {
             <div style={{ fontSize: 18, color: sub, marginBottom: 18 }}>
               See the complete workflow with your team.
             </div>
-            <a href="/register" style={ctaStyle}>
+            <a href="https://lead-management.zalgostore.com/register" style={ctaStyle}>
               Get Your 15-Day Free Demo <ArrowRight size={18} />
             </a>
           </div>
@@ -927,7 +937,7 @@ export default function HomePage() {
       <section
         style={{ background: mint, position: "relative", overflow: "hidden" }}
       >
-        <Blob size={700} top={-200} right={-260} color="rgba(0,168,173,0.16)" />
+        <Blob size={700} top={-200} right={-260} color="rgba(26,92,255,0.16)" />
         <div
           className="mk-wrap"
           style={{ padding: "80px 48px", position: "relative" }}
@@ -1007,7 +1017,7 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
-              <a href="/register" style={ctaStyle}>
+              <a href="https://lead-management.zalgostore.com/register" style={ctaStyle}>
                 Get Your 15-Day Free Demo <ArrowRight size={18} />
               </a>
             </Reveal>
@@ -1116,7 +1126,7 @@ export default function HomePage() {
                     </div>
                     <div
                       style={{
-                        background: "#f6f9f9",
+                        background: "#f3f7ff",
                         borderRadius: 10,
                         padding: "12px 14px",
                       }}
@@ -1273,7 +1283,7 @@ export default function HomePage() {
                         width: 150,
                         height: 6,
                         borderRadius: 3,
-                        background: "#e9eeee",
+                        background: "#e4ebf7",
                         marginTop: 8,
                       }}
                     />
@@ -1282,7 +1292,7 @@ export default function HomePage() {
                         width: 110,
                         height: 6,
                         borderRadius: 3,
-                        background: "#e9eeee",
+                        background: "#e4ebf7",
                         marginTop: 6,
                       }}
                     />
@@ -1337,7 +1347,7 @@ export default function HomePage() {
                           width: 120,
                           height: 8,
                           borderRadius: 4,
-                          background: "#e9eeee",
+                          background: "#e4ebf7",
                         }}
                       />
                     </div>
@@ -1379,12 +1389,12 @@ export default function HomePage() {
       <section
         style={{ background: darkA, position: "relative", overflow: "hidden" }}
       >
-        <Blob size={620} top={-240} left={-240} color="rgba(0,180,170,0.22)" />
+        <Blob size={620} top={-240} left={-240} color="rgba(60,120,255,0.22)" />
         <Blob
           size={620}
           bottom={-300}
           right={-200}
-          color="rgba(0,180,170,0.18)"
+          color="rgba(60,120,255,0.18)"
         />
         <div
           className="mk-wrap"
@@ -1469,11 +1479,11 @@ export default function HomePage() {
                 ))}
               </div>
               <a
-                href="/register"
+                href="https://lead-management.zalgostore.com/register"
                 style={{
                   ...ctaStyle,
                   background: "#fff",
-                  color: "#06282a",
+                  color: blue,
                   boxShadow: "0 12px 28px rgba(0,0,0,0.25)",
                 }}
               >
@@ -1568,7 +1578,7 @@ export default function HomePage() {
                     </div>
                     <div
                       style={{
-                        background: "#f1f4f4",
+                        background: "#eef3ff",
                         borderRadius: 12,
                         padding: "14px 16px",
                         fontSize: 16,
@@ -1706,7 +1716,7 @@ export default function HomePage() {
                             flexShrink: 0,
                             boxShadow:
                               s.state === "active"
-                                ? "0 0 0 6px rgba(0,134,138,0.18)"
+                                ? "0 0 0 6px rgba(26,92,255,0.18)"
                                 : "none",
                           }}
                         >
@@ -1777,17 +1787,17 @@ export default function HomePage() {
       <section
         style={{ background: darkB, position: "relative", overflow: "hidden" }}
       >
-        <Blob size={560} top={-200} left={-200} color="rgba(0,180,170,0.20)" />
+        <Blob size={560} top={-200} left={-200} color="rgba(60,120,255,0.20)" />
         <Blob
           size={700}
           bottom={-320}
           right={-280}
-          color="rgba(0,180,170,0.16)"
+          color="rgba(60,120,255,0.16)"
         />
         <AnimatedDots
           width={90}
           height={220}
-          color="rgba(0,168,173,0.35)"
+          color="rgba(26,92,255,0.35)"
           style={{ position: "absolute", left: 0, bottom: 40 }}
         />
         <div
@@ -1868,11 +1878,11 @@ export default function HomePage() {
               ))}
             </div>
             <a
-              href="/register"
+              href="https://lead-management.zalgostore.com/register"
               style={{
                 ...ctaStyle,
                 background: "#fff",
-                color: "#06282a",
+                color: blue,
                 boxShadow: "0 12px 28px rgba(0,0,0,0.25)",
               }}
             >
@@ -1937,7 +1947,7 @@ export default function HomePage() {
               >
                 <div
                   style={{
-                    background: "#f4f8f8",
+                    background: "#f3f7ff",
                     borderRadius: 14,
                     padding: "26px 22px",
                     display: "flex",
@@ -1969,7 +1979,7 @@ export default function HomePage() {
                 </div>
                 <div
                   style={{
-                    background: "#f4f8f8",
+                    background: "#f3f7ff",
                     borderRadius: 14,
                     padding: "26px 22px",
                     display: "flex",
@@ -2019,7 +2029,7 @@ export default function HomePage() {
                               height: 60,
                               borderRadius: "50%",
                               background:
-                                i < 2 ? green : i === 2 ? teal : "#e6ebeb",
+                                i < 2 ? green : i === 2 ? teal : "#e4ebf7",
                               color: i < 3 ? "#fff" : muted,
                               display: "flex",
                               alignItems: "center",
@@ -2102,12 +2112,12 @@ export default function HomePage() {
 
       {/* ═══════════════════════ INDUSTRIES ═══════════════════════ */}
       <section style={{ position: "relative", overflow: "hidden" }}>
-        <Blob size={640} top={-220} left={-260} color="rgba(0,168,173,0.10)" />
+        <Blob size={640} top={-220} left={-260} color="rgba(26,92,255,0.10)" />
         <Blob
           size={640}
           bottom={-260}
           right={-260}
-          color="rgba(0,168,173,0.10)"
+          color="rgba(26,92,255,0.10)"
         />
         <div
           className="mk-wrap"
@@ -2150,8 +2160,8 @@ export default function HomePage() {
                     height: 116,
                     borderRadius: "50%",
                     background:
-                      "radial-gradient(circle at 30% 30%, #ffffff 0%, #e3f2f0 100%)",
-                    boxShadow: "inset 0 0 0 1px rgba(0,134,138,0.08)",
+                      "radial-gradient(circle at 30% 30%, #ffffff 0%, #dfe9ff 100%)",
+                    boxShadow: "inset 0 0 0 1px rgba(26,92,255,0.08)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -2199,9 +2209,9 @@ export default function HomePage() {
             }}
           >
             <div style={{ fontSize: 20, color: ink, fontWeight: 500 }}>
-              See how Zalgo fits your team.
+              See how LeadLo fits your team.
             </div>
-            <a href="/register" style={ctaStyle}>
+            <a href="https://lead-management.zalgostore.com/register" style={ctaStyle}>
               Get Your 15-Day Free Demo <ArrowRight size={18} />
             </a>
           </div>
@@ -2212,12 +2222,12 @@ export default function HomePage() {
       <section
         style={{ background: mint, position: "relative", overflow: "hidden" }}
       >
-        <Blob size={700} top={-260} left={-260} color="rgba(0,168,173,0.18)" />
+        <Blob size={700} top={-260} left={-260} color="rgba(26,92,255,0.18)" />
         <Blob
           size={700}
           bottom={-300}
           right={-260}
-          color="rgba(0,168,173,0.16)"
+          color="rgba(26,92,255,0.16)"
         />
         <div
           className="mk-wrap mk-2col"
@@ -2230,7 +2240,33 @@ export default function HomePage() {
             position: "relative",
           }}
         >
-          <Reveal>
+          <Reveal style={{ position: "relative" }}>
+            <svg
+              width="46"
+              height="46"
+              viewBox="0 0 46 46"
+              aria-hidden
+              style={{ position: "absolute", top: 18, right: 0 }}
+            >
+              <path
+                d="M6 30 L16 14"
+                stroke={orange}
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <path
+                d="M26 8 L30 2"
+                stroke={orange}
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <path
+                d="M22 26 L34 22"
+                stroke={orange}
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+            </svg>
             <div
               style={{
                 display: "inline-block",
@@ -2399,7 +2435,7 @@ export default function HomePage() {
                 lineHeight: 1.15,
               }}
             >
-              Try Zalgo with your team.
+              Try LeadLo with your team.
             </div>
             <div style={{ fontSize: 17, color: sub, marginBottom: 26 }}>
               Share your details to request trial access.
@@ -2433,7 +2469,7 @@ export default function HomePage() {
           size={560}
           bottom={-260}
           left={-220}
-          color="rgba(0,168,173,0.10)"
+          color="rgba(26,92,255,0.10)"
         />
         <div
           className="mk-wrap mk-2col"
@@ -2539,7 +2575,7 @@ export default function HomePage() {
               </div>
             </div>
             <a
-              href="/register"
+              href="https://lead-management.zalgostore.com/register"
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -2567,12 +2603,12 @@ export default function HomePage() {
       <section
         style={{ background: mint, position: "relative", overflow: "hidden" }}
       >
-        <Blob size={520} top={-260} left={-200} color="rgba(0,168,173,0.18)" />
+        <Blob size={520} top={-260} left={-200} color="rgba(26,92,255,0.18)" />
         <Blob
           size={520}
           bottom={-300}
           right={-160}
-          color="rgba(0,168,173,0.16)"
+          color="rgba(26,92,255,0.16)"
         />
         <div
           className="mk-wrap"
@@ -2603,7 +2639,7 @@ export default function HomePage() {
             </div>
           </div>
           <button
-            onClick={() => router.push("/register")}
+            onClick={() => router.push("https://lead-management.zalgostore.com/register")}
             style={{ ...ctaStyle, padding: "20px 34px", fontSize: 20 }}
           >
             Start Your 15-Day Free Trial <ArrowRight size={20} />
@@ -2612,7 +2648,72 @@ export default function HomePage() {
       </section>
 
       <MarketingFooter />
-      <MarketingStyles />
+
+      {/* ═══════════════════════ global page styles ═══════════════════════ */}
+      <style>{`
+        .mk-page { -webkit-font-smoothing: antialiased; }
+        .mk-wrap { max-width: 1400px; margin: 0 auto; }
+
+        /* Animated dotted connector lines — used everywhere on the page */
+        .flow-dots { animation: flowDots 0.9s linear infinite; }
+        @keyframes flowDots { to { stroke-dashoffset: -16; } }
+
+        /* Hero float */
+        .float-mockup { animation: floatMockup 5s ease-in-out infinite; }
+        @keyframes floatMockup { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .float-card {
+          position: absolute; z-index: 3; background: #fff; border-radius: 16px;
+          box-shadow: 0 20px 44px rgba(20,30,35,0.16); padding: 16px 20px;
+          display: flex; align-items: center; gap: 14px;
+        }
+        .float-card-a { animation: floatA 4.4s ease-in-out infinite; }
+        .float-card-b { animation: floatB 5.2s ease-in-out infinite; }
+        .float-card-c { animation: floatC 4.8s ease-in-out infinite; }
+        @keyframes floatA { 0%,100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
+        @keyframes floatB { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
+        @keyframes floatC { 0%,100% { transform: translateY(0); } 50% { transform: translateY(7px); } }
+
+        .crm-pulse { animation: crmPulse 2.6s ease-in-out infinite; }
+        @keyframes crmPulse {
+          0%,100% { box-shadow: 0 18px 40px rgba(26,92,255,0.30); }
+          50%     { box-shadow: 0 18px 54px rgba(26,92,255,0.50); }
+        }
+
+        .hover-lift { transition: transform .28s cubic-bezier(.16,1,.3,1), box-shadow .28s ease, border-color .28s ease; }
+        .hover-lift:hover { transform: translateY(-6px); box-shadow: 0 22px 44px rgba(20,30,35,0.12); border-color: ${teal} !important; }
+
+        .mk-page a[href="https://lead-management.zalgostore.com/register"], .mk-page button { transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
+        .mk-page a[href="https://lead-management.zalgostore.com/register"]:hover, .mk-page button:hover { transform: translateY(-2px); filter: brightness(1.05); box-shadow: 0 16px 34px rgba(26,92,255,0.34); }
+        html { scroll-behavior: smooth; }
+        .mk-page a:focus-visible, .mk-page button:focus-visible { outline: 3px solid ${teal}; outline-offset: 3px; }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+          .mk-h1 { font-size: 52px !important; }
+          .mk-h2 { font-size: 40px !important; }
+          .mk-4col { grid-template-columns: repeat(2,1fr) !important; }
+          .mk-flow, .mk-steps-line { display: none !important; }
+          .mk-strip-item { border-left: none !important; padding: 8px 18px !important; }
+        }
+        @media (max-width: 860px) {
+          .mk-wrap { padding-left: 24px !important; padding-right: 24px !important; }
+          .mk-2col { grid-template-columns: 1fr !important; gap: 36px !important; }
+          .mk-3col { grid-template-columns: 1fr !important; }
+          .mk-hero-visual { display: none; }
+          .mk-h1 { font-size: 42px !important; }
+          .mk-h2 { font-size: 34px !important; }
+          .mk-bulk { justify-content: center !important; }
+        }
+        @media (max-width: 560px) {
+          .mk-4col { grid-template-columns: 1fr !important; }
+          .mk-2col-keep { grid-template-columns: 1fr !important; }
+          .mk-h1 { font-size: 36px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c, .crm-pulse { animation: none !important; }
+          .hover-lift { transition: none; }
+        }
+      `}</style>
     </div>
   );
 }
