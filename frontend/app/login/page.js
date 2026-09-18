@@ -130,7 +130,7 @@ export default function LoginPage() {
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <Image
             src={theme === "light" ? "/logo_light.png" : "/logo_dark.png"}
-            alt="Zalgo Infotech" width={180} height={54}
+            alt="LeadLo" width={180} height={54}
             style={{ objectFit: "contain" }}
           />
           <div style={{

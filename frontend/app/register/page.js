@@ -115,7 +115,7 @@ export default function RegisterPage() {
         <div style={{ textAlign: "center", marginBottom: 32 }}>
           <Image
             src={theme === "light" ? "/logo_light.png" : "/logo_dark.png"}
-            alt="Zalgo Infotech"
+            alt="LeadLo"
             width={180}
             height={54}
             style={{ objectFit: "contain" }}

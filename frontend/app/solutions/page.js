@@ -80,7 +80,7 @@ export default function SolutionsPage() {
       </div>
 
       <div style={{ maxWidth: 1140, margin: "0 auto", padding: "56px 48px 32px" }}>
-        <SectionHeading subtitle="Four kinds of teams lean on Zalgo CRM every day — here's exactly what it does for each.">
+        <SectionHeading subtitle="Four kinds of teams lean on LeadLo every day — here's exactly what it does for each.">
           Who It&apos;s <span style={{ color: teal }}>Built For</span>
         </SectionHeading>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 20 }}>

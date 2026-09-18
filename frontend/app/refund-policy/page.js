@@ -4,7 +4,7 @@ import LegalPageLayout, { H2, P, UL, A } from "../../components/LegalPageLayout"
 export default function RefundPolicyPage() {
   return (
     <LegalPageLayout title="Refund &amp; Cancellation Policy" updated="September 2026">
-      <P>This policy covers free trials, subscription cancellation, and refunds for Zalgo CRM.</P>
+      <P>This policy covers free trials, subscription cancellation, and refunds for LeadLo.</P>
 
       <H2>1. Free Trial</H2>
       <P>

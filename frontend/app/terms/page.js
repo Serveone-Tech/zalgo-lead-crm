@@ -5,14 +5,14 @@ export default function TermsPage() {
   return (
     <LegalPageLayout title="Terms &amp; Conditions" updated="September 2026">
       <P>
-        These Terms &amp; Conditions ("Terms") govern your access to and use of Zalgo CRM, a lead and customer
+        These Terms &amp; Conditions ("Terms") govern your access to and use of LeadLo, a lead and customer
         management platform operated by Zalgo Infotech ("Zalgo Infotech", "we", "us"). By creating an account or
-        using Zalgo CRM, you agree to these Terms. If you do not agree, please do not use the service.
+        using LeadLo, you agree to these Terms. If you do not agree, please do not use the service.
       </P>
 
       <H2>1. The Service</H2>
       <P>
-        Zalgo CRM lets businesses capture and manage leads, fulfill customer orders, run outbound
+        LeadLo lets businesses capture and manage leads, fulfill customer orders, run outbound
         WhatsApp/Email/SMS automation, and connect third-party channels (Meta Ads, Google Ads, Google Sheets,
         WhatsApp, calls) and delivery couriers, subject to the features included in your subscribed plan.
       </P>
@@ -26,7 +26,7 @@ export default function TermsPage() {
 
       <H2>3. Plans, Billing &amp; Free Trial</H2>
       <P>
-        Zalgo CRM is offered on subscription plans (Basic, Pro, Pro Max, and Custom) billed monthly or yearly.
+        LeadLo is offered on subscription plans (Basic, Pro, Pro Max, and Custom) billed monthly or yearly.
         Each plan defines limits on leads, customers, team members, and which features are available — upgrading
         or downgrading changes what you can access immediately. New accounts get a free trial period as shown at
         signup; no payment is required to start a trial, and it converts to a paid subscription only when you
@@ -43,7 +43,7 @@ export default function TermsPage() {
 
       <H2>5. Your Data</H2>
       <P>
-        Leads, customers, orders, and other business data you enter into Zalgo CRM belong to you. We access it
+        Leads, customers, orders, and other business data you enter into LeadLo belong to you. We access it
         only to operate, secure, and support the service, as described in our{" "}
         <A href="/privacy">Privacy Policy</A>. If you cancel your account, we may retain data for a reasonable
         period as required by law or for legitimate backup purposes before deletion.
@@ -58,7 +58,7 @@ export default function TermsPage() {
       </P>
 
       <H2>7. Acceptable Use</H2>
-      <P>You agree not to use Zalgo CRM to:</P>
+      <P>You agree not to use LeadLo to:</P>
       <UL>
         <li>Send unsolicited spam or messages that violate WhatsApp/Meta/SMS/email provider policies</li>
         <li>Upload unlawful, infringing, or harmful content</li>
@@ -68,14 +68,14 @@ export default function TermsPage() {
 
       <H2>8. Availability &amp; Changes</H2>
       <P>
-        We aim to keep Zalgo CRM available and reliable but don't guarantee uninterrupted service — maintenance,
+        We aim to keep LeadLo available and reliable but don't guarantee uninterrupted service — maintenance,
         third-party outages, or unforeseen issues can cause downtime. We may update features, pricing, or these
         Terms over time; material changes will be communicated where reasonably possible.
       </P>
 
       <H2>9. Limitation of Liability</H2>
       <P>
-        Zalgo CRM is provided "as is." To the maximum extent permitted by law, Zalgo Infotech is not liable for
+        LeadLo is provided "as is." To the maximum extent permitted by law, Zalgo Infotech is not liable for
         indirect, incidental, or consequential damages arising from your use of the service, including losses
         related to third-party integrations outside our control.
       </P>

@@ -37,7 +37,7 @@ export default function ResourcesPage() {
           Resources &amp; <span style={{ color: teal }}>Guides</span>
         </h1>
         <p style={{ fontSize: 16, color: sub, maxWidth: 560, margin: "0 auto", lineHeight: 1.6 }}>
-          Everything you need to get the most out of Zalgo CRM — practical guides written from how teams actually
+          Everything you need to get the most out of LeadLo — practical guides written from how teams actually
           use it day to day.
         </p>
       </Reveal>

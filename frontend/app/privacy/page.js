@@ -6,7 +6,7 @@ export default function PrivacyPage() {
     <LegalPageLayout title="Privacy Policy" updated="September 2026">
       <P>
         This Privacy Policy explains how Zalgo Infotech ("we", "us") collects, uses, and protects information
-        when you use Zalgo CRM.
+        when you use LeadLo.
       </P>
 
       <H2>1. Information We Collect</H2>
@@ -78,12 +78,12 @@ export default function PrivacyPage() {
 
       <H2>8. Cookies &amp; Local Storage</H2>
       <P>
-        Zalgo CRM uses browser local storage to keep you signed in and remember your preferences (like theme) — we
+        LeadLo uses browser local storage to keep you signed in and remember your preferences (like theme) — we
         don't use third-party advertising trackers.
       </P>
 
       <H2>9. Children's Privacy</H2>
-      <P>Zalgo CRM is a business tool and isn't directed at or knowingly used by children.</P>
+      <P>LeadLo is a business tool and isn't directed at or knowingly used by children.</P>
 
       <H2>10. Changes to This Policy</H2>
       <P>We may update this policy from time to time; the "Last updated" date above reflects the latest revision.</P>

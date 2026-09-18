@@ -18,7 +18,7 @@ const FAQS = [
   },
   {
     q: "Are WhatsApp and courier charges included?",
-    a: "WhatsApp messaging is billed by Meta based on conversation volume, and courier charges are billed by your own delivery provider — Zalgo CRM connects to both but doesn't mark up either.",
+    a: "WhatsApp messaging is billed by Meta based on conversation volume, and courier charges are billed by your own delivery provider — LeadLo connects to both but doesn't mark up either.",
   },
   {
     q: "Will Meta leads and missed calls enter the CRM automatically?",

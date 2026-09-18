@@ -122,7 +122,7 @@ export default function PlansPage() {
         amount: order.amount,
         currency: order.currency,
         order_id: order.order_id,
-        name: "Zalgo CRM",
+        name: "LeadLo",
         description: `${order.plan_name} Plan — ${order.billing_cycle}`,
         theme: { color: "#0066cc" },
         handler: async (response) => {

@@ -142,7 +142,7 @@ export default function SettingsPage() {
         amount: order.amount,
         currency: order.currency,
         order_id: order.order_id,
-        name: 'Zalgo CRM',
+        name: 'LeadLo',
         description: `+${order.seats} employee seats`,
         theme: { color: '#0066cc' },
         handler: async (response) => {

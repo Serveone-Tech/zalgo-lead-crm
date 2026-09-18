@@ -69,7 +69,7 @@ export default function ContactRequestsPage() {
       <aside style={{ width: 220, background: "var(--bg-surface)", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", position: "fixed", top: 0, bottom: 0, left: 0 }}>
         <div style={{ padding: "20px 18px", borderBottom: "1px solid var(--border)" }}>
           <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 16, color: "var(--text-primary)", marginBottom: 4 }}>⚡ Super Admin</div>
-          <div style={{ fontSize: 11, color: "var(--teal)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Zalgo CRM</div>
+          <div style={{ fontSize: 11, color: "var(--teal)", letterSpacing: "0.1em", textTransform: "uppercase" }}>LeadLo</div>
         </div>
         <nav style={{ flex: 1, padding: "12px 10px" }}>
           {[

@@ -20,14 +20,14 @@ function wrap(body) {
   return `
 <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:520px;margin:auto;background:#0a1523;border-radius:14px;overflow:hidden">
   <div style="background:#ffffff;padding:24px 32px">
-    <img src="${LOGO_URL}" alt="Zalgo Infotech" style="height:32px;display:block" />
+    <img src="${LOGO_URL}" alt="LeadLo" style="height:32px;display:block" />
     <div style="color:#5a7a96;font-size:11px;margin-top:8px;letter-spacing:0.14em;text-transform:uppercase">Lead Management System</div>
   </div>
   <div style="background:#0f1923;padding:32px;border:1px solid #1e3040;border-top:none">
     ${body}
   </div>
   <div style="background:#080e18;padding:16px 32px;text-align:center;color:#2d4560;font-size:11px">
-    © Zalgo Infotech &nbsp;•&nbsp; You received this because you have a Zalgo CRM account
+    © Zalgo Infotech &nbsp;•&nbsp; You received this because you have a LeadLo account
   </div>
 </div>`;
 }
@@ -35,7 +35,7 @@ function wrap(body) {
 async function send(to, subject, html) {
   try {
     await transport.sendMail({
-      from: `"Zalgo CRM" <${process.env.EMAIL_USER}>`,
+      from: `"LeadLo" <${process.env.EMAIL_USER}>`,
       to, subject, html,
     });
   } catch (e) {
@@ -45,7 +45,7 @@ async function send(to, subject, html) {
 
 // ── OTP ──────────────────────────────────────────────────────────
 async function sendOtp(email, name, otp) {
-  await send(email, "Password Reset OTP — Zalgo CRM", wrap(`
+  await send(email, "Password Reset OTP — LeadLo", wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Password Reset</h2>
     <p style="color:#94a3b8;margin:0 0 24px">Hi <strong style="color:#e2e8f0">${name}</strong>, use this OTP to reset your password. It expires in <strong style="color:#e2e8f0">10 minutes</strong>.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:28px;text-align:center;margin-bottom:24px">
@@ -57,7 +57,7 @@ async function sendOtp(email, name, otp) {
 
 // ── REGISTRATION EMAIL VERIFICATION OTP ─────────────────────────
 async function sendRegisterOtp(email, name, otp) {
-  await send(email, "Verify your email — Zalgo CRM", wrap(`
+  await send(email, "Verify your email — LeadLo", wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Verify your email</h2>
     <p style="color:#94a3b8;margin:0 0 24px">Hi <strong style="color:#e2e8f0">${name}</strong>, use this OTP to verify your email and finish creating your account. It expires in <strong style="color:#e2e8f0">10 minutes</strong>.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:28px;text-align:center;margin-bottom:24px">
@@ -69,7 +69,7 @@ async function sendRegisterOtp(email, name, otp) {
 
 // ── TRIAL STARTED ────────────────────────────────────────────────
 async function sendTrialStarted(email, name, planName, trialEndsAt) {
-  await send(email, `Your ${planName} trial has started — Zalgo CRM`, wrap(`
+  await send(email, `Your ${planName} trial has started — LeadLo`, wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Welcome to your free trial! 🎉</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> trial is now active.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -91,7 +91,7 @@ async function sendTrialStarted(email, name, planName, trialEndsAt) {
 // ── PLAN ACTIVATED / RENEWED ─────────────────────────────────────
 async function sendPlanActivated(email, name, planName, billingCycle, endsAt) {
   const cycleLabel = billingCycle === "yearly" ? "Yearly" : billingCycle === "monthly" ? "Monthly" : billingCycle;
-  await send(email, `Subscription activated — ${planName} | Zalgo CRM`, wrap(`
+  await send(email, `Subscription activated — ${planName} | LeadLo`, wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Subscription Activated ✅</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your subscription is now active. Thank you!</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -116,7 +116,7 @@ async function sendPlanActivated(email, name, planName, billingCycle, endsAt) {
 
 // ── EMPLOYEE SEAT ADD-ON PURCHASED ──────────────────────────────
 async function sendAddonPurchased(email, name, seatsAdded, newLimit, amount) {
-  await send(email, `${seatsAdded} employee seats added — Zalgo CRM`, wrap(`
+  await send(email, `${seatsAdded} employee seats added — LeadLo`, wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Seats Added ✅</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your payment went through and your plan's seat limit has been increased.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -141,7 +141,7 @@ async function sendAddonPurchased(email, name, seatsAdded, newLimit, amount) {
 
 // ── PLAN EXTENDED ────────────────────────────────────────────────
 async function sendPlanExtended(email, name, planName, newEndsAt, days) {
-  await send(email, `Subscription extended by ${days} days — Zalgo CRM`, wrap(`
+  await send(email, `Subscription extended by ${days} days — LeadLo`, wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Subscription Extended ✅</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> subscription has been extended.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -163,7 +163,7 @@ async function sendPlanExtended(email, name, planName, newEndsAt, days) {
 // ── PLAN EXPIRING SOON ───────────────────────────────────────────
 async function sendExpiryReminder(email, name, planName, endsAt, daysLeft) {
   const urgency = daysLeft <= 3 ? "#e53e3e" : "#e6a817";
-  await send(email, `⚠️ Your subscription expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — Zalgo CRM`, wrap(`
+  await send(email, `⚠️ Your subscription expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — LeadLo`, wrap(`
     <h2 style="color:${urgency};margin:0 0 8px">Subscription Expiring Soon ⚠️</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> subscription is expiring soon. Renew now to avoid interruption.</p>
     <div style="background:#1a2535;border:1px solid ${urgency}55;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -182,13 +182,13 @@ async function sendExpiryReminder(email, name, planName, endsAt, daysLeft) {
         </tr>
       </table>
     </div>
-    <p style="color:#94a3b8;font-size:13px;margin:0">Contact your administrator to renew your subscription and continue uninterrupted access to Zalgo CRM.</p>
+    <p style="color:#94a3b8;font-size:13px;margin:0">Contact your administrator to renew your subscription and continue uninterrupted access to LeadLo.</p>
   `));
 }
 
 // ── PLAN EXPIRED ─────────────────────────────────────────────────
 async function sendPlanExpired(email, name, planName, expiredOn) {
-  await send(email, `Your subscription has expired — Zalgo CRM`, wrap(`
+  await send(email, `Your subscription has expired — LeadLo`, wrap(`
     <h2 style="color:#e53e3e;margin:0 0 8px">Subscription Expired</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> subscription has expired. Your data is safe — renew to regain access.</p>
     <div style="background:#1a2535;border:1px solid #e53e3e55;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -209,11 +209,11 @@ async function sendPlanExpired(email, name, planName, expiredOn) {
 
 // ── PLAN CANCELLED ───────────────────────────────────────────────
 async function sendPlanCancelled(email, name, planName) {
-  await send(email, `Subscription cancelled — Zalgo CRM`, wrap(`
+  await send(email, `Subscription cancelled — LeadLo`, wrap(`
     <h2 style="color:#e53e3e;margin:0 0 8px">Subscription Cancelled</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> subscription has been cancelled by the administrator.</p>
     <div style="background:#1a2535;border:1px solid #e53e3e55;border-radius:10px;padding:20px;margin-bottom:20px">
-      <p style="color:#94a3b8;font-size:13px;margin:0">Your access to Zalgo CRM features has been revoked. If you believe this is a mistake, please contact your administrator.</p>
+      <p style="color:#94a3b8;font-size:13px;margin:0">Your access to LeadLo features has been revoked. If you believe this is a mistake, please contact your administrator.</p>
     </div>
     <p style="color:#4a6380;font-size:12px;margin:0">Your existing data remains safe and can be accessed once a new subscription is activated.</p>
   `));

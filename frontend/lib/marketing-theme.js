@@ -1,11 +1,18 @@
-// Shared color tokens for the public marketing site (landing + Features/
-// Solutions/Automation Suite/Pricing/Resources/Contact). Deliberately
-// separate from the authenticated app's dark-mode-aware CSS variables
-// (frontend/app/globals.css) — the marketing site always renders light,
-// regardless of a visitor's in-app theme preference.
-export const teal = "#00868a";
-export const tealLight = "#00a8ad";
-export const ink = "#1c1f22";
-export const sub = "#565d63";
-export const muted = "#8a9097";
-export const border = "#e6e9ec";
+// LeadLo brand theme.
+// `teal` is kept as the export name so existing components keep working —
+// its VALUE is now LeadLo blue. Every marketing component that imports
+// `teal` (nav button, journey tabs, form button, FAQ, footer) picks this up.
+
+export const teal = "#1a5cff"; // primary (LeadLo blue)
+export const tealLight = "#5c8aff"; // lighter accent (footer links, etc.)
+export const tealDeep = "#0f47d6"; // hover / gradient end
+export const orange = "#f59a23"; // accent
+export const navy = "#0b2a63"; // dark sections / footer
+
+export const ink = "#0f1b33"; // headings
+export const sub = "#4a5670"; // body copy
+export const muted = "#8a94a8"; // captions
+export const border = "#dfe6f3"; // card borders
+
+export const mint = "#eef4ff"; // light-blue section background
+export const mintDeep = "#dfe9ff"; // icon tiles / chips

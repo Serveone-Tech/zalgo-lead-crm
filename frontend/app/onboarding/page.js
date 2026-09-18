@@ -73,7 +73,7 @@ export default function OnboardingPage() {
         <div style={{ textAlign: "center", marginBottom: 28 }}>
           <Image
             src={theme === "light" ? "/logo_light.png" : "/logo_dark.png"}
-            alt="Zalgo Infotech"
+            alt="LeadLo"
             width={150}
             height={45}
             style={{ objectFit: "contain" }}

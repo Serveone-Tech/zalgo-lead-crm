@@ -58,7 +58,7 @@ app.use('/api/whatsapp-templates', whatsappTemplatesRoutes);
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 initDB().then(() => {
-  app.listen(PORT, () => console.log(`🚀 Zalgo CRM API running on port ${PORT}`));
+  app.listen(PORT, () => console.log(`🚀 LeadLo API running on port ${PORT}`));
   // Follow-up/payment-due reminders aren't tied to a single request — check
   // for anything due every 30 minutes (each guarded so it only actually
   // sends once per day per lead/order).

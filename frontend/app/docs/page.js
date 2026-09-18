@@ -67,7 +67,7 @@ export default function DocsPage() {
           Documentation
         </h1>
         <p style={{ fontSize: 16, color: sub, maxWidth: 560, margin: "0 auto", lineHeight: 1.6 }}>
-          A quick tour of how Zalgo CRM's modules fit together — enough to get your whole team moving in an
+          A quick tour of how LeadLo's modules fit together — enough to get your whole team moving in an
           afternoon.
         </p>
       </Reveal>
