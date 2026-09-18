@@ -1749,7 +1749,9 @@ export default function FeaturesPage() {
 
       <MarketingFooter />
       <MarketingStyles />
-      <style>{`
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         .flow-dots { animation: flowDots .9s linear infinite; }
         @keyframes flowDots { to { stroke-dashoffset: -16; } }
         .float-mockup { animation: floatMockup 5s ease-in-out infinite; }
@@ -1774,7 +1776,9 @@ export default function FeaturesPage() {
         }
         @media (max-width: 560px) { .mk-4col, .mk-2col-keep { grid-template-columns: 1fr !important; } }
         @media (prefers-reduced-motion: reduce) { .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c { animation: none !important; } }
-      `}</style>
+      `,
+        }}
+      />
     </div>
   );
 }

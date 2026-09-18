@@ -2650,7 +2650,9 @@ export default function HomePage() {
       <MarketingFooter />
 
       {/* ═══════════════════════ global page styles ═══════════════════════ */}
-      <style>{`
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         .mk-page { -webkit-font-smoothing: antialiased; }
         .mk-wrap { max-width: 1400px; margin: 0 auto; }
 
@@ -2713,7 +2715,9 @@ export default function HomePage() {
           .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c, .crm-pulse { animation: none !important; }
           .hover-lift { transition: none; }
         }
-      `}</style>
+      `,
+        }}
+      />
     </div>
   );
 }

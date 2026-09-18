@@ -1227,7 +1227,9 @@ export default function ContactPage() {
 
       <MarketingFooter />
       <MarketingStyles />
-      <style>{`
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         .mk-page input:focus, .mk-page select:focus, .mk-page textarea:focus { border-color: ${blue} !important; box-shadow: 0 0 0 4px ${blueSoft}; }
         .mk-page input::placeholder, .mk-page textarea::placeholder { color: ${muted}; }
         .ct-card { transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
@@ -1245,7 +1247,9 @@ export default function ContactPage() {
           .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 36px !important; }
         }
         @media (max-width: 560px) { .mk-2col-keep { grid-template-columns: 1fr !important; } }
-      `}</style>
+      `,
+        }}
+      />
     </div>
   );
 }

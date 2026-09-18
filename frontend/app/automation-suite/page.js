@@ -1457,7 +1457,14 @@ export default function AutomationSuitePage() {
 
       <MarketingFooter />
       <MarketingStyles />
-      <style>{`
+      <style
+        // dangerouslySetInnerHTML, not a JSX text child — the a[href="..."]
+        // attribute selectors below contain literal quotes, and a plain
+        // <style>{`...`}</style> hydration-mismatches because the server
+        // and client escape those quotes differently when serializing the
+        // text node. Raw HTML sidesteps that (identical bytes both passes).
+        dangerouslySetInnerHTML={{
+          __html: `
         .flow-dots { animation: flowDots .9s linear infinite; }
         @keyframes flowDots { to { stroke-dashoffset: -16; } }
         .float-mockup { animation: floatMockup 5s ease-in-out infinite; }
@@ -1478,7 +1485,9 @@ export default function AutomationSuitePage() {
           .mk-h1 { font-size: 40px !important; } .mk-h2 { font-size: 34px !important; }
         }
         @media (prefers-reduced-motion: reduce) { .flow-dots, .float-mockup, .float-card-c { animation: none !important; } }
-      `}</style>
+      `,
+        }}
+      />
     </div>
   );
 }
