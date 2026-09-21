@@ -32,8 +32,8 @@ const EMAIL = "sales@zalgoinfotech.com";
 const PHONE_DISPLAY = "+91 92442 13326";
 const PHONE_TEL = "+919244213326";
 const WHATSAPP_URL = `https://wa.me/${PHONE_TEL.replace("+", "")}`;
-const ADDRESS = ""; // e.g. "12, MG Road, Indore, MP 452001" — map + directions appear once set
-const HOURS = ""; // e.g. "Mon–Sat, 10:00 AM – 7:00 PM IST"
+const ADDRESS = "1/65, Vinay Nagar Sec 3, 100 Feet Road, S. P. Ashram, Gwalior, Madhya Pradesh, India - 474012";
+const HOURS = "Mon–Sat, 10:00 AM – 8:00 PM IST";
 const MAPS_URL = ADDRESS
   ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ADDRESS)}`
   : "";
@@ -709,6 +709,7 @@ export default function ContactPage() {
                   bg: "#fff1dd",
                   t: "Office address",
                   v: ADDRESS || "[Add your company address]",
+                  href: MAPS_URL || undefined,
                 },
                 {
                   icon: <Clock size={26} />,
@@ -740,6 +741,8 @@ export default function ContactPage() {
                     {r.href ? (
                       <a
                         href={r.href}
+                        target={r.href.startsWith("http") ? "_blank" : undefined}
+                        rel={r.href.startsWith("http") ? "noopener noreferrer" : undefined}
                         style={{
                           fontSize: 18,
                           fontWeight: 700,

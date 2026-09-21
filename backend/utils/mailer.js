@@ -220,7 +220,7 @@ async function sendPlanCancelled(email, name, planName) {
 }
 
 // ── CONTACT FORM SUBMISSION (public marketing site → admin inbox) ──
-const SUPERADMIN_NOTIFY_EMAIL = "zalgoinfotec@gmail.com";
+const SUPERADMIN_NOTIFY_EMAIL = "sales@zalgoinfotech.com";
 // Public, unauthenticated form — escape before interpolating into HTML email.
 function escapeHtml(s) {
   return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
