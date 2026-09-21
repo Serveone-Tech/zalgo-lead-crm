@@ -27,7 +27,26 @@ const whatsappTemplatesRoutes = require('./routes/whatsapp-templates');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:3000', credentials: true }));
+// The main app (FRONTEND_URL) plus the standalone marketing-site domain(s)
+// — leadlo.in is a separate origin that still calls this same API directly
+// from the browser (contact form, trial signup), so it needs its own CORS
+// allowance. Add more via EXTRA_CORS_ORIGINS (comma-separated) without a
+// code change for future domains.
+const ALLOWED_ORIGINS = [
+  process.env.FRONTEND_URL || 'http://localhost:3000',
+  'https://leadlo.in',
+  'https://www.leadlo.in',
+  ...(process.env.EXTRA_CORS_ORIGINS ? process.env.EXTRA_CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean) : []),
+];
+
+app.use(cors({
+  origin(origin, callback) {
+    // No Origin header = same-origin or non-browser request (curl, server-
+    // to-server, health checks) — always allow those.
+    callback(null, !origin || ALLOWED_ORIGINS.includes(origin));
+  },
+  credentials: true,
+}));
 // Every JSON response gets gzipped before it leaves the server — a big win
 // specifically for the full-table-fetch endpoints (e.g. GET /leads on a
 // tenant with 1000+ rows), since JSON text (repeated field names, similar
