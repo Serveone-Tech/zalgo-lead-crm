@@ -259,6 +259,19 @@ async function sendContactNotification({ name, email, phone, company, message })
   `));
 }
 
+// Sent to the person who submitted the form — a receipt, not a reply, so it
+// asks for nothing back and just sets an expectation on when they'll hear
+// from a real person.
+async function sendContactAutoReply(toEmail, name) {
+  const safeName = escapeHtml(name);
+  await send(toEmail, "We've received your message — LeadLo", wrap(`
+    <h2 style="color:#00c4ca;margin:0 0 8px">Thanks for reaching out! 👋</h2>
+    <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${safeName}</strong>, we've received your message and it's already with our team.</p>
+    <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 20px">Our team will get back to you <strong style="color:#e2e8f0">within 24 hours</strong> to answer your questions or set up a walkthrough — whatever you need.</p>
+    <p style="color:#4a6380;font-size:12px;margin:0">This is an automated confirmation — no reply is needed. If it's urgent, you can also reach us directly at sales@zalgoinfotech.com.</p>
+  `));
+}
+
 module.exports = {
   sendOtp,
   sendRegisterOtp,
@@ -270,4 +283,5 @@ module.exports = {
   sendPlanExpired,
   sendPlanCancelled,
   sendContactNotification,
+  sendContactAutoReply,
 };

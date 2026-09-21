@@ -19,7 +19,12 @@ router.post("/", async (req, res) => {
     );
     // Never let an email hiccup fail the submission — mailer.send() already
     // swallows its own errors and logs them, so the request just resolves.
-    await mailer.sendContactNotification(result.rows[0]);
+    // Two emails: the internal notification, and a receipt back to whoever
+    // submitted the form so they know it actually went through.
+    await Promise.all([
+      mailer.sendContactNotification(result.rows[0]),
+      mailer.sendContactAutoReply(result.rows[0].email, result.rows[0].name),
+    ]);
     res.json({ success: true });
   } catch (e) {
     console.error("Contact form error:", e.message);
