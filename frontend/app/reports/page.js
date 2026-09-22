@@ -551,7 +551,21 @@ export default function ReportsPage() {
                   <thead>
                     <tr style={{ background: "var(--bg-surface)" }}>
                       {["Team Member", "Total Orders", "Stage Breakdown"].map((h) => (
-                        <th key={h} style={th}>
+                        <th
+                          key={h}
+                          style={{
+                            padding: "12px 18px",
+                            textAlign: "left",
+                            fontSize: 11,
+                            color: "var(--text-muted)",
+                            fontWeight: 700,
+                            letterSpacing: "0.06em",
+                            textTransform: "uppercase",
+                            borderBottom: "1px solid var(--border)",
+                            fontFamily: "var(--font-main)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           {h}
                         </th>
                       ))}
@@ -560,7 +574,7 @@ export default function ReportsPage() {
                   <tbody>
                     {orderEmpStats.map((emp) => (
                       <tr key={emp.id ?? "__unassigned__"} style={{ borderBottom: "1px solid var(--border)" }}>
-                        <td style={td}>
+                        <td style={{ padding: "14px 18px" }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                             <div
                               style={{
@@ -586,12 +600,12 @@ export default function ReportsPage() {
                             </div>
                           </div>
                         </td>
-                        <td style={td}>
+                        <td style={{ padding: "14px 18px" }}>
                           <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>
                             {emp.total}
                           </span>
                         </td>
-                        <td style={td}>
+                        <td style={{ padding: "14px 18px" }}>
                           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                             {Object.entries(emp.stages)
                               .sort((a, b) => b[1] - a[1])
