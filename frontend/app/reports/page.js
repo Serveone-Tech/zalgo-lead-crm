@@ -9,6 +9,8 @@ export default function ReportsPage() {
   const [user, setUser] = useState(null);
   const [employees, setEmployees] = useState([]);
   const [stageCounts, setStageCounts] = useState([]);
+  const [orderStageCounts, setOrderStageCounts] = useState([]);
+  const [orderReportAllowed, setOrderReportAllowed] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedEmp, setSelectedEmp] = useState(null); // id or null for unassigned
@@ -33,11 +35,20 @@ export default function ReportsPage() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await api.get("/leads/report/by-employee", {
-        params: { from: dateFrom || undefined, to: dateTo || undefined },
-      });
-      setEmployees(data.employees || []);
-      setStageCounts(data.stage_counts || []);
+      const params = { from: dateFrom || undefined, to: dateTo || undefined };
+      const [leadRes, orderRes] = await Promise.all([
+        api.get("/leads/report/by-employee", { params }),
+        // Owner-only (no "view all customers" permission exists for
+        // employees) — a non-owner viewer just sees the lead report above
+        // without this section, instead of the whole page erroring out.
+        api.get("/customers/report/by-employee", { params }).catch((e) => {
+          if (e?.response?.status === 403) setOrderReportAllowed(false);
+          return { data: { stage_counts: [] } };
+        }),
+      ]);
+      setEmployees(leadRes.data.employees || []);
+      setStageCounts(leadRes.data.stage_counts || []);
+      setOrderStageCounts(orderRes.data.stage_counts || []);
     } catch (e) {
       if (e?.response?.status === 403) {
         setError("You do not have permission to view this report.");
@@ -72,6 +83,30 @@ export default function ReportsPage() {
 
     return Object.values(map).sort((a, b) => b.total - a.total);
   }, [employees, stageCounts]);
+
+  // Same shape as empStats, but for orders (Delivered/RTO/Cancelled/etc,
+  // whatever this tenant's Order Stages are) instead of lead stages —
+  // orders don't carry their own assignee, so this follows the customer's
+  // assigned_to like everywhere else Customers does attribution.
+  const orderEmpStats = useMemo(() => {
+    const map = {};
+    for (const e of employees) {
+      map[e.id] = { ...e, total: 0, stages: {} };
+    }
+    map["__unassigned__"] = { id: null, name: "Unassigned", role_label: "", total: 0, stages: {} };
+
+    for (const row of orderStageCounts) {
+      const key = row.assigned_to == null ? "__unassigned__" : row.assigned_to;
+      if (!map[key]) continue;
+      const cnt = parseInt(row.cnt);
+      map[key].total += cnt;
+      map[key].stages[row.stage] = (map[key].stages[row.stage] || 0) + cnt;
+    }
+
+    return Object.values(map)
+      .filter((e) => e.total > 0)
+      .sort((a, b) => b.total - a.total);
+  }, [employees, orderStageCounts]);
 
   // All unique stages
   const allStages = useMemo(() => {
@@ -488,6 +523,107 @@ export default function ReportsPage() {
               </div>
             )}
           </div>
+
+          {/* Order fulfillment by employee — Delivered/RTO/Cancelled/etc,
+              separate from the lead-stage table above since it's a
+              different dataset (orders, not leads). Owner-only. */}
+          {orderReportAllowed && orderEmpStats.length > 0 && (
+            <div
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-md)",
+                overflow: "hidden",
+                boxShadow: "var(--shadow-sm)",
+                marginTop: 24,
+              }}
+            >
+              <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
+                <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                  Order Fulfillment by Employee
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  How many of each team member's orders were Delivered, RTO, Cancelled, etc.
+                </div>
+              </div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
+                  <thead>
+                    <tr style={{ background: "var(--bg-surface)" }}>
+                      {["Team Member", "Total Orders", "Stage Breakdown"].map((h) => (
+                        <th key={h} style={th}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orderEmpStats.map((emp) => (
+                      <tr key={emp.id ?? "__unassigned__"} style={{ borderBottom: "1px solid var(--border)" }}>
+                        <td style={td}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: "50%",
+                                background: emp.id === null ? "var(--bg-surface)" : "var(--gradient-accent)",
+                                border: emp.id === null ? "1px dashed var(--border)" : "none",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: "#fff",
+                                flexShrink: 0,
+                                fontFamily: "var(--font-main)",
+                              }}
+                            >
+                              {emp.id === null ? "—" : emp.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, color: emp.id === null ? "var(--text-muted)" : "var(--text-primary)" }}>
+                              {emp.name}
+                            </div>
+                          </div>
+                        </td>
+                        <td style={td}>
+                          <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 16, color: "var(--text-primary)" }}>
+                            {emp.total}
+                          </span>
+                        </td>
+                        <td style={td}>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                            {Object.entries(emp.stages)
+                              .sort((a, b) => b[1] - a[1])
+                              .map(([stage, cnt]) => {
+                                const sc = stageColor(stage);
+                                return (
+                                  <span
+                                    key={stage}
+                                    style={{
+                                      background: sc.bg,
+                                      color: sc.color,
+                                      borderRadius: 20,
+                                      padding: "3px 10px",
+                                      fontSize: 11,
+                                      fontWeight: 700,
+                                      fontFamily: "var(--font-main)",
+                                      whiteSpace: "nowrap",
+                                    }}
+                                  >
+                                    {stage}: {cnt}
+                                  </span>
+                                );
+                              })}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Bar chart — visual lead distribution */}
           {empStats.some((e) => e.total > 0) && (

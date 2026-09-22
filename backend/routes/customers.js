@@ -336,6 +336,46 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
   }
 });
 
+// GET order counts per employee, split by order stage (Delivered, RTO,
+// Cancelled, etc. — whatever stages this tenant has configured in
+// Settings → Order Stages, picked up automatically). Orders don't carry
+// their own assignee — attribution follows the customer's assigned_to,
+// same as everywhere else in Customers. Owner-only: unlike leads there's
+// no "view all customers" override permission an employee can hold, so a
+// cross-employee breakdown can't be gated any looser than that without
+// leaking data an employee isn't otherwise allowed to see.
+router.get("/report/by-employee", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const emps = await pool.query(`SELECT id, name, role_label FROM users WHERE parent_id=$1 ORDER BY name ASC`, [req.tenantId]);
+
+    const { from, to } = req.query;
+    const conditions = ["co.user_id=$1", "co.deleted_at IS NULL"];
+    const params = [req.tenantId];
+    if (from) {
+      params.push(from);
+      conditions.push(`co.created_at::date >= $${params.length}`);
+    }
+    if (to) {
+      params.push(to);
+      conditions.push(`co.created_at::date <= $${params.length}`);
+    }
+
+    const stageCounts = await pool.query(
+      `SELECT c.assigned_to, co.stage, COUNT(*) AS cnt
+       FROM customer_orders co JOIN customers c ON c.id=co.customer_id
+       WHERE ${conditions.join(" AND ")}
+       GROUP BY c.assigned_to, co.stage`,
+      params,
+    );
+
+    res.json({ employees: emps.rows, stage_counts: stageCounts.rows });
+  } catch (e) {
+    console.error("customers/report/by-employee failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // ── Trash — owner-only, and BEFORE /:id so "trash" never gets swallowed as
 // an :id param. Orders deleted below land here instead of being destroyed
 // outright; only the owner can see this list or permanently remove
