@@ -583,16 +583,32 @@ router.get("/report/by-employee", auth, async (req, res) => {
       [req.tenantId],
     );
 
-    // Stage-level counts for all leads under this tenant
+    // Optional date range — filters which leads are counted by when they
+    // were created, so the report can answer "how did the team do this
+    // week/month" instead of only ever showing the whole-pipeline snapshot.
+    const { from, to } = req.query;
+    const conditions = ["user_id=$1"];
+    const params = [req.tenantId];
+    if (from) {
+      params.push(from);
+      conditions.push(`created_at::date >= $${params.length}`);
+    }
+    if (to) {
+      params.push(to);
+      conditions.push(`created_at::date <= $${params.length}`);
+    }
+
+    // Stage-level counts for leads under this tenant (within the date
+    // range, if one was given)
     const stageCounts = await pool.query(
       `SELECT
          assigned_to,
          stage,
          COUNT(*) AS cnt,
          COUNT(CASE WHEN follow_up_date < NOW() AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED') THEN 1 END) AS overdue
-       FROM leads WHERE user_id=$1
+       FROM leads WHERE ${conditions.join(" AND ")}
        GROUP BY assigned_to, stage`,
-      [req.tenantId],
+      params,
     );
 
     res.json({ employees: emps.rows, stage_counts: stageCounts.rows });

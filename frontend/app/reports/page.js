@@ -12,6 +12,8 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedEmp, setSelectedEmp] = useState(null); // id or null for unassigned
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -20,14 +22,20 @@ export default function ReportsPage() {
     }
     const u = localStorage.getItem("crm_user");
     if (u) setUser(JSON.parse(u));
-    load();
   }, []);
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo]);
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const { data } = await api.get("/leads/report/by-employee");
+      const { data } = await api.get("/leads/report/by-employee", {
+        params: { from: dateFrom || undefined, to: dateTo || undefined },
+      });
       setEmployees(data.employees || []);
       setStageCounts(data.stage_counts || []);
     } catch (e) {
@@ -110,26 +118,100 @@ export default function ReportsPage() {
             See how leads are distributed across your team members.
           </p>
         </div>
-        <button
-          onClick={load}
-          style={{
-            background: "var(--bg-card)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius-sm)",
-            padding: "9px 16px",
-            fontSize: 13,
-            fontWeight: 600,
-            color: "var(--text-secondary)",
-            cursor: "pointer",
-            fontFamily: "var(--font-main)",
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-          }}
-        >
-          ↻ Refresh
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              padding: "0 12px",
+            }}
+          >
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>📅</span>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              max={dateTo || undefined}
+              title="From"
+              style={{
+                padding: "9px 2px",
+                background: "transparent",
+                border: "none",
+                color: "var(--text-primary)",
+                fontSize: 13,
+                outline: "none",
+                fontFamily: "var(--font-main)",
+                width: 118,
+              }}
+            />
+            <span style={{ color: "var(--text-muted)", fontSize: 12 }}>–</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              min={dateFrom || undefined}
+              title="To"
+              style={{
+                padding: "9px 2px",
+                background: "transparent",
+                border: "none",
+                color: "var(--text-primary)",
+                fontSize: 13,
+                outline: "none",
+                fontFamily: "var(--font-main)",
+                width: 118,
+              }}
+            />
+            {(dateFrom || dateTo) && (
+              <button
+                onClick={() => {
+                  setDateFrom("");
+                  setDateTo("");
+                }}
+                title="Clear date range"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  fontSize: 13,
+                  padding: "4px 2px",
+                }}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <button
+            onClick={load}
+            style={{
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-sm)",
+              padding: "9px 16px",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              fontFamily: "var(--font-main)",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            ↻ Refresh
+          </button>
+        </div>
       </div>
+      {(dateFrom || dateTo) && (
+        <div style={{ marginTop: -18, marginBottom: 20, fontSize: 11.5, color: "var(--text-muted)" }}>
+          Showing leads created {dateFrom ? `from ${dateFrom}` : "up to"}{dateFrom && dateTo ? " to " : ""}{dateTo ? dateTo : dateFrom ? " onward" : ""}.
+        </div>
+      )}
 
       {loading ? (
         <div style={{ padding: 64, textAlign: "center", color: "var(--text-muted)", fontFamily: "var(--font-main)" }}>
