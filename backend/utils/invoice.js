@@ -158,8 +158,27 @@ async function streamOrderInvoice(res, { seller, customer, order, items, currenc
   const advance = parseFloat(order.advance_paid) || 0;
   const balance = Math.max(0, amount - advance);
 
+  // The item lines are priced at their catalog rate — if the order was
+  // actually agreed at a lower total (a manually discounted price), that
+  // gap is a real discount and should be shown as one line item with both
+  // the rupee amount and the percentage off, not just a total that looks
+  // "wrong" next to the item prices above it.
+  const itemsSubtotal = rows.reduce((s, item) => s + (parseInt(item.quantity) || 1) * (parseFloat(item.price) || 0), 0);
+  const discount = Math.max(0, itemsSubtotal - amount);
+  const discountPct = itemsSubtotal > 0 ? (discount / itemsSubtotal) * 100 : 0;
+
   y += 16;
-  totalsRow(doc, "Order Total", money(amount, symbol), y);
+  if (discount > 0.01) {
+    totalsRow(doc, "Subtotal", money(itemsSubtotal, symbol), y);
+    y += 18;
+    totalsRow(doc, `Discount (${discountPct.toFixed(discountPct % 1 === 0 ? 0 : 1)}%)`, `- ${money(discount, symbol)}`, y, {
+      color: "#15803d",
+    });
+    y += 18;
+    doc.moveTo(330, y - 4).lineTo(PAGE_RIGHT, y - 4).strokeColor(BORDER).stroke();
+    y += 4;
+  }
+  totalsRow(doc, "Order Total", money(amount, symbol), y, { bold: discount > 0.01 });
   y += 18;
   totalsRow(doc, order.payment_type === "cod" ? "Advance Collected" : "Amount Paid", money(advance, symbol), y);
   y += 18;
