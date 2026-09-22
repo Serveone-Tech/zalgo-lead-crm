@@ -16,6 +16,25 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+// Expands a tenant's configured invoice number pattern — {seq} (the
+// running counter, zero-padded to at least 5 digits — never truncated past
+// that once the counter grows beyond it) and {dd}/{mm}/{yyyy}/{yy} (today's
+// date). Combinations like {dd}{mm} just work since they're two separate
+// tags placed next to each other in the pattern string.
+function formatInvoiceNumber(pattern, seq, date = new Date()) {
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = String(date.getFullYear());
+  const yy = yyyy.slice(-2);
+  const seqStr = String(seq).padStart(5, "0");
+  return (pattern && pattern.trim() ? pattern : "INV-{seq}")
+    .replace(/\{seq\}/g, seqStr)
+    .replace(/\{yyyy\}/g, yyyy)
+    .replace(/\{yy\}/g, yy)
+    .replace(/\{dd\}/g, dd)
+    .replace(/\{mm\}/g, mm);
+}
+
 // pdfkit's built-in fonts (Helvetica etc.) only cover WinAnsi/Latin-1, which
 // does NOT include ₹ (U+20B9) — trying to render it silently substitutes a
 // wrong glyph (shows up as a stray "1"). Swapping in "Rs." only for that one
@@ -53,12 +72,11 @@ function totalsRow(doc, label, value, y, { bold = false, color = INK } = {}) {
   doc.fillColor(color).text(value, 460, y, { width: 85, align: "right" });
 }
 
-async function streamOrderInvoice(res, { seller, customer, order, items, currencySymbol }) {
+async function streamOrderInvoice(res, { seller, customer, order, items, currencySymbol, invoiceNo }) {
   const doc = new PDFDocument({ size: "A4", margin: 50 });
   doc.pipe(res);
 
   const symbol = currencySymbol || "₹";
-  const invoiceNo = `INV-${String(order.id).padStart(5, "0")}`;
   const logoBuffer = await fetchLogoBuffer(seller.logoUrl);
 
   // ── Header band ───────────────────────────────────────────────
@@ -199,4 +217,4 @@ async function streamOrderInvoice(res, { seller, customer, order, items, currenc
   doc.end();
 }
 
-module.exports = { streamOrderInvoice };
+module.exports = { streamOrderInvoice, formatInvoiceNumber };

@@ -12,6 +12,24 @@ const COLOR_PALETTE = [
   '#3a8fd9', '#e06b3f', '#1e7d5c', '#8a6d00',
 ];
 
+// Mirrors backend/utils/invoice.js's formatInvoiceNumber — kept in sync by
+// hand since it's a small, stable piece of logic; this copy only drives the
+// live preview, the backend's copy is what actually gets used.
+function formatInvoicePreview(pattern, seq) {
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2, '0');
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(now.getFullYear());
+  const yy = yyyy.slice(-2);
+  const seqStr = String(seq).padStart(5, '0');
+  return (pattern && pattern.trim() ? pattern : 'INV-{seq}')
+    .replace(/\{seq\}/g, seqStr)
+    .replace(/\{yyyy\}/g, yyyy)
+    .replace(/\{yy\}/g, yy)
+    .replace(/\{dd\}/g, dd)
+    .replace(/\{mm\}/g, mm);
+}
+
 const TABS = [
   { key: 'general',  label: 'General' },
   { key: 'pipeline', label: 'Pipeline' },
@@ -180,6 +198,8 @@ export default function SettingsPage() {
         currency_symbol: setRes.data.currency_symbol || '₹',
         institute_name: setRes.data.institute_name || '',
         order_fulfillment_stage: setRes.data.order_fulfillment_stage || '',
+        invoice_seq_start: setRes.data.invoice_seq_start ?? 0,
+        invoice_seq_pattern: setRes.data.invoice_seq_pattern || 'INV-{seq}',
       });
       localStorage.setItem('crm_settings', JSON.stringify(setRes.data));
     } catch {}
@@ -952,6 +972,59 @@ export default function SettingsPage() {
                   </button>
                 );
               })}
+            </div>
+          </Card>
+
+          <Card title="Invoice Numbering">
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+              Controls the invoice number shown when a shipped order's invoice is generated (Customers → a shipped order → Download Invoice). Changing the starting number resets the counter — do this before you've issued invoices you want to keep, not after.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 6 }}>
+              <div>
+                <label style={lbl}>Sequence Starting Number</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={settings.invoice_seq_start}
+                  onChange={e => setSettings(s => ({ ...s, invoice_seq_start: e.target.value === '' ? '' : parseInt(e.target.value) || 0 }))}
+                  placeholder="0"
+                  style={inp}
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Leave empty to start from 0.</div>
+              </div>
+              <div>
+                <label style={lbl}>Invoice Sequence Pattern</label>
+                <input
+                  value={settings.invoice_seq_pattern}
+                  onChange={e => setSettings(s => ({ ...s, invoice_seq_pattern: e.target.value }))}
+                  placeholder="INV-{seq}"
+                  style={inp}
+                />
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+                  Available tags: <code>{'{seq}'}</code> <code>{'{dd}'}</code> <code>{'{mm}'}</code> <code>{'{yyyy}'}</code> <code>{'{yy}'}</code>
+                </div>
+              </div>
+            </div>
+
+            <div style={{
+              marginTop: 14, padding: '14px 16px',
+              background: 'var(--bg-surface)', border: '1px solid var(--border)',
+              borderRadius: 10,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: 8 }}>
+                Pattern Result
+              </div>
+              <div style={{ fontFamily: 'var(--font-main)', fontWeight: 700, fontSize: 20, color: 'var(--teal-light)', marginBottom: 10 }}>
+                {formatInvoicePreview(settings.invoice_seq_pattern, settings.invoice_seq_start || 0)}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Next invoices will look like:</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {[0, 1, 2].map(offset => (
+                  <span key={offset} style={{ fontSize: 13, color: 'var(--text-secondary)', fontFamily: 'var(--font-main)' }}>
+                    {formatInvoicePreview(settings.invoice_seq_pattern, (settings.invoice_seq_start || 0) + offset)}
+                  </span>
+                ))}
+              </div>
             </div>
           </Card>
 

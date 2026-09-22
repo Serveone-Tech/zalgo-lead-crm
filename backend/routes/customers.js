@@ -6,7 +6,7 @@ const { isOwner, hasPermission } = require("../utils/permissions");
 const { getStageStockActions, isDeductStage, isRestoreStage, isDeliveredStage, deductStockForOrder, restoreStockForOrder } = require("../utils/inventory");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
 const { PROVIDERS } = require("../utils/delivery-providers");
-const { streamOrderInvoice } = require("../utils/invoice");
+const { streamOrderInvoice, formatInvoiceNumber } = require("../utils/invoice");
 const ExcelJS = require("exceljs");
 const upload = require("../middleware/upload");
 
@@ -800,15 +800,38 @@ router.get("/:id/orders/:orderId/invoice", auth, requirePermission("view_custome
       pool.query("SELECT name, quantity, price FROM order_items WHERE order_id=$1 ORDER BY id", [order.id]),
       pool.query("SELECT name, email FROM users WHERE id=$1", [req.tenantId]),
       pool.query("SELECT * FROM organisations WHERE user_id=$1", [req.tenantId]),
-      pool.query("SELECT currency_symbol FROM user_settings WHERE user_id=$1", [req.tenantId]),
+      pool.query("SELECT * FROM user_settings WHERE user_id=$1", [req.tenantId]),
     ]);
     const userRow = userRes.rows[0] || {};
     const org = orgRes.rows[0] || {};
     const settingsRow = settingsRes.rows[0] || {};
     const cityLine = [org.city, org.state].filter(Boolean).join(", ");
 
+    // Invoice number is assigned once per order and reused on every later
+    // download — a fresh sequential number on every request would mean
+    // re-downloading the same invoice gives it a different number each
+    // time, defeating the point of sequential numbering.
+    let invoiceNo = order.invoice_number;
+    if (!invoiceNo) {
+      await pool.query("INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [req.tenantId]);
+      const claim = await pool.query(
+        `UPDATE user_settings SET invoice_seq_next = invoice_seq_next + 1
+         WHERE user_id=$1 RETURNING invoice_seq_next - 1 AS assigned_seq, invoice_seq_pattern`,
+        [req.tenantId],
+      );
+      const assignedSeq = claim.rows[0].assigned_seq;
+      const pattern = claim.rows[0].invoice_seq_pattern;
+      invoiceNo = formatInvoiceNumber(pattern, assignedSeq);
+      await pool.query("UPDATE customer_orders SET invoice_number=$1 WHERE id=$2", [invoiceNo, order.id]);
+    }
+
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `attachment; filename="invoice-${order.id}.pdf"`);
+    // The invoice number itself can contain "/" (e.g. a financial-year style
+    // pattern like "AY17/18-{seq}") which is meaningful in the number but
+    // not valid inside a filename — replace only for the download name, the
+    // number printed inside the PDF is untouched.
+    const safeFilename = invoiceNo.replace(/[\\/]/g, "-");
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}.pdf"`);
     await streamOrderInvoice(res, {
       seller: {
         name: org.name || userRow.name || "Invoice",
@@ -821,6 +844,7 @@ router.get("/:id/orders/:orderId/invoice", auth, requirePermission("view_custome
       customer,
       order,
       items: itemsRes.rows,
+      invoiceNo,
       currencySymbol: settingsRow.currency_symbol || "₹",
     });
   } catch (e) {

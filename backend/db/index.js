@@ -147,6 +147,16 @@ const initDB = async () => {
       // Fallback weight used for order items with no catalog link (custom
       // items typed by hand), so a courier shipment can still be created.
       `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS default_item_weight_kg DECIMAL(10,3) DEFAULT 0.5`,
+      // Configurable invoice numbering — pattern supports {seq} (the
+      // running counter, zero-padded), {dd}/{mm}/{yyyy}/{yy} (today's date
+      // at generation time). invoice_seq_next is the actual running
+      // counter (auto-incremented every time an order's invoice number is
+      // first assigned — see GET .../invoice); invoice_seq_start only
+      // resets it when the admin explicitly changes the starting number in
+      // Settings.
+      `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS invoice_seq_start INTEGER DEFAULT 0`,
+      `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS invoice_seq_pattern VARCHAR(100) DEFAULT 'INV-{seq}'`,
+      `ALTER TABLE user_settings ADD COLUMN IF NOT EXISTS invoice_seq_next INTEGER DEFAULT 0`,
     ];
     for (const q of alterUserSettings) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -192,6 +202,13 @@ const initDB = async () => {
       // /uploads/order-attachments; this column holds its public path.
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS attachment_path TEXT DEFAULT ''`,
       `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS attachment_name TEXT DEFAULT ''`,
+      // Assigned once, the first time this order's invoice is generated
+      // (see GET .../invoice) — formatted from the tenant's invoice
+      // sequence pattern/counter in Settings. Reused on every later
+      // download of the same order's invoice instead of being
+      // recomputed, so a sequential numbering scheme never skips or
+      // reissues a number just because someone downloaded twice.
+      `ALTER TABLE customer_orders ADD COLUMN IF NOT EXISTS invoice_number VARCHAR(50) DEFAULT ''`,
       // Guards the payment_due/payment_overdue automation triggers against
       // re-firing every time the scheduled check runs — set once per
       // calendar day this order actually sent a reminder.
