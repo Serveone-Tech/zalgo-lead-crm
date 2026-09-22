@@ -80,6 +80,21 @@ export default function ReportsPage() {
     return Array.from(s);
   }, [stageCounts]);
 
+  // Tenant-wide totals per stage — same stage_counts rows the per-employee
+  // table already uses, just summed across everyone instead of split by
+  // who it's assigned to. Picks up whatever stages actually exist for this
+  // tenant automatically (including ones an admin renamed/added in
+  // Settings → Lead Stages), no hardcoded stage list to keep in sync.
+  const stageSummary = useMemo(() => {
+    const map = {};
+    for (const row of stageCounts) {
+      map[row.stage] = (map[row.stage] || 0) + parseInt(row.cnt);
+    }
+    return Object.entries(map)
+      .map(([stage, cnt]) => ({ stage, cnt }))
+      .sort((a, b) => b.cnt - a.cnt);
+  }, [stageCounts]);
+
   const totalLeads = empStats.reduce((s, e) => s + e.total, 0);
   const totalOverdue = empStats.reduce((s, e) => s + e.overdue, 0);
   const assignedLeads = empStats
@@ -257,6 +272,52 @@ export default function ReportsPage() {
               </div>
             ))}
           </div>
+
+          {/* Overall stage breakdown — tenant-wide, across the whole team,
+              not split per employee. Picks up any stage automatically,
+              including ones an admin renamed or added. */}
+          {stageSummary.length > 0 && (
+            <div
+              style={{
+                background: "var(--bg-card)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius-md)",
+                padding: "20px 24px",
+                marginBottom: 24,
+                boxShadow: "var(--shadow-sm)",
+              }}
+            >
+              <div style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)", marginBottom: 16 }}>
+                Overall Stage Breakdown
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 12 }}>
+                {stageSummary.map(({ stage, cnt }) => {
+                  const sc = stageColor(stage);
+                  const pct = totalLeads > 0 ? Math.round((cnt / totalLeads) * 100) : 0;
+                  return (
+                    <div
+                      key={stage}
+                      style={{
+                        background: sc.bg,
+                        borderRadius: "var(--radius-sm)",
+                        padding: "12px 14px",
+                      }}
+                    >
+                      <div style={{ fontSize: 11, fontWeight: 700, color: sc.color, fontFamily: "var(--font-main)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {stage}
+                      </div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: sc.color, fontFamily: "var(--font-main)", marginTop: 4 }}>
+                        {cnt}
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginLeft: 6 }}>
+                          {pct}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Table */}
           <div style={{
