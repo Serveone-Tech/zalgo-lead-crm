@@ -796,18 +796,28 @@ router.get("/:id/orders/:orderId/invoice", auth, requirePermission("view_custome
       return res.status(400).json({ error: "Invoice is available once this order has shipped." });
     }
 
-    const [itemsRes, sellerRes, settingsRes] = await Promise.all([
+    const [itemsRes, userRes, orgRes, settingsRes] = await Promise.all([
       pool.query("SELECT name, quantity, price FROM order_items WHERE order_id=$1 ORDER BY id", [order.id]),
       pool.query("SELECT name, email FROM users WHERE id=$1", [req.tenantId]),
-      pool.query("SELECT institute_name, currency_symbol FROM user_settings WHERE user_id=$1", [req.tenantId]),
+      pool.query("SELECT * FROM organisations WHERE user_id=$1", [req.tenantId]),
+      pool.query("SELECT currency_symbol FROM user_settings WHERE user_id=$1", [req.tenantId]),
     ]);
-    const sellerRow = sellerRes.rows[0] || {};
+    const userRow = userRes.rows[0] || {};
+    const org = orgRes.rows[0] || {};
     const settingsRow = settingsRes.rows[0] || {};
+    const cityLine = [org.city, org.state].filter(Boolean).join(", ");
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="invoice-${order.id}.pdf"`);
-    streamOrderInvoice(res, {
-      seller: { name: settingsRow.institute_name || sellerRow.name || "Invoice", email: sellerRow.email },
+    await streamOrderInvoice(res, {
+      seller: {
+        name: org.name || userRow.name || "Invoice",
+        addressLine: org.address || "",
+        cityLine,
+        phone: org.phone || "",
+        email: org.email || userRow.email || "",
+        logoUrl: org.logo_url || "",
+      },
       customer,
       order,
       items: itemsRes.rows,
