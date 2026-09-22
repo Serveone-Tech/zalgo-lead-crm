@@ -2,7 +2,7 @@ const express = require("express");
 const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { fireTrigger } = require("../utils/automation-trigger");
-const { isOwner } = require("../utils/permissions");
+const { isOwner, hasPermission } = require("../utils/permissions");
 const { getStageStockActions, isDeductStage, isRestoreStage, isDeliveredStage, deductStockForOrder, restoreStockForOrder } = require("../utils/inventory");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
 const { PROVIDERS } = require("../utils/delivery-providers");
@@ -772,7 +772,17 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
 // Optional proof file attached from the fulfillment form — an advance
 // payment screenshot, a report, whatever the tenant wants on record for
 // this order. Re-uploading replaces whatever was attached before.
-router.post("/:id/orders/:orderId/attachment", auth, requirePermission("manage_customers"), (req, res) => {
+//
+// Not gated on manage_customers alone: POST /leads/:id/fulfill-order (the
+// initial "convert a lead to an order" flow this attachment usually comes
+// from) only requires plain auth, no manage_customers — so an employee
+// without that permission could already create the order itself, and the
+// attachment upload immediately after was silently 403ing on them (order
+// saved, file quietly dropped, no error visible since the modal had
+// already closed by the time the request failed). An employee who created
+// this exact order gets the same pass here; editing someone else's order
+// still needs manage_customers.
+router.post("/:id/orders/:orderId/attachment", auth, (req, res) => {
   upload.single("file")(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
@@ -783,6 +793,16 @@ router.post("/:id/orders/:orderId/attachment", auth, requirePermission("manage_c
         [req.params.id, req.tenantId, ...vis.params],
       );
       if (!owns.rows[0]) return res.status(404).json({ error: "Not found" });
+
+      if (!hasPermission(req, "manage_customers")) {
+        const created = await pool.query(
+          "SELECT created_by FROM customer_orders WHERE id=$1 AND customer_id=$2 AND deleted_at IS NULL",
+          [req.params.orderId, req.params.id],
+        );
+        if (!created.rows[0] || created.rows[0].created_by !== req.user.id) {
+          return res.status(403).json({ error: "Permission denied" });
+        }
+      }
 
       const attachmentPath = `/uploads/order-attachments/${req.file.filename}`;
       const result = await pool.query(
