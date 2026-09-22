@@ -36,6 +36,7 @@ export default function CustomerDetailPage() {
   const [user, setUser] = useState(null);
   const [deletingOrder, setDeletingOrder] = useState(null);
   const [markingPaid, setMarkingPaid] = useState(null);
+  const [invoiceDownloading, setInvoiceDownloading] = useState(null);
   // Remembers what advance_paid was right before a "Mark as Paid" click, so
   // an accidental click can be undone back to the real collected amount
   // instead of just zeroing it out. Lost on page refresh — falls back to 0.
@@ -134,6 +135,24 @@ export default function CustomerDetailPage() {
       }));
     }
     setTrackingId(null);
+  };
+
+  const downloadInvoice = async (order) => {
+    setInvoiceDownloading(order.id);
+    try {
+      const res = await api.get(`/customers/${id}/orders/${order.id}/invoice`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice-${order.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      // no-op — button just stops spinning, order row is unaffected
+    }
+    setInvoiceDownloading(null);
   };
 
   const saveOrderEdit = async (form) => {
@@ -837,6 +856,26 @@ export default function CustomerDetailPage() {
                             }}
                           >
                             {trackingId === o.id ? "Checking…" : "🚚 View Track"}
+                          </button>
+                        )}
+                        {o.tracking_id && (
+                          <button
+                            onClick={() => downloadInvoice(o)}
+                            disabled={invoiceDownloading === o.id}
+                            style={{
+                              padding: "6px 12px",
+                              borderRadius: 7,
+                              background: "transparent",
+                              border: "1px solid var(--border)",
+                              color: "var(--text-secondary)",
+                              fontSize: 11,
+                              fontWeight: 600,
+                              cursor: invoiceDownloading === o.id ? "not-allowed" : "pointer",
+                              whiteSpace: "nowrap",
+                              opacity: invoiceDownloading === o.id ? 0.5 : 1,
+                            }}
+                          >
+                            {invoiceDownloading === o.id ? "Preparing…" : "🧾 Download Invoice"}
                           </button>
                         )}
                         {(isOwnerUser(user) || hasPerm(user, "manage_customers")) &&

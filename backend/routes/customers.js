@@ -6,6 +6,7 @@ const { isOwner, hasPermission } = require("../utils/permissions");
 const { getStageStockActions, isDeductStage, isRestoreStage, isDeliveredStage, deductStockForOrder, restoreStockForOrder } = require("../utils/inventory");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
 const { PROVIDERS } = require("../utils/delivery-providers");
+const { streamOrderInvoice } = require("../utils/invoice");
 const ExcelJS = require("exceljs");
 const upload = require("../middleware/upload");
 
@@ -765,6 +766,55 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
 
     res.json(result.rows[0]);
   } catch (e) {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET a PDF invoice for an order — available once the order has actually
+// shipped (a courier tracking ID exists), matching "invoice appears right
+// after the shipment is created" rather than being downloadable for an
+// order that's still just a draft. Generated fresh on every request
+// (nothing stored on disk) straight from the order/customer/items already
+// on record, so it always reflects the latest data.
+router.get("/:id/orders/:orderId/invoice", auth, requirePermission("view_customers"), async (req, res) => {
+  try {
+    const vis = visibilityClause(req, 3);
+    const custRes = await pool.query(
+      `SELECT c.* FROM customers c WHERE c.id=$1 AND c.user_id=$2${vis.clause}`,
+      [req.params.id, req.tenantId, ...vis.params],
+    );
+    const customer = custRes.rows[0];
+    if (!customer) return res.status(404).json({ error: "Not found" });
+
+    const orderRes = await pool.query(
+      "SELECT * FROM customer_orders WHERE id=$1 AND customer_id=$2 AND deleted_at IS NULL",
+      [req.params.orderId, req.params.id],
+    );
+    const order = orderRes.rows[0];
+    if (!order) return res.status(404).json({ error: "Order not found" });
+    if (!order.tracking_id) {
+      return res.status(400).json({ error: "Invoice is available once this order has shipped." });
+    }
+
+    const [itemsRes, sellerRes, settingsRes] = await Promise.all([
+      pool.query("SELECT name, quantity, price FROM order_items WHERE order_id=$1 ORDER BY id", [order.id]),
+      pool.query("SELECT name, email FROM users WHERE id=$1", [req.tenantId]),
+      pool.query("SELECT institute_name, currency_symbol FROM user_settings WHERE user_id=$1", [req.tenantId]),
+    ]);
+    const sellerRow = sellerRes.rows[0] || {};
+    const settingsRow = settingsRes.rows[0] || {};
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="invoice-${order.id}.pdf"`);
+    streamOrderInvoice(res, {
+      seller: { name: settingsRow.institute_name || sellerRow.name || "Invoice", email: sellerRow.email },
+      customer,
+      order,
+      items: itemsRes.rows,
+      currencySymbol: settingsRow.currency_symbol || "₹",
+    });
+  } catch (e) {
+    console.error("Invoice generation failed:", e.message);
     res.status(500).json({ error: "Server error" });
   }
 });
