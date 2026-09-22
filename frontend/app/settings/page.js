@@ -22,7 +22,15 @@ function formatInvoicePreview(pattern, seq) {
   const yyyy = String(now.getFullYear());
   const yy = yyyy.slice(-2);
   const seqStr = String(seq).padStart(5, '0');
-  return (pattern && pattern.trim() ? pattern : 'INV-{seq}')
+
+  let base = pattern && pattern.trim() ? pattern.trim() : 'INV-{seq}';
+  // A pattern with no {seq} tag would otherwise show the same "number" for
+  // every invoice — append the counter automatically, same as the backend.
+  if (!base.includes('{seq}')) {
+    base += /[-/_\s]$/.test(base) ? '{seq}' : '-{seq}';
+  }
+
+  return base
     .replace(/\{seq\}/g, seqStr)
     .replace(/\{yyyy\}/g, yyyy)
     .replace(/\{yy\}/g, yy)

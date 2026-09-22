@@ -27,7 +27,18 @@ function formatInvoiceNumber(pattern, seq, date = new Date()) {
   const yyyy = String(date.getFullYear());
   const yy = yyyy.slice(-2);
   const seqStr = String(seq).padStart(5, "0");
-  return (pattern && pattern.trim() ? pattern : "INV-{seq}")
+
+  let base = pattern && pattern.trim() ? pattern.trim() : "INV-{seq}";
+  // A pattern with no {seq} tag at all (someone just typed a plain prefix
+  // like "INV-Kalp") would otherwise produce the exact same "number" for
+  // every invoice — append the counter automatically so it still runs in
+  // series, adding a separating "-" only if the pattern doesn't already
+  // end in one.
+  if (!base.includes("{seq}")) {
+    base += /[-/_\s]$/.test(base) ? "{seq}" : "-{seq}";
+  }
+
+  return base
     .replace(/\{seq\}/g, seqStr)
     .replace(/\{yyyy\}/g, yyyy)
     .replace(/\{yy\}/g, yy)
