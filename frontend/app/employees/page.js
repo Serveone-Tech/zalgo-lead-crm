@@ -70,9 +70,11 @@ export default function EmployeesPage() {
   };
 
   // -1 on the plan means unlimited; a Super Admin-granted override always
-  // wins over the plan's own default seat count.
+  // wins over the plan's own default seat count. Deactivated employees
+  // don't count against the seat limit — same rule the backend enforces.
+  const activeCount = employees.filter((e) => !e.is_blocked).length;
   const employeeLimit = sub ? (sub.employee_limit_override ?? sub.max_employees) : null;
-  const atLimit = employeeLimit !== null && employeeLimit !== -1 && employees.length >= employeeLimit;
+  const atLimit = employeeLimit !== null && employeeLimit !== -1 && activeCount >= employeeLimit;
 
   const openAdd = () => {
     setEditing(null);
@@ -146,6 +148,22 @@ export default function EmployeesPage() {
     load();
   };
 
+  const [statusChanging, setStatusChanging] = useState(null);
+  const toggleActive = async (emp) => {
+    const goingActive = !!emp.is_blocked;
+    if (!goingActive && !confirm(`Deactivate ${emp.name}? They won't be able to log in, but their data stays exactly as-is — you can reactivate them any time.`))
+      return;
+    setStatusChanging(emp.id);
+    try {
+      await api.put(`/employees/${emp.id}/status`, { active: goingActive });
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || "Something went wrong");
+    } finally {
+      setStatusChanging(null);
+    }
+  };
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const paged = useMemo(
@@ -175,8 +193,9 @@ export default function EmployeesPage() {
             Team
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
-            {employees.length} employee{employees.length !== 1 ? "s" : ""}
+            {activeCount} active employee{activeCount !== 1 ? "s" : ""}
             {employeeLimit !== null && employeeLimit !== -1 && ` of ${employeeLimit} on your plan`}
+            {employees.length !== activeCount && ` · ${employees.length - activeCount} deactivated`}
           </p>
           {atLimit && (
             <p style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>
@@ -224,7 +243,7 @@ export default function EmployeesPage() {
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 700 }}>
               <thead>
                 <tr style={{ background: "var(--bg-surface)" }}>
-                  {["Name", "Email", "Role", "Permissions", "Actions"].map((h) => (
+                  {["Name", "Email", "Role", "Permissions", "Status", "Actions"].map((h) => (
                     <th key={h} style={th}>
                       {h}
                     </th>
@@ -268,9 +287,31 @@ export default function EmployeesPage() {
                       </div>
                     </td>
                     <td style={td}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: "3px 10px",
+                          borderRadius: 20,
+                          background: emp.is_blocked ? "var(--danger-dim)" : "var(--success-dim)",
+                          color: emp.is_blocked ? "var(--danger)" : "var(--success)",
+                        }}
+                      >
+                        {emp.is_blocked ? "Inactive" : "Active"}
+                      </span>
+                    </td>
+                    <td style={td}>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => openEdit(emp)} style={editBtn}>
                           Edit
+                        </button>
+                        <button
+                          onClick={() => toggleActive(emp)}
+                          disabled={statusChanging === emp.id}
+                          style={emp.is_blocked ? activateBtn : deactivateBtn}
+                        >
+                          {statusChanging === emp.id ? "…" : emp.is_blocked ? "Activate" : "Deactivate"}
                         </button>
                         <button onClick={() => removeEmployee(emp.id)} style={delBtn}>
                           Remove
@@ -606,6 +647,8 @@ const editBtn = {
   fontWeight: 600,
 };
 const delBtn = { ...editBtn, color: "var(--danger)" };
+const deactivateBtn = { ...editBtn, color: "var(--warn)" };
+const activateBtn = { ...editBtn, color: "var(--success)" };
 const closeBtn = {
   background: "none",
   border: "none",
