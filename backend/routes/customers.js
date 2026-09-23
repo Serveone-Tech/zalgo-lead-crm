@@ -220,14 +220,16 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
 
     const params = [req.tenantId];
     const conditions = ["co.deleted_at IS NULL"];
-    let stageJoin = "JOIN order_stages os ON os.user_id = co.user_id AND os.name = co.stage AND os.is_delivered = true";
-    let dateBasisExpr = "COALESCE(co.delivered_at, co.created_at)";
+    // "All Stages" (no stage filter) must mean every order regardless of
+    // stage, matching the same dropdown on the Customers page — it used to
+    // silently restrict to delivered-only orders here, which didn't match
+    // what "All Stages" shows on screen.
+    const stageJoin = "LEFT JOIN order_stages os ON os.user_id = co.user_id AND os.name = co.stage";
+    const dateBasisExpr = "COALESCE(co.delivered_at, co.stage_changed_at, co.created_at)";
 
     if (stage) {
-      stageJoin = "LEFT JOIN order_stages os ON os.user_id = co.user_id AND os.name = co.stage";
       params.push(stage);
       conditions.push(`co.stage = $${params.length}`);
-      dateBasisExpr = "COALESCE(co.stage_changed_at, co.created_at)";
     }
     if (from) {
       params.push(from);
@@ -286,7 +288,7 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Sales Report");
     sheet.columns = [
-      { header: stage ? "Date" : "Delivered Date", key: "report_date", width: 18 },
+      { header: "Date", key: "report_date", width: 18 },
       { header: "Stage", key: "order_stage", width: 14 },
       { header: "Customer Name", key: "customer_name", width: 24 },
       { header: "City", key: "city", width: 16 },
