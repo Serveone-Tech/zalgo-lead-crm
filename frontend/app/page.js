@@ -43,6 +43,7 @@ import HeroSalesMockup from "../components/mockups/HeroSalesMockup";
 import CustomerJourney from "../components/CustomerJourney";
 import FaqAccordion from "../components/FaqAccordion";
 import TrialSignupForm from "../components/TrialSignupForm";
+import DemoVideo from "../components/DemoVideo";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -575,6 +576,66 @@ export default function HomePage() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════ DEMO VIDEO ═══════════════════════ */}
+      <section
+        aria-label="LeadLo demo video"
+        style={{ position: "relative", overflow: "hidden", background: "#f8faff" }}
+      >
+        <Blob size={640} top={-220} left={-260} />
+        <Blob size={640} top={-160} right={-280} />
+        <div
+          className="mk-wrap"
+          style={{ padding: "80px 48px", position: "relative" }}
+        >
+          <Reveal style={{ textAlign: "center", marginBottom: 44 }}>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 10,
+                background: mintDeep,
+                color: teal,
+                fontSize: 13,
+                fontWeight: 700,
+                letterSpacing: "0.1em",
+                borderRadius: 24,
+                padding: "10px 20px",
+                marginBottom: 26,
+              }}
+            >
+              WATCH THE DEMO
+            </div>
+            <h2
+              className="mk-h2"
+              style={{
+                fontSize: 58,
+                fontWeight: 800,
+                lineHeight: 1.06,
+                letterSpacing: "-0.02em",
+                margin: "0 0 18px",
+              }}
+            >
+              See LeadLo <span style={{ color: teal }}>in action.</span>
+            </h2>
+            <p
+              style={{
+                fontSize: 20,
+                color: sub,
+                lineHeight: 1.55,
+                maxWidth: 560,
+                margin: "0 auto",
+              }}
+            >
+              Two minutes. Every step from enquiry to delivery.
+            </p>
+          </Reveal>
+
+          <Reveal delay={0.1}>
+            <DemoVideo />
+          </Reveal>
         </div>
       </section>
 

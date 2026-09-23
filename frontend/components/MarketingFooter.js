@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
 import { Mail, Phone, MapPin, ArrowUpRight } from "lucide-react";
+import SocialLinks from "./SocialLinks";
 
 /* LeadLo footer tokens */
 const navy = "#0a1f4e";
@@ -252,6 +253,19 @@ export default function MarketingFooter() {
           >
             Visit Zalgo Infotech <ArrowUpRight size={20} />
           </a>
+          <div
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: "0.1em",
+              textTransform: "uppercase",
+              color: "rgba(255,255,255,0.7)",
+              margin: "28px 0 14px",
+            }}
+          >
+            Follow LeadLo
+          </div>
+          <SocialLinks variant="dark" size={46} />
         </div>
       </div>
 

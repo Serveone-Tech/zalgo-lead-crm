@@ -20,6 +20,7 @@ import {
 import { ink, sub, muted, border } from "../../lib/marketing-theme";
 import { poppins } from "../../lib/marketing-font";
 import { WhatsAppGlyph } from "../../components/BrandIcons";
+import SocialLinks from "../../components/SocialLinks";
 import MarketingNav from "../../components/MarketingNav";
 import MarketingFooter from "../../components/MarketingFooter";
 import MarketingStyles from "../../components/MarketingStyles";
@@ -398,6 +399,18 @@ export default function ContactPage() {
                   </div>
                 </div>
               </a>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 16,
+                marginTop: 26,
+                fontSize: 15,
+                color: sub,
+              }}
+            >
+              Follow us <SocialLinks variant="light" size={44} />
             </div>
             <div
               style={{
