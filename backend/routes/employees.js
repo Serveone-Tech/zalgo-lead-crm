@@ -12,14 +12,17 @@ const sanitizePermissions = (input = {}) => {
   return clean;
 };
 
-// GET lightweight id+name list — usable by anyone who can assign leads
+// GET lightweight id+name list — usable by anyone who can assign leads.
+// Deactivated employees are left out: they must not be pickable for new
+// work, even though their existing assignments/data stay untouched and
+// keep showing their name wherever that data is already displayed.
 router.get("/list", auth, requireSubscription, requirePlanFeature("employees"), async (req, res) => {
   if (!isOwner(req) && !hasPermission(req, "manage_employees") && !hasPermission(req, "assign_leads")) {
     return res.status(403).json({ error: "Permission denied" });
   }
   try {
     const result = await pool.query(
-      `SELECT id, name, role_label FROM users WHERE parent_id=$1 ORDER BY name ASC`,
+      `SELECT id, name, role_label FROM users WHERE parent_id=$1 AND is_blocked=false ORDER BY name ASC`,
       [req.tenantId],
     );
     res.json(result.rows);
