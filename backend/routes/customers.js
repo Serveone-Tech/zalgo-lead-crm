@@ -810,12 +810,12 @@ router.put("/:id/orders/:orderId", auth, requirePermission("manage_customers"), 
   }
 });
 
-// GET a PDF invoice for an order — available once the order has actually
-// shipped (a courier tracking ID exists), matching "invoice appears right
-// after the shipment is created" rather than being downloadable for an
-// order that's still just a draft. Generated fresh on every request
-// (nothing stored on disk) straight from the order/customer/items already
-// on record, so it always reflects the latest data.
+// GET a PDF invoice for an order — available once the order reaches a stage
+// the tenant has flagged (Settings -> Order Stages -> "Generate invoice"),
+// e.g. only once it's Shipped/Delivered rather than while it's still a
+// draft. Generated fresh on every request (nothing stored on disk) straight
+// from the order/customer/items already on record, so it always reflects
+// the latest data.
 router.get("/:id/orders/:orderId/invoice", auth, requirePermission("view_customers"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 3);
@@ -832,8 +832,16 @@ router.get("/:id/orders/:orderId/invoice", auth, requirePermission("view_custome
     );
     const order = orderRes.rows[0];
     if (!order) return res.status(404).json({ error: "Order not found" });
-    if (!order.tracking_id) {
-      return res.status(400).json({ error: "Invoice is available once this order has shipped." });
+
+    const stageRes = await pool.query(
+      "SELECT enables_invoice FROM order_stages WHERE user_id=$1 AND name=$2",
+      [req.tenantId, order.stage],
+    );
+    // No matching stage row (e.g. it was renamed/deleted since) falls back
+    // to allowed, rather than hard-blocking an otherwise valid order.
+    const invoiceEnabled = stageRes.rows[0] ? !!stageRes.rows[0].enables_invoice : true;
+    if (!invoiceEnabled) {
+      return res.status(400).json({ error: `Invoice is not available while this order is on the "${order.stage}" stage.` });
     }
 
     const [itemsRes, userRes, orgRes, settingsRes] = await Promise.all([

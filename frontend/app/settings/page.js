@@ -77,7 +77,7 @@ export default function SettingsPage() {
   const [orderStages, setOrderStages]            = useState([]);
   const [orderStagesLoading, setOrderStagesLoading] = useState(true);
   const [editingOrderStage, setEditingOrderStage]   = useState(null);
-  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#0066cc', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false });
+  const [newOrderStage, setNewOrderStage]           = useState({ name: '', color: '#0066cc', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false, enables_invoice: true });
   const [addingOrderStage, setAddingOrderStage]     = useState(false);
   const [orderStageError, setOrderStageError]       = useState('');
   const [orderStageSaving, setOrderStageSaving]     = useState(false);
@@ -281,9 +281,9 @@ export default function SettingsPage() {
   };
 
   // ── Order Stage CRUD ────────────────────────────────────────────
-  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, stock_action: s.stock_action || 'none', is_default: s.is_default, excludes_dues: s.excludes_dues, is_delivered: s.is_delivered }); setOrderStageError(''); };
+  const startEditOrderStage = (s) => { setEditingOrderStage({ id: s.id, name: s.name, color: s.color, stock_action: s.stock_action || 'none', is_default: s.is_default, excludes_dues: s.excludes_dues, is_delivered: s.is_delivered, enables_invoice: s.enables_invoice }); setOrderStageError(''); };
   const cancelEditOrderStage = () => { setEditingOrderStage(null); setOrderStageError(''); };
-  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#0066cc', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false }); setOrderStageError(''); };
+  const cancelAddOrderStage  = () => { setAddingOrderStage(false); setNewOrderStage({ name: '', color: '#0066cc', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false, enables_invoice: true }); setOrderStageError(''); };
 
   const saveEditOrderStage = async () => {
     if (!editingOrderStage.name.trim()) { setOrderStageError('Name is required'); return; }
@@ -296,6 +296,7 @@ export default function SettingsPage() {
         is_default: editingOrderStage.is_default,
         excludes_dues: editingOrderStage.excludes_dues,
         is_delivered: editingOrderStage.is_delivered,
+        enables_invoice: editingOrderStage.enables_invoice,
       });
       setEditingOrderStage(null);
       await loadOrderStages();
@@ -315,6 +316,7 @@ export default function SettingsPage() {
         is_default: newOrderStage.is_default,
         excludes_dues: newOrderStage.excludes_dues,
         is_delivered: newOrderStage.is_delivered,
+        enables_invoice: newOrderStage.enables_invoice,
       });
       setAddingOrderStage(false);
       setNewOrderStage({ name: '', color: '#0066cc', stock_action: 'none', is_default: false, excludes_dues: false, is_delivered: false });
@@ -625,9 +627,11 @@ export default function SettingsPage() {
             stock</strong> (gives it back if an order later moves to Hold/Cancelled after being confirmed). Leave
             every stage unmarked to keep deducting stock immediately when an order is created (the default). You can
             also mark one stage ⭐ as where new orders start out, mark any stage ✕ <strong>Exclude from dues</strong>
-            (e.g. Cancelled, Returned) so orders sitting there stop counting toward pending dues totals, and mark
+            (e.g. Cancelled, Returned) so orders sitting there stop counting toward pending dues totals, mark
             any stage 📬 <strong>Delivered</strong> so orders that reach it show up in the Customers page's Sales
-            Report download.
+            Report download, and mark any stage 🧾 <strong>Generate Invoice</strong> so an order's invoice can only
+            be downloaded once it reaches that stage (e.g. Shipped) — leave a stage unmarked to block invoices
+            while an order is still there.
           </p>
 
           {orderStageError && <ErrorBox msg={orderStageError} />}
@@ -707,6 +711,12 @@ export default function SettingsPage() {
                             borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
                           }}>📬 Delivered</span>
                         )}
+                        {s.enables_invoice && (
+                          <span style={{
+                            fontSize: 10, color: 'var(--teal-light)', background: 'var(--teal-dim)',
+                            borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                          }}>🧾 Generates invoice</span>
+                        )}
                         <span style={{
                           fontSize: 10, color: s.color, background: s.color + '22',
                           borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)',
@@ -782,6 +792,20 @@ export default function SettingsPage() {
                         }}
                       >
                         📬 {editingOrderStage.is_delivered ? 'Counts as Delivered' : 'Mark as Delivered'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingOrderStage(es => ({ ...es, enables_invoice: !es.enables_invoice }))}
+                        title="Orders can only have their invoice downloaded while on a stage marked this way"
+                        style={{
+                          padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                          border: `1px solid ${editingOrderStage.enables_invoice ? 'var(--teal)' : 'var(--border)'}`,
+                          background: editingOrderStage.enables_invoice ? 'var(--teal-dim)' : 'transparent',
+                          color: editingOrderStage.enables_invoice ? 'var(--teal-light)' : 'var(--text-muted)',
+                          fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        🧾 {editingOrderStage.enables_invoice ? 'Generates invoice' : 'Enable invoice generation'}
                       </button>
                     </div>
                   )}
@@ -881,6 +905,20 @@ export default function SettingsPage() {
                       }}
                     >
                       📬 {newOrderStage.is_delivered ? 'Counts as Delivered' : 'Mark as Delivered'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewOrderStage(ns => ({ ...ns, enables_invoice: !ns.enables_invoice }))}
+                      title="Orders can only have their invoice downloaded while on a stage marked this way"
+                      style={{
+                        padding: '5px 10px', borderRadius: 7, cursor: 'pointer',
+                        border: `1px solid ${newOrderStage.enables_invoice ? 'var(--teal)' : 'var(--border)'}`,
+                        background: newOrderStage.enables_invoice ? 'var(--teal-dim)' : 'transparent',
+                        color: newOrderStage.enables_invoice ? 'var(--teal-light)' : 'var(--text-muted)',
+                        fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-main)', whiteSpace: 'nowrap',
+                      }}
+                    >
+                      🧾 {newOrderStage.enables_invoice ? 'Generates invoice' : 'Enable invoice generation'}
                     </button>
                   </div>
                 </div>

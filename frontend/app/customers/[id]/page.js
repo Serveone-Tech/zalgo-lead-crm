@@ -858,7 +858,7 @@ export default function CustomerDetailPage() {
                             {trackingId === o.id ? "Checking…" : "🚚 View Track"}
                           </button>
                         )}
-                        {o.tracking_id && (
+                        {orderStages.find((s) => s.name === o.stage)?.enables_invoice && (
                           <button
                             onClick={() => downloadInvoice(o)}
                             disabled={invoiceDownloading === o.id}

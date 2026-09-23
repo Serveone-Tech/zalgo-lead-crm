@@ -250,6 +250,10 @@ const initDB = async () => {
       // Any number of stages (Delivered, Completed, ...) can be flagged so
       // orders that reach them show up in the Sales Report.
       `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS is_delivered BOOLEAN DEFAULT false`,
+      // Which stage(s) an order must be on before its invoice can be
+      // downloaded. Defaults true so existing tenants see no change until
+      // they deliberately narrow it down to specific stages.
+      `ALTER TABLE order_stages ADD COLUMN IF NOT EXISTS enables_invoice BOOLEAN DEFAULT true`,
     ];
     for (const q of alterOrderStages) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));

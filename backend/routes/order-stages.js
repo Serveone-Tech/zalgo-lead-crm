@@ -49,7 +49,7 @@ router.post('/', auth, async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage order stages' });
   const client = await pool.connect();
   try {
-    const { name, color = '#00868a', sort_order = 99, stock_action = 'none', is_default = false, excludes_dues = false, is_delivered = false } = req.body;
+    const { name, color = '#00868a', sort_order = 99, stock_action = 'none', is_default = false, excludes_dues = false, is_delivered = false, enables_invoice = true } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
     if (!STOCK_ACTIONS.includes(stock_action)) return res.status(400).json({ error: 'Invalid stock action' });
     const dup = await client.query(
@@ -65,8 +65,8 @@ router.post('/', auth, async (req, res) => {
       await client.query('UPDATE order_stages SET is_default=false WHERE user_id=$1', [req.tenantId]);
     }
     const { rows } = await client.query(
-      'INSERT INTO order_stages (user_id, name, color, sort_order, stock_action, is_default, excludes_dues, is_delivered) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',
-      [req.tenantId, name.trim(), color, sort_order, stock_action, !!is_default, !!excludes_dues, !!is_delivered]
+      'INSERT INTO order_stages (user_id, name, color, sort_order, stock_action, is_default, excludes_dues, is_delivered, enables_invoice) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+      [req.tenantId, name.trim(), color, sort_order, stock_action, !!is_default, !!excludes_dues, !!is_delivered, !!enables_invoice]
     );
     await client.query('COMMIT');
     res.json(rows[0]);
@@ -83,7 +83,7 @@ router.put('/:id', auth, async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage order stages' });
   const client = await pool.connect();
   try {
-    const { name, color, sort_order, stock_action, is_default, excludes_dues, is_delivered } = req.body;
+    const { name, color, sort_order, stock_action, is_default, excludes_dues, is_delivered, enables_invoice } = req.body;
     if (stock_action !== undefined && !STOCK_ACTIONS.includes(stock_action)) {
       return res.status(400).json({ error: 'Invalid stock action' });
     }
@@ -125,9 +125,10 @@ router.put('/:id', auth, async (req, res) => {
          stock_action = COALESCE($4, stock_action),
          is_default = COALESCE($5, is_default),
          excludes_dues = COALESCE($6, excludes_dues),
-         is_delivered = COALESCE($7, is_delivered)
-       WHERE id=$8 AND user_id=$9 RETURNING *`,
-      [newName, color ?? null, sort_order ?? null, stock_action ?? null, is_default ?? null, excludes_dues ?? null, is_delivered ?? null, req.params.id, req.tenantId]
+         is_delivered = COALESCE($7, is_delivered),
+         enables_invoice = COALESCE($8, enables_invoice)
+       WHERE id=$9 AND user_id=$10 RETURNING *`,
+      [newName, color ?? null, sort_order ?? null, stock_action ?? null, is_default ?? null, excludes_dues ?? null, is_delivered ?? null, enables_invoice ?? null, req.params.id, req.tenantId]
     );
 
     // Renaming a stage must not orphan orders already sitting on the old name.
