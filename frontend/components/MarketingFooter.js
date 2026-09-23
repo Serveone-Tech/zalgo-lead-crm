@@ -37,8 +37,8 @@ const COLUMNS = [
 const CONTACT = [
   {
     icon: Mail,
-    text: "sales@zalgoinfotech.com",
-    href: "mailto:sales@zalgoinfotech.com",
+    text: "leadlozalgo@gmail.com",
+    href: "mailto:leadlozalgo@gmail.com",
   },
   { icon: Phone, text: "+91 92442 13326", href: "tel:+919244213326" },
   {

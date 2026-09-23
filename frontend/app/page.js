@@ -365,7 +365,12 @@ export default function HomePage() {
                 flexWrap: "wrap",
               }}
             >
-              <button onClick={() => router.push("https://lead-management.zalgostore.com/register")} style={ctaStyle}>
+              <button
+                onClick={() =>
+                  router.push("https://lead-management.zalgostore.com/register")
+                }
+                style={ctaStyle}
+              >
                 Get Your 15-Day Free Demo <ArrowRight size={18} />
               </button>
               <a
@@ -926,7 +931,10 @@ export default function HomePage() {
             <div style={{ fontSize: 18, color: sub, marginBottom: 18 }}>
               See the complete workflow with your team.
             </div>
-            <a href="https://lead-management.zalgostore.com/register" style={ctaStyle}>
+            <a
+              href="https://lead-management.zalgostore.com/register"
+              style={ctaStyle}
+            >
               Get Your 15-Day Free Demo <ArrowRight size={18} />
             </a>
           </div>
@@ -1017,7 +1025,10 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
-              <a href="https://lead-management.zalgostore.com/register" style={ctaStyle}>
+              <a
+                href="https://lead-management.zalgostore.com/register"
+                style={ctaStyle}
+              >
                 Get Your 15-Day Free Demo <ArrowRight size={18} />
               </a>
             </Reveal>
@@ -2211,7 +2222,10 @@ export default function HomePage() {
             <div style={{ fontSize: 20, color: ink, fontWeight: 500 }}>
               See how LeadLo fits your team.
             </div>
-            <a href="https://lead-management.zalgostore.com/register" style={ctaStyle}>
+            <a
+              href="https://lead-management.zalgostore.com/register"
+              style={ctaStyle}
+            >
               Get Your 15-Day Free Demo <ArrowRight size={18} />
             </a>
           </div>
@@ -2453,10 +2467,10 @@ export default function HomePage() {
             >
               Have questions?{" "}
               <a
-                href="mailto:sales@zalgoinfotech.com"
+                href="mailto:leadlozalgo@gmail.com"
                 style={{ color: teal, fontWeight: 600 }}
               >
-                sales@zalgoinfotech.com
+                leadlozalgo@gmail.com
               </a>
             </div>
           </Reveal>
@@ -2570,7 +2584,7 @@ export default function HomePage() {
                     color: sub,
                   }}
                 >
-                  <Mail size={18} color={teal} /> sales@zalgoinfotech.com
+                  <Mail size={18} color={teal} /> leadlozalgo@gmail.com
                 </div>
               </div>
             </div>
@@ -2639,7 +2653,9 @@ export default function HomePage() {
             </div>
           </div>
           <button
-            onClick={() => router.push("https://lead-management.zalgostore.com/register")}
+            onClick={() =>
+              router.push("https://lead-management.zalgostore.com/register")
+            }
             style={{ ...ctaStyle, padding: "20px 34px", fontSize: 20 }}
           >
             Start Your 15-Day Free Trial <ArrowRight size={20} />

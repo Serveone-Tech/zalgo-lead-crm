@@ -8,7 +8,11 @@ const transport = nodemailer.createTransport({
 
 function fmtDate(d) {
   if (!d) return "N/A";
-  return new Date(d).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
+  return new Date(d).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 // The "light" logo (dark wordmark, transparent background) only reads on a
@@ -36,7 +40,9 @@ async function send(to, subject, html) {
   try {
     await transport.sendMail({
       from: `"LeadLo" <${process.env.EMAIL_USER}>`,
-      to, subject, html,
+      to,
+      subject,
+      html,
     });
   } catch (e) {
     console.error(`[mailer] failed to send "${subject}" to ${to}:`, e.message);
@@ -45,31 +51,42 @@ async function send(to, subject, html) {
 
 // ── OTP ──────────────────────────────────────────────────────────
 async function sendOtp(email, name, otp) {
-  await send(email, "Password Reset OTP — LeadLo", wrap(`
+  await send(
+    email,
+    "Password Reset OTP — LeadLo",
+    wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Password Reset</h2>
     <p style="color:#94a3b8;margin:0 0 24px">Hi <strong style="color:#e2e8f0">${name}</strong>, use this OTP to reset your password. It expires in <strong style="color:#e2e8f0">10 minutes</strong>.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:28px;text-align:center;margin-bottom:24px">
       <div style="font-size:38px;font-weight:800;letter-spacing:14px;color:#00c4ca;font-family:monospace">${otp}</div>
     </div>
     <p style="color:#4a6380;font-size:12px;margin:0">Do not share this OTP with anyone. If you did not request this, please ignore.</p>
-  `));
+  `),
+  );
 }
 
 // ── REGISTRATION EMAIL VERIFICATION OTP ─────────────────────────
 async function sendRegisterOtp(email, name, otp) {
-  await send(email, "Verify your email — LeadLo", wrap(`
+  await send(
+    email,
+    "Verify your email — LeadLo",
+    wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Verify your email</h2>
     <p style="color:#94a3b8;margin:0 0 24px">Hi <strong style="color:#e2e8f0">${name}</strong>, use this OTP to verify your email and finish creating your account. It expires in <strong style="color:#e2e8f0">10 minutes</strong>.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:28px;text-align:center;margin-bottom:24px">
       <div style="font-size:38px;font-weight:800;letter-spacing:14px;color:#00c4ca;font-family:monospace">${otp}</div>
     </div>
     <p style="color:#4a6380;font-size:12px;margin:0">Do not share this OTP with anyone. If you did not request this, please ignore.</p>
-  `));
+  `),
+  );
 }
 
 // ── TRIAL STARTED ────────────────────────────────────────────────
 async function sendTrialStarted(email, name, planName, trialEndsAt) {
-  await send(email, `Your ${planName} trial has started — LeadLo`, wrap(`
+  await send(
+    email,
+    `Your ${planName} trial has started — LeadLo`,
+    wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Welcome to your free trial! 🎉</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> trial is now active.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -85,13 +102,22 @@ async function sendTrialStarted(email, name, planName, trialEndsAt) {
       </table>
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Explore all features during your trial period. Upgrade before it ends to keep your data and access.</p>
-  `));
+  `),
+  );
 }
 
 // ── PLAN ACTIVATED / RENEWED ─────────────────────────────────────
 async function sendPlanActivated(email, name, planName, billingCycle, endsAt) {
-  const cycleLabel = billingCycle === "yearly" ? "Yearly" : billingCycle === "monthly" ? "Monthly" : billingCycle;
-  await send(email, `Subscription activated — ${planName} | LeadLo`, wrap(`
+  const cycleLabel =
+    billingCycle === "yearly"
+      ? "Yearly"
+      : billingCycle === "monthly"
+        ? "Monthly"
+        : billingCycle;
+  await send(
+    email,
+    `Subscription activated — ${planName} | LeadLo`,
+    wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Subscription Activated ✅</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your subscription is now active. Thank you!</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -111,12 +137,16 @@ async function sendPlanActivated(email, name, planName, billingCycle, endsAt) {
       </table>
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">You now have full access to all features included in the ${planName} plan. Login to your dashboard to get started.</p>
-  `));
+  `),
+  );
 }
 
 // ── EMPLOYEE SEAT ADD-ON PURCHASED ──────────────────────────────
 async function sendAddonPurchased(email, name, seatsAdded, newLimit, amount) {
-  await send(email, `${seatsAdded} employee seats added — LeadLo`, wrap(`
+  await send(
+    email,
+    `${seatsAdded} employee seats added — LeadLo`,
+    wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Seats Added ✅</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your payment went through and your plan's seat limit has been increased.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -136,12 +166,16 @@ async function sendAddonPurchased(email, name, seatsAdded, newLimit, amount) {
       </table>
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">These seats stay on your account until you or a Super Admin change them — no separate renewal needed.</p>
-  `));
+  `),
+  );
 }
 
 // ── PLAN EXTENDED ────────────────────────────────────────────────
 async function sendPlanExtended(email, name, planName, newEndsAt, days) {
-  await send(email, `Subscription extended by ${days} days — LeadLo`, wrap(`
+  await send(
+    email,
+    `Subscription extended by ${days} days — LeadLo`,
+    wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Subscription Extended ✅</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> subscription has been extended.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -157,13 +191,17 @@ async function sendPlanExtended(email, name, planName, newEndsAt, days) {
       </table>
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Your access has been extended. No action required from your side.</p>
-  `));
+  `),
+  );
 }
 
 // ── PLAN EXPIRING SOON ───────────────────────────────────────────
 async function sendExpiryReminder(email, name, planName, endsAt, daysLeft) {
   const urgency = daysLeft <= 3 ? "#e53e3e" : "#e6a817";
-  await send(email, `⚠️ Your subscription expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — LeadLo`, wrap(`
+  await send(
+    email,
+    `⚠️ Your subscription expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"} — LeadLo`,
+    wrap(`
     <h2 style="color:${urgency};margin:0 0 8px">Subscription Expiring Soon ⚠️</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> subscription is expiring soon. Renew now to avoid interruption.</p>
     <div style="background:#1a2535;border:1px solid ${urgency}55;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -183,12 +221,16 @@ async function sendExpiryReminder(email, name, planName, endsAt, daysLeft) {
       </table>
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Contact your administrator to renew your subscription and continue uninterrupted access to LeadLo.</p>
-  `));
+  `),
+  );
 }
 
 // ── PLAN EXPIRED ─────────────────────────────────────────────────
 async function sendPlanExpired(email, name, planName, expiredOn) {
-  await send(email, `Your subscription has expired — LeadLo`, wrap(`
+  await send(
+    email,
+    `Your subscription has expired — LeadLo`,
+    wrap(`
     <h2 style="color:#e53e3e;margin:0 0 8px">Subscription Expired</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> subscription has expired. Your data is safe — renew to regain access.</p>
     <div style="background:#1a2535;border:1px solid #e53e3e55;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -204,34 +246,54 @@ async function sendPlanExpired(email, name, planName, expiredOn) {
       </table>
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Please contact your administrator or visit the plans page to renew your subscription.</p>
-  `));
+  `),
+  );
 }
 
 // ── PLAN CANCELLED ───────────────────────────────────────────────
 async function sendPlanCancelled(email, name, planName) {
-  await send(email, `Subscription cancelled — LeadLo`, wrap(`
+  await send(
+    email,
+    `Subscription cancelled — LeadLo`,
+    wrap(`
     <h2 style="color:#e53e3e;margin:0 0 8px">Subscription Cancelled</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, your <strong style="color:#e2e8f0">${planName}</strong> subscription has been cancelled by the administrator.</p>
     <div style="background:#1a2535;border:1px solid #e53e3e55;border-radius:10px;padding:20px;margin-bottom:20px">
       <p style="color:#94a3b8;font-size:13px;margin:0">Your access to LeadLo features has been revoked. If you believe this is a mistake, please contact your administrator.</p>
     </div>
     <p style="color:#4a6380;font-size:12px;margin:0">Your existing data remains safe and can be accessed once a new subscription is activated.</p>
-  `));
+  `),
+  );
 }
 
 // ── CONTACT FORM SUBMISSION (public marketing site → admin inbox) ──
 const SUPERADMIN_NOTIFY_EMAIL = "sales@zalgoinfotech.com";
 // Public, unauthenticated form — escape before interpolating into HTML email.
 function escapeHtml(s) {
-  return String(s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  return String(s || "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
 }
-async function sendContactNotification({ name, email, phone, company, message }) {
+async function sendContactNotification({
+  name,
+  email,
+  phone,
+  company,
+  message,
+}) {
   name = escapeHtml(name);
   email = escapeHtml(email);
   phone = escapeHtml(phone);
   company = escapeHtml(company);
   message = escapeHtml(message);
-  await send(SUPERADMIN_NOTIFY_EMAIL, `New Contact Request — ${name}`, wrap(`
+  await send(
+    SUPERADMIN_NOTIFY_EMAIL,
+    `New Contact Request — ${name}`,
+    wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">New Contact Request 📩</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Someone submitted the contact form on the website.</p>
     <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
@@ -256,7 +318,8 @@ async function sendContactNotification({ name, email, phone, company, message })
     </div>
     <p style="color:#5a7a96;font-size:12px;margin:0 0 6px;text-transform:uppercase;letter-spacing:0.06em">Message</p>
     <p style="color:#e2e8f0;font-size:14px;line-height:1.6;margin:0;white-space:pre-wrap">${message || "—"}</p>
-  `));
+  `),
+  );
 }
 
 // Sent to the person who submitted the form — a receipt, not a reply, so it
@@ -264,12 +327,16 @@ async function sendContactNotification({ name, email, phone, company, message })
 // from a real person.
 async function sendContactAutoReply(toEmail, name) {
   const safeName = escapeHtml(name);
-  await send(toEmail, "We've received your message — LeadLo", wrap(`
+  await send(
+    toEmail,
+    "We've received your message — LeadLo",
+    wrap(`
     <h2 style="color:#00c4ca;margin:0 0 8px">Thanks for reaching out! 👋</h2>
     <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${safeName}</strong>, we've received your message and it's already with our team.</p>
     <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 20px">Our team will get back to you <strong style="color:#e2e8f0">within 24 hours</strong> to answer your questions or set up a walkthrough — whatever you need.</p>
     <p style="color:#4a6380;font-size:12px;margin:0">This is an automated confirmation — no reply is needed. If it's urgent, you can also reach us directly at sales@zalgoinfotech.com.</p>
-  `));
+  `),
+  );
 }
 
 module.exports = {

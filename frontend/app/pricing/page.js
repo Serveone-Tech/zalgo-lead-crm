@@ -331,7 +331,8 @@ export default function PricingPage() {
       : Math.floor((cards.length - 1) / 2),
   );
 
-  const go = () => router.push("https://lead-management.zalgostore.com/register");
+  const go = () =>
+    router.push("https://lead-management.zalgostore.com/register");
 
   return (
     <div
@@ -1421,7 +1422,7 @@ export default function PricingPage() {
                   Let's talk about your team's workflow.
                 </div>
                 <a
-                  href="mailto:sales@zalgoinfotech.com"
+                  href="mailto:leadlozalgo@gmail.com"
                   style={{
                     color: blue,
                     fontWeight: 700,
@@ -1429,7 +1430,7 @@ export default function PricingPage() {
                     textDecoration: "none",
                   }}
                 >
-                  sales@zalgoinfotech.com
+                  leadlozalgo@gmail.com
                 </a>
               </div>
             </div>
@@ -1958,7 +1959,7 @@ export default function PricingPage() {
               Tell us about your team. We'll help you choose.
             </span>
             <a
-              href="mailto:sales@zalgoinfotech.com"
+              href="mailto:leadlozalgo@gmail.com"
               style={{
                 color: blue,
                 fontWeight: 700,
@@ -1969,7 +1970,7 @@ export default function PricingPage() {
                 gap: 10,
               }}
             >
-              sales@zalgoinfotech.com <ArrowRight size={18} />
+              leadlozalgo@gmail.com <ArrowRight size={18} />
             </a>
           </div>
         </div>

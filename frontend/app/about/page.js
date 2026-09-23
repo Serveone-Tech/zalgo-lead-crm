@@ -41,7 +41,7 @@ import Reveal from "../../components/Reveal";
 
 /* ─────────── editable details ─────────── */
 const LOGO = "/logo_light.png";
-const EMAIL = "sales@zalgoinfotech.com";
+const EMAIL = "leadlozalgo@gmail.com";
 const REGISTER_URL = "/register";
 const COMPANY_URL = "https://zalgoinfotech.com";
 const FOUNDER = {

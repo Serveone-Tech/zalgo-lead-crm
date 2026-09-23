@@ -182,10 +182,10 @@ export default function TrialSignupForm() {
       >
         Have questions?{" "}
         <a
-          href="mailto:sales@zalgoinfotech.com"
+          href="mailto:leadlozalgo@gmail.com"
           style={{ color: teal, fontWeight: 600 }}
         >
-          sales@zalgoinfotech.com
+          leadlozalgo@gmail.com
         </a>
       </div> */}
     </form>
