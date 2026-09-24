@@ -81,11 +81,29 @@ const requireSubscription = async (req, res, next) => {
 
     const s = sub.rows[0];
     const now = new Date();
+    // 5-state machine: trialing, active, past_due, canceled, expired.
+    const GRACE_MS = 3 * 24 * 60 * 60 * 1000; // matches utils/billing-cron.js's GRACE_DAYS
 
-    if (s.status === 'trial' && s.trial_ends_at && new Date(s.trial_ends_at) < now) {
+    if (s.status === 'trialing' && s.trial_ends_at && new Date(s.trial_ends_at) < now) {
       return res.status(403).json({ error: 'TRIAL_EXPIRED', message: 'Your free trial has expired. Please upgrade your plan.' });
     }
-    if (s.status === 'expired' || s.status === 'cancelled') {
+    if (s.status === 'expired') {
+      return res.status(403).json({ error: 'SUBSCRIPTION_EXPIRED', message: 'Your subscription has expired. Please renew.' });
+    }
+    // Cancelled keeps full access until the period it was already paid for
+    // ends — only blocks once ends_at actually passes, same as a normal
+    // active subscription running out.
+    if (s.status === 'canceled' && s.ends_at && new Date(s.ends_at) < now) {
+      await pool.query("UPDATE subscriptions SET status='expired' WHERE id=$1", [s.id]);
+      return res.status(403).json({ error: 'SUBSCRIPTION_EXPIRED', message: 'Your subscription has expired. Please renew.' });
+    }
+    // past_due is the non-blocking grace period — access stays on while
+    // Razorpay retries the charge. The hourly cron is what normally flips
+    // this to expired once the grace window passes; this is just a
+    // defensive fallback so a request never slips through on a stale
+    // status if the cron hasn't run yet.
+    if (s.status === 'past_due' && s.past_due_since && now - new Date(s.past_due_since) > GRACE_MS) {
+      await pool.query("UPDATE subscriptions SET status='expired' WHERE id=$1", [s.id]);
       return res.status(403).json({ error: 'SUBSCRIPTION_EXPIRED', message: 'Your subscription has expired. Please renew.' });
     }
     if (s.status === 'active' && s.ends_at && new Date(s.ends_at) < now) {

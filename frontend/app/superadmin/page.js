@@ -18,9 +18,10 @@ function daysLeft(d) {
 
 const STATUS_COLORS = {
   active:    { bg:"rgba(82,184,138,0.12)",  color:"#52b88a",  label:"Active" },
-  trial:     { bg:"rgba(91,163,217,0.12)",  color:"#5ba3d9",  label:"Trial" },
+  trialing:  { bg:"rgba(91,163,217,0.12)",  color:"#5ba3d9",  label:"Trial" },
+  past_due:  { bg:"rgba(230,168,23,0.12)",  color:"#e6a817",  label:"Payment issue" },
   expired:   { bg:"rgba(224,82,82,0.12)",   color:"#e05252",  label:"Expired" },
-  cancelled: { bg:"rgba(100,100,100,0.12)", color:"#888",     label:"Cancelled" },
+  canceled:  { bg:"rgba(100,100,100,0.12)", color:"#888",     label:"Cancelled" },
 };
 
 export default function SuperAdminDashboard() {
@@ -169,7 +170,7 @@ export default function SuperAdminDashboard() {
             style={{ flex:1, minWidth:220, padding:"8px 12px", background:"var(--bg-card)", border:"1px solid var(--border)", borderRadius:7, color:"var(--text-primary)", fontSize:13, outline:"none" }} />
           <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ padding:"8px 12px", background:"var(--bg-card)", border:"1px solid var(--border)", borderRadius:7, color:"var(--text-primary)", fontSize:12, outline:"none", cursor:"pointer" }}>
             <option value="">All Status</option>
-            {["active","trial","expired","cancelled"].map(s=><option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>)}
+            {["active","trialing","past_due","expired","canceled"].map(s=><option key={s} value={s}>{STATUS_COLORS[s]?.label || s}</option>)}
           </select>
           <Link href="/superadmin/plans" style={{ padding:"8px 16px", background:"var(--teal)", color:"#fff", borderRadius:7, fontSize:12, fontWeight:600, fontFamily:"var(--font-main)", textDecoration:"none", display:"flex", alignItems:"center" }}>
             Manage Plans

@@ -98,7 +98,41 @@ export default function PlansPage() {
     }
   };
 
-  // Real payment, via Razorpay Checkout — used once an owner already has
+  // Polls /payments/subscription-status every 3s for up to 60s. That
+  // endpoint checks Razorpay directly (not just our own webhook) once the
+  // attempt is a few seconds old, so a delayed/dropped webhook never
+  // leaves the tenant stuck on "processing" after actually paying.
+  const pollSubscriptionStatus = (razorpaySubscriptionId, planName) => {
+    const startedAt = Date.now();
+    const MAX_MS = 60000;
+    const poll = async () => {
+      try {
+        const { data } = await axios.get(`${BASE}/payments/subscription-status`, {
+          params: { razorpay_subscription_id: razorpaySubscriptionId },
+          headers: authHeaders(),
+        });
+        if (data.status === "active") {
+          showToast(`Payment successful! ${planName} plan activated.`);
+          setTimeout(() => router.push("/dashboard"), 1200);
+          setSubscribing(null);
+          return;
+        }
+      } catch {
+        // transient — keep polling until MAX_MS
+      }
+      if (Date.now() - startedAt < MAX_MS) {
+        setTimeout(poll, 3000);
+      } else {
+        showToast("Still confirming your payment — refresh this page in a minute, or contact support if it doesn't update.", "error");
+        setSubscribing(null);
+      }
+    };
+    poll();
+  };
+
+  // Real payment, via Razorpay Checkout in subscription mode — a recurring
+  // mandate is authorized once here, then every future renewal charges
+  // automatically with no action needed. Used once an owner already has
   // some subscription (even just a trial) and wants to actually pay to
   // activate/renew, as opposed to the zero-friction free trial `subscribe`
   // above that brand-new signups get.
@@ -111,30 +145,25 @@ export default function PlansPage() {
         setSubscribing(null);
         return;
       }
-      const { data: order } = await axios.post(
-        `${BASE}/payments/create-order`,
+      const { data: sub } = await axios.post(
+        `${BASE}/payments/subscribe`,
         { plan_id: plan.id, billing_cycle: billing },
         { headers: authHeaders() },
       );
 
       const rzp = new window.Razorpay({
-        key: order.key_id,
-        amount: order.amount,
-        currency: order.currency,
-        order_id: order.order_id,
+        key: sub.key_id,
+        subscription_id: sub.razorpay_subscription_id,
         name: "LeadLo",
-        description: `${order.plan_name} Plan — ${order.billing_cycle}`,
+        description: sub.starts_after_trial
+          ? `${sub.plan_name} Plan — starts when your trial ends`
+          : `${sub.plan_name} Plan — ${sub.billing_cycle}`,
         theme: { color: "#0066cc" },
-        handler: async (response) => {
-          try {
-            await axios.post(`${BASE}/payments/verify`, response, { headers: authHeaders() });
-            showToast(`Payment successful! ${order.plan_name} plan activated.`);
-            setTimeout(() => router.push("/dashboard"), 1200);
-          } catch (err) {
-            showToast(err.response?.data?.error || "Payment succeeded but activation failed — contact support.", "error");
-          } finally {
-            setSubscribing(null);
-          }
+        handler: () => {
+          // Checkout closing successfully ≠ activated yet — the webhook
+          // (or this poll's own fallback) is the real source of truth.
+          showToast("Payment received — confirming your subscription…");
+          pollSubscriptionStatus(sub.razorpay_subscription_id, sub.plan_name);
         },
         modal: {
           ondismiss: () => setSubscribing(null),
@@ -428,9 +457,11 @@ export default function PlansPage() {
                   marginTop: 2,
                 }}
               >
-                {current.status === "trial"
+                {current.status === "trialing"
                   ? `Trial ends ${fmtDate(current.trial_ends_at)}`
-                  : `Expires ${fmtDate(current.ends_at)}`}
+                  : current.status === "past_due"
+                    ? "Payment issue — update your card to keep access"
+                    : `Expires ${fmtDate(current.ends_at)}`}
               </div>
             </div>
           </div>

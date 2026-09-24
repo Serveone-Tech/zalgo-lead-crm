@@ -1,8 +1,11 @@
 const express = require("express");
+const crypto = require("crypto");
 const { pool } = require("../db");
 const { findDuplicateLeadByPhone, isValidPhone, cleanPhoneValue, withPhoneLock } = require("../utils/lead-dedup");
 const { savePendingLead } = require("../utils/pending-leads");
 const { downloadWhatsAppMedia } = require("../utils/whatsapp-media");
+const mailer = require("../utils/mailer");
+const { findSubscriptionByRazorpayId, activateFromCharge } = require("../utils/razorpay-billing");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -568,6 +571,94 @@ router.post("/sheets/:token", express.json(), async (req, res) => {
   } catch (e) {
     console.error("Sheets webhook error:", e.message);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ── POST Razorpay webhook — drives the whole recurring-billing lifecycle.
+// Verified via HMAC-SHA256 over the exact raw request bytes (req.rawBody,
+// captured by server.js's express.json({ verify }) — NOT
+// JSON.stringify(req.body), which can reorder/reformat and silently break
+// the signature) using a webhook-specific secret (RAZORPAY_WEBHOOK_SECRET,
+// set once in the Razorpay Dashboard — different from RAZORPAY_KEY_SECRET,
+// which signs Checkout callbacks, not webhooks).
+router.post("/razorpay", async (req, res) => {
+  const signature = req.headers["x-razorpay-signature"];
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret || !signature || !req.rawBody) {
+    return res.status(400).json({ error: "Missing signature" });
+  }
+  const expected = crypto.createHmac("sha256", secret).update(req.rawBody).digest("hex");
+  if (expected !== signature) {
+    console.error("Razorpay webhook: signature mismatch");
+    return res.status(400).json({ error: "Invalid signature" });
+  }
+
+  const { event, payload } = req.body;
+  const eventId = req.body.event_id || req.headers["x-razorpay-event-id"];
+
+  try {
+    // Idempotency — Razorpay retries undelivered webhooks; without this, a
+    // retried "charged" event would extend ends_at a second time.
+    if (eventId) {
+      const claim = await pool.query(
+        "INSERT INTO razorpay_webhook_events (event_id, event_type) VALUES ($1,$2) ON CONFLICT (event_id) DO NOTHING RETURNING event_id",
+        [eventId, event],
+      );
+      if (claim.rows.length === 0) return res.json({ skipped: "duplicate" });
+    }
+
+    const sub = payload?.subscription?.entity;
+    const razorpaySubId = sub?.id;
+
+    if (event === "subscription.charged" && razorpaySubId) {
+      const row = await findSubscriptionByRazorpayId(razorpaySubId, sub.notes);
+      if (row) {
+        await activateFromCharge(row, {
+          razorpaySubId,
+          billingCycle: sub.notes?.billing_cycle,
+          planId: sub.notes?.plan_id ? parseInt(sub.notes.plan_id) : null,
+        });
+      }
+    } else if ((event === "subscription.pending" || event === "payment.failed") && razorpaySubId) {
+      const row = await findSubscriptionByRazorpayId(razorpaySubId, sub?.notes);
+      if (row && row.status === "active") {
+        await pool.query(
+          "UPDATE subscriptions SET status='past_due', past_due_since=NOW() WHERE id=$1",
+          [row.id],
+        );
+        const u = await pool.query("SELECT name, email FROM users WHERE id=$1", [row.user_id]);
+        const plan = await pool.query("SELECT name FROM plans WHERE id=$1", [row.plan_id]);
+        if (u.rows[0] && plan.rows[0]) {
+          mailer.sendPaymentFailed(u.rows[0].email, u.rows[0].name, plan.rows[0].name, 3, false);
+        }
+      }
+    } else if (event === "subscription.halted" && razorpaySubId) {
+      // Razorpay has given up retrying on its own dunning schedule — send
+      // the final warning now; the hourly cron still owns the actual
+      // past_due -> expired flip once the 3-day grace window elapses, so a
+      // slow-to-arrive halted event never accidentally cuts the grace
+      // period short.
+      const row = await findSubscriptionByRazorpayId(razorpaySubId, sub?.notes);
+      if (row) {
+        const u = await pool.query("SELECT name, email FROM users WHERE id=$1", [row.user_id]);
+        const plan = await pool.query("SELECT name FROM plans WHERE id=$1", [row.plan_id]);
+        if (u.rows[0] && plan.rows[0]) {
+          mailer.sendPaymentFailed(u.rows[0].email, u.rows[0].name, plan.rows[0].name, 3, true);
+        }
+      }
+    } else if (event === "subscription.cancelled" && razorpaySubId) {
+      const row = await findSubscriptionByRazorpayId(razorpaySubId, sub?.notes);
+      if (row) {
+        await pool.query("UPDATE subscriptions SET status='canceled' WHERE id=$1", [row.id]);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("Razorpay webhook error:", e.message);
+    // Still 200 — a 5xx here makes Razorpay retry indefinitely for an error
+    // that's almost always a bug on our side, not something a retry fixes.
+    res.json({ received: true });
   }
 });
 

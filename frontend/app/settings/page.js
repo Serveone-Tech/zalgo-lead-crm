@@ -96,6 +96,8 @@ export default function SettingsPage() {
   const [buyingAddon, setBuyingAddon] = useState(false);
   const [billingLoaded, setBillingLoaded] = useState(false);
   const [addonMsg, setAddonMsg]       = useState('');
+  const [enablingAutoRenew, setEnablingAutoRenew] = useState(false);
+  const [cancellingAutoRenew, setCancellingAutoRenew] = useState(false);
 
   useEffect(() => {
     if (!localStorage.getItem('crm_token')) { router.push('/login'); return; }
@@ -190,6 +192,58 @@ export default function SettingsPage() {
     } catch (err) {
       alert(err?.response?.data?.error || err.message || 'Could not start payment');
       setBuyingAddon(false);
+    }
+  };
+
+  // Authorizes a recurring mandate on the CURRENT plan/billing cycle — for
+  // a tenant who's on a plan already (trial or a manually-renewed paid
+  // plan) but has no saved card yet, so future renewals stop needing a
+  // manual visit here.
+  const enableAutoRenew = async () => {
+    if (!sub) return;
+    setEnablingAutoRenew(true);
+    try {
+      const ok = await loadRazorpayScript();
+      if (!ok) throw new Error('Could not load payment gateway');
+      const cycle = sub.billing_cycle === 'yearly' ? 'yearly' : 'monthly';
+      const { data: rzpSub } = await api.post('/payments/subscribe', { plan_id: sub.plan_id, billing_cycle: cycle });
+
+      const rzp = new window.Razorpay({
+        key: rzpSub.key_id,
+        subscription_id: rzpSub.razorpay_subscription_id,
+        name: 'LeadLo',
+        description: rzpSub.starts_after_trial
+          ? `${rzpSub.plan_name} Plan — starts when your trial ends`
+          : `${rzpSub.plan_name} Plan — ${rzpSub.billing_cycle}`,
+        theme: { color: '#0066cc' },
+        handler: () => {
+          setAddonMsg('✓ Card saved — future renewals will charge automatically.');
+          setTimeout(() => setAddonMsg(''), 8000);
+          setEnablingAutoRenew(false);
+          // Refresh so the saved-card summary below reflects the new mandate
+          // once the webhook (or the very next page load) catches up.
+          api.get('/auth/subscription').then((r) => setSub(r.data)).catch(() => {});
+        },
+        modal: { ondismiss: () => setEnablingAutoRenew(false) },
+      });
+      rzp.on('payment.failed', () => setEnablingAutoRenew(false));
+      rzp.open();
+    } catch (err) {
+      alert(err?.response?.data?.error || err.message || 'Could not start payment');
+      setEnablingAutoRenew(false);
+    }
+  };
+
+  const cancelAutoRenew = async () => {
+    if (!confirm('Cancel auto-renewal? You keep full access until your current period ends, then you\'ll need to renew manually.')) return;
+    setCancellingAutoRenew(true);
+    try {
+      const { data } = await api.post('/payments/cancel');
+      setSub((s) => ({ ...s, cancel_at_period_end: true, ends_at: data.ends_at }));
+    } catch (err) {
+      alert(err?.response?.data?.error || 'Could not cancel auto-renewal');
+    } finally {
+      setCancellingAutoRenew(false);
     }
   };
 
@@ -1094,6 +1148,55 @@ export default function SettingsPage() {
               <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading...</p>
             </Card>
           ) : (
+            <>
+            <Card title="Payment Method">
+              {sub.razorpay_subscription_id && !sub.cancel_at_period_end ? (
+                <>
+                  <p style={{ fontSize: 13, color: 'var(--success)', fontWeight: 600, marginBottom: 6 }}>
+                    ✓ Auto-renewal is on{sub.card_last4 ? ` — card ending ${sub.card_last4}` : ''}
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                    Your plan renews automatically on {sub.ends_at ? new Date(sub.ends_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}. No action needed.
+                  </p>
+                  <button
+                    onClick={cancelAutoRenew}
+                    disabled={cancellingAutoRenew}
+                    style={{
+                      padding: '9px 18px', borderRadius: 8, border: '1px solid var(--danger)',
+                      background: 'transparent', color: 'var(--danger)', fontFamily: 'var(--font-main)',
+                      fontWeight: 600, fontSize: 12.5, cursor: cancellingAutoRenew ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {cancellingAutoRenew ? 'Cancelling…' : 'Cancel auto-renewal'}
+                  </button>
+                </>
+              ) : sub.cancel_at_period_end ? (
+                <p style={{ fontSize: 13, color: 'var(--warn)', fontWeight: 600 }}>
+                  Auto-renewal cancelled — you keep full access until {sub.ends_at ? new Date(sub.ends_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'your period ends'}.
+                </p>
+              ) : (
+                <>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                    No card on file yet — you're currently renewing manually. Add a card so your plan renews automatically without you having to come back here.
+                  </p>
+                  <button
+                    onClick={enableAutoRenew}
+                    disabled={enablingAutoRenew}
+                    style={{
+                      padding: '10px 22px', borderRadius: 8, border: 'none',
+                      background: enablingAutoRenew ? 'var(--bg-hover)' : 'var(--teal)',
+                      color: '#fff', fontFamily: 'var(--font-main)', fontWeight: 600, fontSize: 13,
+                      cursor: enablingAutoRenew ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {enablingAutoRenew ? 'Processing…' : 'Set up auto-renewal'}
+                  </button>
+                </>
+              )}
+              {addonMsg && (
+                <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--success)', fontWeight: 600 }}>{addonMsg}</div>
+              )}
+            </Card>
             <Card title="Team Seats">
               {(() => {
                 const base = sub.max_employees;
@@ -1172,6 +1275,7 @@ export default function SettingsPage() {
                 );
               })()}
             </Card>
+            </>
           )}
         </div>
       )}

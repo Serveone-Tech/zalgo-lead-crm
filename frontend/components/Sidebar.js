@@ -784,11 +784,12 @@ export default function Sidebar() {
 
 function PlanChip({ sub }) {
   const now = new Date();
-  const expiryRaw = sub.status === "trial" ? sub.trial_ends_at : sub.ends_at;
+  const expiryRaw = sub.status === "trialing" ? sub.trial_ends_at : sub.ends_at;
   const expiry = expiryRaw ? new Date(expiryRaw) : null;
   const daysLeft = expiry ? Math.ceil((expiry - now) / (1000 * 60 * 60 * 24)) : null;
 
-  const isUrgent = daysLeft !== null && daysLeft <= 3;
+  const isPastDue = sub.status === "past_due";
+  const isUrgent = isPastDue || (daysLeft !== null && daysLeft <= 3);
   const isWarning = daysLeft !== null && daysLeft <= 7;
   const color = isUrgent ? "var(--danger)" : isWarning ? "var(--warn)" : "var(--teal)";
   const dimColor = isUrgent ? "var(--danger-dim)" : isWarning ? "var(--warn-dim)" : "var(--teal-dim)";
@@ -820,17 +821,23 @@ function PlanChip({ sub }) {
           borderRadius: 20, padding: "2px 6px", fontFamily: "var(--font-main)",
           textTransform: "uppercase", letterSpacing: "0.05em", flexShrink: 0, marginLeft: 6,
         }}>
-          {sub.status === "trial" ? "Trial" : billing}
+          {sub.status === "trialing" ? "Trial" : isPastDue ? "Payment issue" : billing}
         </span>
       </div>
-      <div style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span>{fmtExpiry ? `Expires ${fmtExpiry}` : "No expiry"}</span>
-        {daysLeft !== null && (
-          <span style={{ fontWeight: 700, color, fontSize: 10 }}>
-            {daysLeft <= 0 ? "Today" : `${daysLeft}d left`}
-          </span>
-        )}
-      </div>
+      {isPastDue ? (
+        <a href="/settings?tab=billing" style={{ fontSize: 10, color, fontWeight: 700, textDecoration: "underline" }}>
+          Your last payment failed — update your card
+        </a>
+      ) : (
+        <div style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span>{fmtExpiry ? `Expires ${fmtExpiry}` : "No expiry"}</span>
+          {daysLeft !== null && (
+            <span style={{ fontWeight: 700, color, fontSize: 10 }}>
+              {daysLeft <= 0 ? "Today" : `${daysLeft}d left`}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

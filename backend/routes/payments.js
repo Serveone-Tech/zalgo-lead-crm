@@ -1,28 +1,16 @@
 const express = require("express");
 const crypto = require("crypto");
-const Razorpay = require("razorpay");
 const { pool } = require("../db");
 const { auth } = require("../middleware/auth");
 const mailer = require("../utils/mailer");
+const {
+  getRazorpay,
+  getOrCreateRazorpayPlan,
+  getOrCreateRazorpayCustomer,
+  activateFromCharge,
+} = require("../utils/razorpay-billing");
 
 const router = express.Router();
-
-// Built lazily, not at module load — the Razorpay SDK throws immediately if
-// key_id is missing, and this file is require()'d unconditionally from
-// server.js, so constructing it eagerly here would crash the *entire*
-// backend (every route, every tenant) on any deploy where the env vars
-// haven't been set yet, not just fail the payment routes.
-let razorpay = null;
-function getRazorpay() {
-  if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) return null;
-  if (!razorpay) {
-    razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    });
-  }
-  return razorpay;
-}
 
 // Only the account owner manages billing — same rule as /auth/subscribe.
 function requireOwner(req, res, next) {
@@ -119,7 +107,9 @@ router.post("/verify", auth, requireOwner, async (req, res) => {
     const days = payment.billing_cycle === "yearly" ? 365 : 30;
     const ends_at = new Date(now.getTime() + days * 86400000);
 
-    await pool.query("UPDATE subscriptions SET status='cancelled' WHERE user_id=$1", [req.userId]);
+    // Manual one-time renewal path (no saved mandate) — still offered
+    // alongside /subscribe for tenants who'd rather not save a card.
+    await pool.query("UPDATE subscriptions SET status='canceled' WHERE user_id=$1", [req.userId]);
     await pool.query(
       `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, ends_at, amount_paid, payment_ref)
        VALUES ($1,$2,'active',$3,$4,$5,$6,$7)`,
@@ -239,6 +229,152 @@ router.post("/addon/verify", auth, requireOwner, async (req, res) => {
   } catch (e) {
     console.error("Razorpay addon verify failed:", e.message);
     res.status(500).json({ error: "Could not verify payment" });
+  }
+});
+
+// ── POST start a recurring subscription (Razorpay Subscriptions API) ──
+// Creates (or reuses) a Razorpay Customer + Plan + Subscription and hands
+// the frontend what it needs to open Checkout in subscription mode. Doesn't
+// touch this tenant's plan_id/status yet — that only happens once a charge
+// actually succeeds (webhook, or the polling fallback below), same
+// "never grant before payment confirms" rule the old /verify endpoint
+// already followed.
+router.post("/subscribe", auth, requireOwner, async (req, res) => {
+  const razorpay = getRazorpay();
+  if (!razorpay) return res.status(503).json({ error: "Online payment isn't set up yet — contact support." });
+  const { plan_id, billing_cycle } = req.body;
+  if (!plan_id) return res.status(400).json({ error: "plan_id required" });
+  try {
+    const planRes = await pool.query("SELECT * FROM plans WHERE id=$1 AND is_active=true", [plan_id]);
+    const plan = planRes.rows[0];
+    if (!plan) return res.status(404).json({ error: "Plan not found" });
+
+    const cycle = billing_cycle === "yearly" ? "yearly" : "monthly";
+    const amount = parseFloat(cycle === "yearly" ? plan.price_yearly : plan.price_monthly);
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: "This plan has no payable price — use the free trial instead." });
+    }
+
+    const currentSubRes = await pool.query(
+      "SELECT * FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1",
+      [req.userId],
+    );
+    const currentSub = currentSubRes.rows[0];
+
+    const userRes = await pool.query("SELECT id, name, email FROM users WHERE id=$1", [req.userId]);
+    const userRow = userRes.rows[0];
+
+    const razorpayPlanId = await getOrCreateRazorpayPlan(plan, cycle);
+    const customerId = await getOrCreateRazorpayCustomer(userRow, currentSub);
+
+    // Still mid-trial? Don't charge today — the mandate is authorized now,
+    // but the first actual charge is scheduled for exactly when the trial
+    // promise says it ends, not a day earlier.
+    const stillTrialing =
+      currentSub?.status === "trialing" && currentSub.trial_ends_at && new Date(currentSub.trial_ends_at) > new Date();
+    const startAt = stillTrialing ? Math.floor(new Date(currentSub.trial_ends_at).getTime() / 1000) : undefined;
+
+    const subscription = await razorpay.subscriptions.create({
+      plan_id: razorpayPlanId,
+      customer_id: customerId,
+      customer_notify: 1,
+      quantity: 1,
+      total_count: 120, // Razorpay requires a bound — 120 cycles (10yr monthly / 120yr yearly) is effectively "until cancelled"
+      ...(startAt ? { start_at: startAt } : {}),
+      notes: { user_id: String(req.userId), plan_id: String(plan_id), billing_cycle: cycle },
+    });
+
+    // Stamp the ids onto the current row now so the webhook/poll fallback
+    // can find it immediately — status/plan_id are left untouched until a
+    // charge actually succeeds.
+    if (currentSub) {
+      await pool.query(
+        "UPDATE subscriptions SET razorpay_customer_id=$1, razorpay_subscription_id=$2 WHERE id=$3",
+        [customerId, subscription.id, currentSub.id],
+      );
+    }
+
+    res.json({
+      razorpay_subscription_id: subscription.id,
+      key_id: process.env.RAZORPAY_KEY_ID,
+      plan_name: plan.name,
+      billing_cycle: cycle,
+      starts_after_trial: !!startAt,
+    });
+  } catch (e) {
+    console.error("Razorpay subscribe failed:", e.message);
+    res.status(500).json({ error: "Could not start subscription. Please try again." });
+  }
+});
+
+// ── GET poll for a subscription's activation status after Checkout ────
+// The frontend polls this every few seconds right after Checkout closes.
+// If the webhook hasn't landed yet, this does a live reconciliation call
+// to Razorpay directly instead of just waiting — so a delayed or dropped
+// webhook never leaves a tenant stuck on "processing" despite having paid.
+router.get("/subscription-status", auth, requireOwner, async (req, res) => {
+  const razorpaySubId = req.query.razorpay_subscription_id;
+  if (!razorpaySubId) return res.status(400).json({ error: "razorpay_subscription_id required" });
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM subscriptions WHERE razorpay_subscription_id=$1 AND user_id=$2",
+      [razorpaySubId, req.userId],
+    );
+    const row = rows[0];
+    if (!row) return res.status(404).json({ error: "Subscription not found" });
+
+    if (row.status === "active") {
+      return res.json({ status: "active", ends_at: row.ends_at });
+    }
+
+    // Not active locally yet — ask Razorpay directly rather than only
+    // trusting the webhook.
+    const razorpay = getRazorpay();
+    if (!razorpay) return res.json({ status: row.status });
+    const live = await razorpay.subscriptions.fetch(razorpaySubId);
+    if (live.status === "active" || live.status === "authenticated") {
+      const endsAt = await activateFromCharge(row, {
+        razorpaySubId,
+        billingCycle: live.notes?.billing_cycle,
+        planId: live.notes?.plan_id ? parseInt(live.notes.plan_id) : null,
+      });
+      return res.json({ status: "active", ends_at: endsAt });
+    }
+
+    res.json({ status: "pending", razorpay_status: live.status });
+  } catch (e) {
+    console.error("Razorpay subscription-status failed:", e.message);
+    res.status(500).json({ error: "Could not check subscription status" });
+  }
+});
+
+// ── POST cancel the recurring subscription ──────────────────────────
+// Cancels the mandate on Razorpay's side too (cancel_at_cycle_end) — not
+// just a local status flip, which would leave the tenant on the hook for a
+// charge Razorpay still thinks is scheduled. Access continues until
+// ends_at either way; the webhook (subscription.cancelled) flips status
+// once the period actually ends.
+router.post("/cancel", auth, requireOwner, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      "SELECT * FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1",
+      [req.userId],
+    );
+    const row = rows[0];
+    if (!row?.razorpay_subscription_id) {
+      return res.status(400).json({ error: "No recurring subscription to cancel" });
+    }
+    const razorpay = getRazorpay();
+    if (razorpay) {
+      await razorpay.subscriptions.cancel(row.razorpay_subscription_id, { cancel_at_cycle_end: 1 }).catch((e) => {
+        console.error("Razorpay cancel failed:", e.message);
+      });
+    }
+    await pool.query("UPDATE subscriptions SET cancel_at_period_end=true WHERE id=$1", [row.id]);
+    res.json({ success: true, ends_at: row.ends_at });
+  } catch (e) {
+    console.error("Cancel subscription failed:", e.message);
+    res.status(500).json({ error: "Could not cancel subscription" });
   }
 });
 

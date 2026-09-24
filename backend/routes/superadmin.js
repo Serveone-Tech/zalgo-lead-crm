@@ -4,6 +4,7 @@ const { pool } = require('../db');
 const { superadminAuth } = require('../middleware/auth');
 const { PERMISSION_KEYS } = require('../utils/permissions');
 const mailer = require('../utils/mailer');
+const { getRazorpay } = require('../utils/razorpay-billing');
 
 const router = express.Router();
 
@@ -156,9 +157,9 @@ router.get('/stats', superadminAuth, async (req, res) => {
     const [total, active, trial, expired, cancelled, revenue, newContacts] = await Promise.all([
       pool.query("SELECT COUNT(*) FROM users WHERE role!='superadmin'"),
       pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='active'"),
-      pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='trial'"),
+      pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='trialing'"),
       pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='expired'"),
-      pool.query("SELECT COUNT(*) FROM subscriptions WHERE status='cancelled'"),
+      pool.query("SELECT COUNT(*) FROM subscriptions WHERE status IN ('canceled','past_due')"),
       pool.query("SELECT COALESCE(SUM(amount_paid),0) as total FROM subscriptions WHERE status='active'"),
       pool.query("SELECT COUNT(*) FROM contact_requests WHERE status='new'"),
     ]);
@@ -243,7 +244,7 @@ router.delete('/plans/:id', superadminAuth, async (req, res) => {
   try {
     // Check if any active subscriptions on this plan
     const active = await pool.query(
-      "SELECT COUNT(*) FROM subscriptions WHERE plan_id=$1 AND status IN ('active','trial')",
+      "SELECT COUNT(*) FROM subscriptions WHERE plan_id=$1 AND status IN ('active','trialing','past_due')",
       [req.params.id]
     );
     if (parseInt(active.rows[0].count) > 0) {
@@ -276,7 +277,7 @@ router.post('/users/:id/subscription', superadminAuth, async (req, res) => {
       const prevOverride = await pool.query(
         'SELECT employee_limit_override FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]
       );
-      await pool.query("UPDATE subscriptions SET status='cancelled' WHERE user_id=$1", [userId]);
+      await pool.query("UPDATE subscriptions SET status='canceled' WHERE user_id=$1", [userId]);
       await pool.query(
         `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, ends_at, notes, created_by, employee_limit_override)
          VALUES ($1,$2,'active',$3,$4,$5,$6,$7,$8)`,
@@ -303,8 +304,18 @@ router.post('/users/:id/subscription', superadminAuth, async (req, res) => {
       const sub = await pool.query(
         'SELECT s.*, p.name as plan_name FROM subscriptions s JOIN plans p ON p.id=s.plan_id WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 1', [userId]
       );
+      // Tear down any recurring mandate too — a Super Admin force-cancel
+      // must not leave Razorpay still scheduled to charge this tenant.
+      if (sub.rows[0]?.razorpay_subscription_id) {
+        const razorpay = getRazorpay();
+        if (razorpay) {
+          await razorpay.subscriptions.cancel(sub.rows[0].razorpay_subscription_id, { cancel_at_cycle_end: 0 }).catch((e) => {
+            console.error('Razorpay cancel (superadmin) failed:', e.message);
+          });
+        }
+      }
       await pool.query(
-        "UPDATE subscriptions SET status='cancelled', notes=$1, updated_at=NOW() WHERE user_id=$2",
+        "UPDATE subscriptions SET status='canceled', notes=$1, updated_at=NOW() WHERE user_id=$2",
         [notes||'Cancelled by admin', userId]
       );
       if (u && sub.rows[0]) mailer.sendPlanCancelled(u.email, u.name, sub.rows[0].plan_name);
@@ -316,10 +327,10 @@ router.post('/users/:id/subscription', superadminAuth, async (req, res) => {
       const prevOverride = await pool.query(
         'SELECT employee_limit_override FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]
       );
-      await pool.query("UPDATE subscriptions SET status='cancelled' WHERE user_id=$1", [userId]);
+      await pool.query("UPDATE subscriptions SET status='canceled' WHERE user_id=$1", [userId]);
       await pool.query(
         `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, trial_ends_at, notes, created_by, employee_limit_override)
-         VALUES ($1,$2,'trial','trial',$3,$4,$5,$6,$7)`,
+         VALUES ($1,$2,'trialing','trial',$3,$4,$5,$6,$7)`,
         [userId, plan.rows[0]?.id || 1, now, trial_ends_at, notes||'Trial extended by admin', req.userId, prevOverride.rows[0]?.employee_limit_override ?? null]
       );
       if (u) mailer.sendTrialStarted(u.email, u.name, plan.rows[0]?.name || 'Trial', trial_ends_at);

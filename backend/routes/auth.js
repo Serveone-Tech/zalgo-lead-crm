@@ -157,27 +157,32 @@ router.post("/login", async (req, res) => {
         const now = new Date();
 
         // Trial expired?
-        if (s.status === "trial" && s.trial_ends_at && new Date(s.trial_ends_at) < now) {
+        if (s.status === "trialing" && s.trial_ends_at && new Date(s.trial_ends_at) < now) {
           redirect = "/plans";
           if (!s.expired_email_sent) {
             mailer.sendPlanExpired(user.email, user.name, s.plan_name, s.trial_ends_at);
             pool.query("UPDATE subscriptions SET expired_email_sent=true WHERE id=$1", [s.id]);
           }
         }
-        // Explicitly cancelled?
-        else if (s.status === "cancelled") {
+        // Cancelled AND its already-paid-for period has run out?
+        else if (s.status === "canceled" && (!s.ends_at || new Date(s.ends_at) < now)) {
           redirect = "/plans";
         }
-        // Active subscription expired?
-        else if (s.status === "active" && s.ends_at && new Date(s.ends_at) < now) {
+        // Hard expired, or expired on this same request (active/past_due
+        // past their date — requireSubscription already lazily flips the
+        // row on API calls, this covers the case where /auth/me is the
+        // very first request after expiry).
+        else if (s.status === "expired" || ((s.status === "active" || s.status === "past_due") && s.ends_at && new Date(s.ends_at) < now)) {
           redirect = "/plans";
           if (!s.expired_email_sent) {
             mailer.sendPlanExpired(user.email, user.name, s.plan_name, s.ends_at);
             pool.query("UPDATE subscriptions SET expired_email_sent=true WHERE id=$1", [s.id]);
           }
         }
-        // ✅ Active — check if expiry reminder needed (≤7 days left)
-        else if (s.status === "active" && s.ends_at && !s.expiry_reminder_sent) {
+        // past_due (grace period) and canceled-but-still-in-paid-period both
+        // keep full dashboard access — non-blocking, a banner (not a
+        // redirect) is what tells the owner their card needs attention.
+        else if ((s.status === "active" || s.status === "past_due") && s.ends_at && !s.expiry_reminder_sent) {
           const daysLeft = Math.ceil((new Date(s.ends_at) - now) / 86400000);
           if (daysLeft <= 7) {
             mailer.sendExpiryReminder(user.email, user.name, s.plan_name, s.ends_at, daysLeft);
@@ -334,7 +339,7 @@ router.post("/subscribe", auth, async (req, res) => {
       status = "active";
 
     if (p.is_free || p.trial_days > 0) {
-      status = "trial";
+      status = "trialing";
       trial_ends_at = new Date(now.getTime() + p.trial_days * 86400000);
     } else {
       const days = billing_cycle === "yearly" ? 365 : 30;
@@ -343,7 +348,7 @@ router.post("/subscribe", auth, async (req, res) => {
 
     // Cancel old subscriptions
     await pool.query(
-      "UPDATE subscriptions SET status='cancelled' WHERE user_id=$1",
+      "UPDATE subscriptions SET status='canceled' WHERE user_id=$1",
       [req.userId],
     );
 
@@ -366,7 +371,7 @@ router.post("/subscribe", auth, async (req, res) => {
     const userRow = await pool.query("SELECT name, email FROM users WHERE id=$1", [req.userId]);
     const u = userRow.rows[0];
     if (u) {
-      if (status === "trial") {
+      if (status === "trialing") {
         mailer.sendTrialStarted(u.email, u.name, p.name, trial_ends_at);
       } else {
         mailer.sendPlanActivated(u.email, u.name, p.name, billing_cycle || "monthly", ends_at);

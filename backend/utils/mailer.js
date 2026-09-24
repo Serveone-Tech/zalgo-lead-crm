@@ -266,6 +266,47 @@ async function sendPlanCancelled(email, name, planName) {
   );
 }
 
+// ── RENEWAL PAYMENT FAILED (day 1 of grace period) ───────────────
+async function sendPaymentFailed(email, name, planName, graceDays, isLastWarning = false) {
+  const subject = isLastWarning
+    ? `⚠️ Last chance — your card is still failing, LeadLo access ends today`
+    : `⚠️ Your renewal payment failed — LeadLo`;
+  await send(
+    email,
+    subject,
+    wrap(`
+    <h2 style="color:#e53e3e;margin:0 0 8px">Payment Failed</h2>
+    <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, we tried to renew your <strong style="color:#e2e8f0">${planName}</strong> subscription but the charge on your saved card didn't go through.</p>
+    <div style="background:#1a2535;border:1px solid #e53e3e55;border-radius:10px;padding:20px;margin-bottom:20px">
+      <p style="color:#94a3b8;font-size:13px;margin:0">${
+        isLastWarning
+          ? `This is your final reminder — if the payment isn't fixed today, your access will pause until you update your card. Your data stays safe either way.`
+          : `You still have <strong style="color:#e2e8f0">${graceDays} days</strong> of full access while we retry the charge — update your card in Settings → Billing to avoid any interruption.`
+      }</p>
+    </div>
+    <p style="color:#94a3b8;font-size:13px;margin:0">Login and visit Settings → Billing to update your payment method.</p>
+  `),
+  );
+}
+
+// ── MIGRATION NOTICE — pre-existing subscriber, no saved mandate ──
+async function sendMigrationNotice(email, name, planName, endsAt) {
+  await send(
+    email,
+    `Action needed before your next renewal — LeadLo`,
+    wrap(`
+    <h2 style="color:#e6a817;margin:0 0 8px">Set up auto-renewal (optional)</h2>
+    <p style="color:#94a3b8;margin:0 0 20px">Hi <strong style="color:#e2e8f0">${name}</strong>, we've upgraded how <strong style="color:#e2e8f0">${planName}</strong> renewals work. Your current subscription is unaffected and stays active until <strong style="color:#e2e8f0">${fmtDate(endsAt)}</strong>.</p>
+    <div style="background:#1a2535;border:1px solid #2d3f54;border-radius:10px;padding:20px;margin-bottom:20px">
+      <p style="color:#94a3b8;font-size:13px;margin:0 0 10px">You have two options before then:</p>
+      <p style="color:#e2e8f0;font-size:13px;margin:0 0 6px">1. <strong>Add a card</strong> in Settings → Billing to renew automatically — no action needed after that.</p>
+      <p style="color:#e2e8f0;font-size:13px;margin:0">2. <strong>Do nothing</strong> and renew manually like before, any time before it expires.</p>
+    </div>
+    <p style="color:#94a3b8;font-size:13px;margin:0">Either way, your data and access continue exactly as they are today.</p>
+  `),
+  );
+}
+
 // ── CONTACT FORM SUBMISSION (public marketing site → admin inbox) ──
 const SUPERADMIN_NOTIFY_EMAIL = "sales@zalgoinfotech.com";
 // Public, unauthenticated form — escape before interpolating into HTML email.
@@ -349,6 +390,8 @@ module.exports = {
   sendExpiryReminder,
   sendPlanExpired,
   sendPlanCancelled,
+  sendPaymentFailed,
+  sendMigrationNotice,
   sendContactNotification,
   sendContactAutoReply,
 };

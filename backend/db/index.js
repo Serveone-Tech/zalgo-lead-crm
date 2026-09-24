@@ -114,6 +114,11 @@ const initDB = async () => {
     ];
     const alterPlans = [
       `ALTER TABLE plans ADD COLUMN IF NOT EXISTS max_employees INTEGER DEFAULT 10`,
+      // Razorpay's own Plan objects (amount + interval), created lazily on
+      // first subscribe and cached here — separate from this table's own
+      // id, which stays the source of truth for features/limits.
+      `ALTER TABLE plans ADD COLUMN IF NOT EXISTS razorpay_plan_id_monthly VARCHAR(64)`,
+      `ALTER TABLE plans ADD COLUMN IF NOT EXISTS razorpay_plan_id_yearly VARCHAR(64)`,
     ];
     for (const q of alterPlans) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
@@ -869,6 +874,43 @@ const initDB = async () => {
     await client
       .query(`UPDATE plans SET features = features || '["core"]'::jsonb WHERE NOT (features @> '["core"]'::jsonb)`)
       .catch((e) => console.log("core feature backfill skip:", e.message));
+
+    // ── STEP 5c: recurring billing (Razorpay Subscriptions) ─────
+    const alterSubscriptionsBilling = [
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT false`,
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS razorpay_customer_id VARCHAR(64)`,
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS razorpay_subscription_id VARCHAR(64)`,
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS past_due_since TIMESTAMP`,
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS card_last4 VARCHAR(4)`,
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS card_network VARCHAR(20)`,
+      // One-time nudge for tenants who subscribed under the old one-time
+      // Checkout flow (no saved mandate) to either add a card for
+      // auto-renewal or keep renewing manually — sent once per row.
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS migration_notice_sent BOOLEAN DEFAULT false`,
+    ];
+    for (const q of alterSubscriptionsBilling) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
+
+    // Dedupe table for Razorpay webhook retries — a webhook delivery can be
+    // retried by Razorpay itself, so the event id (not the subscription/
+    // payment id) is the idempotency key.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS razorpay_webhook_events (
+        event_id VARCHAR(64) PRIMARY KEY,
+        event_type VARCHAR(64),
+        processed_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch((e) => console.log("razorpay_webhook_events create skip:", e.message));
+
+    // One-time rename: 'trial'->'trialing', 'cancelled'->'canceled' so the
+    // whole app (backend + frontend) reads one consistent 5-state
+    // vocabulary (trialing/active/past_due/canceled/expired). 'active' and
+    // 'expired' keep their existing spelling — only these two change.
+    await client.query(`
+      UPDATE subscriptions SET status='trialing' WHERE status='trial';
+      UPDATE subscriptions SET status='canceled' WHERE status='cancelled';
+    `).catch((e) => console.log("status rename skip:", e.message));
 
     // ── STEP 6: Seed superadmin ──────────────────────────────
     const bcrypt = require("bcryptjs");

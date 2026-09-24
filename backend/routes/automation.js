@@ -662,6 +662,15 @@ router.post("/broadcast", auth, requireSubscription, requirePlanFeature("automat
     if (recipients.length === 0) {
       return res.status(400).json({ error: audience === "selected" ? "No recipients selected" : "No recipients match this audience" });
     }
+    // Trial accounts get the full feature, just rate-limited — reduces
+    // WhatsApp Business API ban risk from a signup abusing free trial
+    // access to blast a large list before ever paying.
+    const TRIAL_BROADCAST_CAP = 50;
+    if (req.subscription.status === "trialing" && recipients.length > TRIAL_BROADCAST_CAP) {
+      return res.status(400).json({
+        error: `Trial accounts are limited to ${TRIAL_BROADCAST_CAP} recipients per broadcast (this audience has ${recipients.length}). Upgrade to remove this limit.`,
+      });
+    }
 
     const credRes = await pool.query("SELECT * FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
     const creds = credRes.rows[0];

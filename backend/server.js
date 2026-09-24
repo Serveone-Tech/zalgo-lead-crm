@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const { initDB } = require('./db');
 const { runScheduledTriggers } = require('./utils/scheduled-triggers');
+const { startBillingCron } = require('./utils/billing-cron');
 const authRoutes       = require('./routes/auth');
 const leadsRoutes      = require('./routes/leads');
 const customersRoutes  = require('./routes/customers');
@@ -53,7 +54,12 @@ app.use(cors({
 // values) compresses 70-80%+, cutting transfer time without touching any
 // query or changing what data is sent.
 app.use(compression());
-app.use(express.json());
+// Captures the exact received bytes on req.rawBody before JSON-parsing —
+// Razorpay's webhook signature is an HMAC over the raw body, and
+// re-serializing req.body with JSON.stringify() can differ in key order/
+// whitespace from what was actually sent, which silently breaks the check.
+// This is a no-op for every other route (nothing else reads req.rawBody).
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use('/api/auth',       authRoutes);
@@ -83,4 +89,5 @@ initDB().then(() => {
   // sends once per day per lead/order).
   runScheduledTriggers();
   setInterval(runScheduledTriggers, 30 * 60 * 1000);
+  startBillingCron();
 }).catch(err => { console.error('DB init failed:', err); process.exit(1); });
