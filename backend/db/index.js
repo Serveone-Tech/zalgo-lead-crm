@@ -916,6 +916,16 @@ const initDB = async () => {
     const bcrypt = require("bcryptjs");
     const saEmail = process.env.SUPERADMIN_EMAIL || "superadmin@zalgo.com";
     const saPass = process.env.SUPERADMIN_PASSWORD || "superadmin123";
+    // WARNING for anyone with DB access: `superadminAuth` (middleware/auth.js)
+    // is a bare `role === 'superadmin'` check — ANY row with that role gets
+    // full, unchecked access to every admin action, with no permission
+    // model distinguishing one admin from another. Manually inserting a
+    // second superadmin row (or changing another user's role to it) grants
+    // that account full access immediately. Do NOT create a second
+    // superadmin account without first building a real permission model
+    // (parallel to the tenant employee Read/Write/Delete system) — this was
+    // explicitly scoped out of the initial Super Admin panel build because
+    // only one admin account exists today.
     const exists = await client.query("SELECT id FROM users WHERE email=$1", [
       saEmail,
     ]);
@@ -945,6 +955,15 @@ const initDB = async () => {
     `,
       )
       .catch(() => {});
+
+    // Non-blocking sanity check — see the warning above STEP 6's superadmin
+    // seed for why more than one matters: every row with this role gets
+    // full unchecked access today, so a second one appearing (deliberately
+    // or by accident) should be loud, not silent.
+    const saCount = await client.query("SELECT COUNT(*) FROM users WHERE role='superadmin'").catch(() => null);
+    if (saCount && parseInt(saCount.rows[0].count) > 1) {
+      console.warn(`⚠️  WARNING: ${saCount.rows[0].count} superadmin accounts exist — every one has full unchecked access (no permission model built). Verify this is intentional.`);
+    }
 
     console.log("✅ Database initialized successfully");
   } finally {

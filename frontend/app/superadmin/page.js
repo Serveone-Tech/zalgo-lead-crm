@@ -5,6 +5,7 @@ import Link from "next/link";
 import api from "../../lib/api";
 import EmployeesModal from "./EmployeesModal";
 import Pagination from "../../components/Pagination";
+import SuperAdminShell from "./SuperAdminShell";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -85,8 +86,6 @@ export default function SuperAdminDashboard() {
     catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
   };
 
-  const logout = () => { localStorage.clear(); router.push("/login"); };
-
   const filtered = users.filter(u => {
     const q = search.toLowerCase();
     const matchSearch = !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.org_name?.toLowerCase().includes(q);
@@ -116,41 +115,12 @@ export default function SuperAdminDashboard() {
   ];
 
   return (
-    <div style={{ minHeight:"100vh", background:"var(--bg-base)", display:"flex" }}>
+    <SuperAdminShell>
       {toast && <div style={{ position:"fixed", top:20, right:20, zIndex:9999, background:toast.type==="success"?"var(--success)":"var(--danger)", color:"#fff", borderRadius:10, padding:"12px 20px", fontFamily:"var(--font-main)", fontWeight:600, fontSize:13, boxShadow:"0 4px 20px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
 
-      {/* Sidebar */}
-      <aside style={{ width:220, background:"var(--bg-surface)", borderRight:"1px solid var(--border)", display:"flex", flexDirection:"column", position:"fixed", top:0, bottom:0, left:0 }}>
-        <div style={{ padding:"20px 18px", borderBottom:"1px solid var(--border)" }}>
-          <div style={{ fontFamily:"var(--font-main)", fontWeight:700, fontSize:16, color:"var(--text-primary)", marginBottom:4 }}>⚡ Super Admin</div>
-          <div style={{ fontSize:11, color:"var(--teal)", letterSpacing:"0.1em", textTransform:"uppercase" }}>LeadLo</div>
-        </div>
-        <nav style={{ flex:1, padding:"12px 10px" }}>
-          {[
-            { label:"Dashboard",  icon:"📊", active:true },
-            { label:"All Users",  icon:"👥", href:"#users" },
-            { label:"Plans",      icon:"📋", href:"/superadmin/plans" },
-            { label:"Contact Requests", icon:"📩", href:"/superadmin/contact-requests" },
-          ].map(item=>(
-            <Link key={item.label} href={item.href||"#"} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:8, marginBottom:4, color: item.active?"var(--teal-light)":"var(--text-secondary)", background: item.active?"var(--teal-dim)":"transparent", fontFamily:"var(--font-main)", fontWeight: item.active?600:400, fontSize:13, textDecoration:"none", borderLeft: item.active?"2px solid var(--teal)":"2px solid transparent" }}>
-              <span>{item.icon}</span>{item.label}
-            </Link>
-          ))}
-        </nav>
-        <div style={{ padding:"14px", borderTop:"1px solid var(--border)" }}>
-          <button onClick={logout} style={{ width:"100%", padding:"8px", borderRadius:7, background:"transparent", border:"1px solid var(--border)", color:"var(--text-muted)", fontSize:12, cursor:"pointer" }}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--danger)";e.currentTarget.style.color="var(--danger)"}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border)";e.currentTarget.style.color="var(--text-muted)"}}>
-            Sign Out
-          </button>
-        </div>
-      </aside>
-
-      {/* Main */}
-      <main style={{ marginLeft:220, flex:1, padding:"28px 32px" }}>
         <div style={{ marginBottom:28 }}>
-          <h1 style={{ fontFamily:"var(--font-main)", fontSize:22, fontWeight:700, color:"var(--text-primary)" }}>Super Admin Dashboard</h1>
-          <p style={{ color:"var(--text-muted)", fontSize:13, marginTop:4 }}>Manage all users, subscriptions and plans</p>
+          <h1 style={{ fontFamily:"var(--font-main)", fontSize:22, fontWeight:700, color:"var(--text-primary)" }}>Tenants</h1>
+          <p style={{ color:"var(--text-muted)", fontSize:13, marginTop:4 }}>Manage all tenants, subscriptions and plans</p>
         </div>
 
         {/* Stats */}
@@ -272,7 +242,6 @@ export default function SuperAdminDashboard() {
         <div style={{ marginTop:12, fontSize:12, color:"var(--text-muted)", textAlign:"right" }}>
           {filtered.length} of {users.length} users
         </div>
-      </main>
 
       {/* Action Modal */}
       {actionUser && (
@@ -387,7 +356,7 @@ export default function SuperAdminDashboard() {
           onChanged={loadAll}
         />
       )}
-    </div>
+    </SuperAdminShell>
   );
 }
 
