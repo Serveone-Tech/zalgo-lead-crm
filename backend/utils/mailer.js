@@ -1,5 +1,6 @@
 const nodemailer = require("nodemailer");
 require("dotenv").config();
+const { pool } = require("../db");
 
 const transport = nodemailer.createTransport({
   service: "gmail",
@@ -36,7 +37,20 @@ function wrap(body) {
 </div>`;
 }
 
-async function send(to, subject, html) {
+// Best-effort — a logging hiccup must never be why an email fails to send,
+// so this never throws and never blocks send() below.
+async function logEmailAttempt(recipient, type, status, errorMessage) {
+  try {
+    await pool.query(
+      "INSERT INTO system_email_log (recipient, email_type, status, error_message) VALUES ($1,$2,$3,$4)",
+      [recipient, type, status, errorMessage],
+    );
+  } catch (e) {
+    console.error("[mailer] failed to log email attempt:", e.message);
+  }
+}
+
+async function send(to, subject, html, type = "unknown") {
   try {
     await transport.sendMail({
       from: `"LeadLo" <${process.env.EMAIL_USER}>`,
@@ -44,8 +58,10 @@ async function send(to, subject, html) {
       subject,
       html,
     });
+    await logEmailAttempt(to, type, "sent", null);
   } catch (e) {
     console.error(`[mailer] failed to send "${subject}" to ${to}:`, e.message);
+    await logEmailAttempt(to, type, "failed", e.message?.slice(0, 500) || "Unknown error");
   }
 }
 
@@ -62,6 +78,7 @@ async function sendOtp(email, name, otp) {
     </div>
     <p style="color:#4a6380;font-size:12px;margin:0">Do not share this OTP with anyone. If you did not request this, please ignore.</p>
   `),
+    "password_reset_otp",
   );
 }
 
@@ -78,6 +95,7 @@ async function sendRegisterOtp(email, name, otp) {
     </div>
     <p style="color:#4a6380;font-size:12px;margin:0">Do not share this OTP with anyone. If you did not request this, please ignore.</p>
   `),
+    "register_otp",
   );
 }
 
@@ -103,6 +121,7 @@ async function sendTrialStarted(email, name, planName, trialEndsAt) {
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Explore all features during your trial period. Upgrade before it ends to keep your data and access.</p>
   `),
+    "trial_started",
   );
 }
 
@@ -138,6 +157,7 @@ async function sendPlanActivated(email, name, planName, billingCycle, endsAt) {
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">You now have full access to all features included in the ${planName} plan. Login to your dashboard to get started.</p>
   `),
+    "plan_activated",
   );
 }
 
@@ -167,6 +187,7 @@ async function sendAddonPurchased(email, name, seatsAdded, newLimit, amount) {
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">These seats stay on your account until you or a Super Admin change them — no separate renewal needed.</p>
   `),
+    "addon_purchased",
   );
 }
 
@@ -192,6 +213,7 @@ async function sendPlanExtended(email, name, planName, newEndsAt, days) {
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Your access has been extended. No action required from your side.</p>
   `),
+    "plan_extended",
   );
 }
 
@@ -222,6 +244,7 @@ async function sendExpiryReminder(email, name, planName, endsAt, daysLeft) {
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Contact your administrator to renew your subscription and continue uninterrupted access to LeadLo.</p>
   `),
+    "expiry_reminder",
   );
 }
 
@@ -247,6 +270,7 @@ async function sendPlanExpired(email, name, planName, expiredOn) {
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Please contact your administrator or visit the plans page to renew your subscription.</p>
   `),
+    "plan_expired",
   );
 }
 
@@ -263,6 +287,7 @@ async function sendPlanCancelled(email, name, planName) {
     </div>
     <p style="color:#4a6380;font-size:12px;margin:0">Your existing data remains safe and can be accessed once a new subscription is activated.</p>
   `),
+    "plan_cancelled",
   );
 }
 
@@ -286,6 +311,7 @@ async function sendPaymentFailed(email, name, planName, graceDays, isLastWarning
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Login and visit Settings → Billing to update your payment method.</p>
   `),
+    "payment_failed",
   );
 }
 
@@ -304,6 +330,7 @@ async function sendMigrationNotice(email, name, planName, endsAt) {
     </div>
     <p style="color:#94a3b8;font-size:13px;margin:0">Either way, your data and access continue exactly as they are today.</p>
   `),
+    "migration_notice",
   );
 }
 
@@ -360,6 +387,7 @@ async function sendContactNotification({
     <p style="color:#5a7a96;font-size:12px;margin:0 0 6px;text-transform:uppercase;letter-spacing:0.06em">Message</p>
     <p style="color:#e2e8f0;font-size:14px;line-height:1.6;margin:0;white-space:pre-wrap">${message || "—"}</p>
   `),
+    "contact_notification",
   );
 }
 
@@ -377,6 +405,7 @@ async function sendContactAutoReply(toEmail, name) {
     <p style="color:#94a3b8;font-size:14px;line-height:1.6;margin:0 0 20px">Our team will get back to you <strong style="color:#e2e8f0">within 24 hours</strong> to answer your questions or set up a walkthrough — whatever you need.</p>
     <p style="color:#4a6380;font-size:12px;margin:0">This is an automated confirmation — no reply is needed. If it's urgent, you can also reach us directly at sales@zalgoinfotech.com.</p>
   `),
+    "contact_autoreply",
   );
 }
 

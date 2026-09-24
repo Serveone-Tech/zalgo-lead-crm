@@ -26,7 +26,10 @@ const NAV_GROUPS = [
   },
   {
     section: "SYSTEM",
-    items: [{ label: "Contact Requests", icon: "📩", href: "/superadmin/contact-requests" }],
+    items: [
+      { label: "Contact Requests", icon: "📩", href: "/superadmin/contact-requests" },
+      { label: "Email Log", icon: "✉️", href: "/superadmin/email-log" },
+    ],
   },
 ];
 

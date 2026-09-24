@@ -398,6 +398,21 @@ router.get('/webhook-events', superadminAuth, async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
+// ── GET the system email log — billing receipts, dunning, trial/renewal
+// reminders, OTPs, contact-form notifications: every send attempt through
+// EMAIL_USER (see utils/mailer.js's send() wrapper). Deliberately excludes
+// tenant-facing outbound automation email, which goes through each
+// tenant's own SMTP credentials on a different code path.
+router.get('/email-log', superadminAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, recipient, email_type, status, error_message, created_at
+       FROM system_email_log ORDER BY created_at DESC LIMIT 200`,
+    );
+    res.json(result.rows);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ── GET contact form submissions (marketing site inbox)
 router.get('/contact-requests', superadminAuth, async (req, res) => {
   try {

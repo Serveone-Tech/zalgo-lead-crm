@@ -923,6 +923,27 @@ const initDB = async () => {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
 
+    // Logs every platform/system email send attempt — billing receipts,
+    // dunning, trial/renewal reminders, OTPs, contact-form notifications —
+    // everything sent through EMAIL_USER via utils/mailer.js's shared
+    // send() wrapper. Deliberately does NOT cover tenant-facing outbound
+    // automation email (WhatsApp/email/SMS triggers, broadcasts), which
+    // goes through each tenant's own SMTP credentials — that's the
+    // tenant's own business communication on a different code path, not
+    // "did our own system emails silently fail," which is what this table
+    // is for.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_email_log (
+        id SERIAL PRIMARY KEY,
+        recipient VARCHAR(255),
+        email_type VARCHAR(60),
+        status VARCHAR(20),
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch((e) => console.log("system_email_log create skip:", e.message));
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_system_email_log_created_at ON system_email_log(created_at DESC)`).catch(() => {});
+
     // Every state-changing Super Admin action (plan changes, subscription
     // overrides, tenant suspend/reactivate, impersonation, account-settings
     // changes, ...) writes one row here — see utils/admin-audit.js. Purely
