@@ -595,24 +595,31 @@ router.post("/razorpay", async (req, res) => {
 
   const { event, payload } = req.body;
   const eventId = req.body.event_id || req.headers["x-razorpay-event-id"];
+  let claimed = false;
 
   try {
     // Idempotency — Razorpay retries undelivered webhooks; without this, a
-    // retried "charged" event would extend ends_at a second time.
+    // retried "charged" event would extend ends_at a second time. This row
+    // also doubles as the event log the Super Admin panel reads — status
+    // starts 'received' and is updated to 'processed'/'failed' below once
+    // we know the outcome.
     if (eventId) {
       const claim = await pool.query(
         "INSERT INTO razorpay_webhook_events (event_id, event_type) VALUES ($1,$2) ON CONFLICT (event_id) DO NOTHING RETURNING event_id",
         [eventId, event],
       );
       if (claim.rows.length === 0) return res.json({ skipped: "duplicate" });
+      claimed = true;
     }
 
     const sub = payload?.subscription?.entity;
     const razorpaySubId = sub?.id;
+    let resolvedUserId = null;
 
     if (event === "subscription.charged" && razorpaySubId) {
       const row = await findSubscriptionByRazorpayId(razorpaySubId, sub.notes);
       if (row) {
+        resolvedUserId = row.user_id;
         await activateFromCharge(row, {
           razorpaySubId,
           billingCycle: sub.notes?.billing_cycle,
@@ -621,15 +628,18 @@ router.post("/razorpay", async (req, res) => {
       }
     } else if ((event === "subscription.pending" || event === "payment.failed") && razorpaySubId) {
       const row = await findSubscriptionByRazorpayId(razorpaySubId, sub?.notes);
-      if (row && row.status === "active") {
-        await pool.query(
-          "UPDATE subscriptions SET status='past_due', past_due_since=NOW() WHERE id=$1",
-          [row.id],
-        );
-        const u = await pool.query("SELECT name, email FROM users WHERE id=$1", [row.user_id]);
-        const plan = await pool.query("SELECT name FROM plans WHERE id=$1", [row.plan_id]);
-        if (u.rows[0] && plan.rows[0]) {
-          mailer.sendPaymentFailed(u.rows[0].email, u.rows[0].name, plan.rows[0].name, 3, false);
+      if (row) {
+        resolvedUserId = row.user_id;
+        if (row.status === "active") {
+          await pool.query(
+            "UPDATE subscriptions SET status='past_due', past_due_since=NOW() WHERE id=$1",
+            [row.id],
+          );
+          const u = await pool.query("SELECT name, email FROM users WHERE id=$1", [row.user_id]);
+          const plan = await pool.query("SELECT name FROM plans WHERE id=$1", [row.plan_id]);
+          if (u.rows[0] && plan.rows[0]) {
+            mailer.sendPaymentFailed(u.rows[0].email, u.rows[0].name, plan.rows[0].name, 3, false);
+          }
         }
       }
     } else if (event === "subscription.halted" && razorpaySubId) {
@@ -640,6 +650,7 @@ router.post("/razorpay", async (req, res) => {
       // period short.
       const row = await findSubscriptionByRazorpayId(razorpaySubId, sub?.notes);
       if (row) {
+        resolvedUserId = row.user_id;
         const u = await pool.query("SELECT name, email FROM users WHERE id=$1", [row.user_id]);
         const plan = await pool.query("SELECT name FROM plans WHERE id=$1", [row.plan_id]);
         if (u.rows[0] && plan.rows[0]) {
@@ -649,13 +660,26 @@ router.post("/razorpay", async (req, res) => {
     } else if (event === "subscription.cancelled" && razorpaySubId) {
       const row = await findSubscriptionByRazorpayId(razorpaySubId, sub?.notes);
       if (row) {
+        resolvedUserId = row.user_id;
         await pool.query("UPDATE subscriptions SET status='canceled' WHERE id=$1", [row.id]);
       }
     }
 
+    if (eventId) {
+      await pool.query(
+        "UPDATE razorpay_webhook_events SET status='processed', user_id=$1 WHERE event_id=$2",
+        [resolvedUserId, eventId],
+      ).catch(() => {});
+    }
     res.json({ success: true });
   } catch (e) {
     console.error("Razorpay webhook error:", e.message);
+    if (eventId && claimed) {
+      await pool.query(
+        "UPDATE razorpay_webhook_events SET status='failed', error_message=$1 WHERE event_id=$2",
+        [e.message?.slice(0, 500) || "Unknown error", eventId],
+      ).catch(() => {});
+    }
     // Still 200 — a 5xx here makes Razorpay retry indefinitely for an error
     // that's almost always a bug on our side, not something a retry fixes.
     res.json({ received: true });

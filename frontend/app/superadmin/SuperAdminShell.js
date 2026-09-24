@@ -17,6 +17,10 @@ const NAV_GROUPS = [
     items: [{ label: "Plans", icon: "📋", href: "/superadmin/plans" }],
   },
   {
+    section: "BILLING",
+    items: [{ label: "Webhook Events", icon: "🔌", href: "/superadmin/webhook-events" }],
+  },
+  {
     section: "SYSTEM",
     items: [{ label: "Contact Requests", icon: "📩", href: "/superadmin/contact-requests" }],
   },

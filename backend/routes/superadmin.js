@@ -336,6 +336,24 @@ router.get('/health', superadminAuth, async (req, res) => {
   res.json(health);
 });
 
+// ── GET the Razorpay webhook event log — newest first, tenant name joined
+// in where resolved. A failed or delayed webhook is visible here without
+// SSH-ing into the server to grep logs (see routes/webhooks.js for how
+// status/error_message get set).
+router.get('/webhook-events', superadminAuth, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT e.event_id, e.event_type, e.status, e.error_message, e.processed_at,
+             u.id AS tenant_id, u.name AS tenant_name
+      FROM razorpay_webhook_events e
+      LEFT JOIN users u ON u.id = e.user_id
+      ORDER BY e.processed_at DESC
+      LIMIT 200
+    `);
+    res.json(result.rows);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ── GET contact form submissions (marketing site inbox)
 router.get('/contact-requests', superadminAuth, async (req, res) => {
   try {

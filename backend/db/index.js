@@ -903,7 +903,10 @@ const initDB = async () => {
 
     // Dedupe table for Razorpay webhook retries — a webhook delivery can be
     // retried by Razorpay itself, so the event id (not the subscription/
-    // payment id) is the idempotency key.
+    // payment id) is the idempotency key. Also doubles as the event log the
+    // Super Admin panel reads (status/error_message/user_id let a failed or
+    // delayed webhook actually be diagnosed from the UI instead of SSH-ing
+    // into the server to grep logs).
     await client.query(`
       CREATE TABLE IF NOT EXISTS razorpay_webhook_events (
         event_id VARCHAR(64) PRIMARY KEY,
@@ -911,6 +914,14 @@ const initDB = async () => {
         processed_at TIMESTAMP DEFAULT NOW()
       )
     `).catch((e) => console.log("razorpay_webhook_events create skip:", e.message));
+    const alterWebhookEvents = [
+      `ALTER TABLE razorpay_webhook_events ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id)`,
+      `ALTER TABLE razorpay_webhook_events ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'received'`,
+      `ALTER TABLE razorpay_webhook_events ADD COLUMN IF NOT EXISTS error_message TEXT`,
+    ];
+    for (const q of alterWebhookEvents) {
+      await client.query(q).catch((e) => console.log("alter skip:", e.message));
+    }
 
     // Every state-changing Super Admin action (plan changes, subscription
     // overrides, tenant suspend/reactivate, impersonation, account-settings
