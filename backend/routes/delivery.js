@@ -1,6 +1,6 @@
 const express = require("express");
 const { pool } = require("../db");
-const { auth, requirePermission } = require("../middleware/auth");
+const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { isOwner } = require("../utils/permissions");
 const { PROVIDERS } = require("../utils/delivery-providers");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
@@ -26,7 +26,7 @@ function maskCredentials(provider, credentials) {
 // so the admin doesn't have to type them by hand, and so couriers' create-
 // order APIs (which require billing_city/billing_state) reliably get them.
 // India Post's public lookup is free and needs no API key/credentials.
-router.get("/pincode/:pincode", auth, async (req, res) => {
+router.get("/pincode/:pincode", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
   const pincode = req.params.pincode;
   if (!/^\d{6}$/.test(pincode)) return res.status(400).json({ error: "Invalid pincode" });
   try {
@@ -42,7 +42,7 @@ router.get("/pincode/:pincode", auth, async (req, res) => {
 });
 
 // ── GET provider registry — drives the dynamic Settings form ──────
-router.get("/providers", auth, (req, res) => {
+router.get("/providers", auth, requireSubscription, requirePlanFeature("customers"), (req, res) => {
   const list = Object.entries(PROVIDERS).map(([id, p]) => ({
     id,
     label: p.label,
@@ -58,7 +58,7 @@ router.get("/providers", auth, (req, res) => {
 // which providers to offer in the order fulfillment form, so gating it
 // behind manage_settings hid tracking from every employee even when an
 // admin had already configured a provider.
-router.get("/credentials", auth, async (req, res) => {
+router.get("/credentials", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT provider, enabled, credentials FROM delivery_credentials WHERE user_id=$1 ORDER BY provider ASC",
@@ -77,7 +77,7 @@ router.get("/credentials", auth, async (req, res) => {
 });
 
 // ── PUT save one provider's config (a tenant can connect several) ──
-router.put("/credentials", auth, requirePermission("manage_settings"), async (req, res) => {
+router.put("/credentials", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("manage_settings"), async (req, res) => {
   const { provider, enabled, credentials } = req.body;
   if (!provider || !PROVIDERS[provider]) {
     return res.status(400).json({ error: "Unknown provider" });
@@ -111,7 +111,7 @@ router.put("/credentials", auth, requirePermission("manage_settings"), async (re
 });
 
 // ── DELETE a connected panel ────────────────────────────────────────
-router.delete("/credentials/:provider", auth, requirePermission("manage_settings"), async (req, res) => {
+router.delete("/credentials/:provider", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("manage_settings"), async (req, res) => {
   try {
     await pool.query("DELETE FROM delivery_credentials WHERE user_id=$1 AND provider=$2", [req.tenantId, req.params.provider]);
     res.json({ success: true });
@@ -122,7 +122,7 @@ router.delete("/credentials/:provider", auth, requirePermission("manage_settings
 });
 
 // ── GET live tracking status for one order ─────────────────────────
-router.get("/track/:orderId", auth, async (req, res) => {
+router.get("/track/:orderId", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
   try {
     // Employees can only track orders for customers assigned to them —
     // same boundary as the customer list/detail endpoints.
@@ -175,7 +175,7 @@ router.get("/track/:orderId", auth, async (req, res) => {
 // Safety valve for when the automatic attempt (triggered at the deduct
 // stage) failed — e.g. wrong pickup-location name, courier API down — so
 // an admin can fix the config and retry without touching the order again.
-router.post("/ship/:orderId", auth, requirePermission("manage_customers"), async (req, res) => {
+router.post("/ship/:orderId", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("manage_customers"), async (req, res) => {
   try {
     const vis = isOwner(req) ? { clause: "", params: [] } : { clause: " AND c.assigned_to=$3", params: [req.user.id] };
     const orderRes = await pool.query(

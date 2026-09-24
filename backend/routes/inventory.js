@@ -1,14 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const { pool } = require("../db");
-const { auth } = require("../middleware/auth");
+const { auth, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { hasPermission, isOwner } = require("../utils/permissions");
 
 // GET /api/inventory — deliberately open to any authenticated tenant member
 // (not gated by view_inventory) since this also powers the item dropdown in
 // the Order Fulfillment form, which every order-taker needs regardless of
 // whether they can see the dedicated Inventory page.
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
   try {
     const { rows } = await pool.query(
       "SELECT * FROM inventory_items WHERE user_id=$1 ORDER BY name ASC",
@@ -20,7 +20,7 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
   if (!isOwner(req) && !hasPermission(req, "manage_inventory")) {
     return res.status(403).json({ error: "Permission denied" });
   }
@@ -37,7 +37,7 @@ router.post("/", auth, async (req, res) => {
   }
 });
 
-router.put("/:id", auth, async (req, res) => {
+router.put("/:id", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
   if (!isOwner(req) && !hasPermission(req, "manage_inventory")) {
     return res.status(403).json({ error: "Permission denied" });
   }
@@ -72,7 +72,7 @@ router.put("/:id", auth, async (req, res) => {
 // No delete-guard needed — order_items.inventory_item_id is ON DELETE SET
 // NULL, so past orders keep their name/price snapshot even if the catalog
 // entry they were picked from is later removed.
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
   if (!isOwner(req) && !hasPermission(req, "delete_inventory")) {
     return res.status(403).json({ error: "Permission denied" });
   }

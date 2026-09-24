@@ -1,6 +1,6 @@
 const express = require("express");
 const { pool } = require("../db");
-const { auth } = require("../middleware/auth");
+const { auth, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { isOwner, hasPermission } = require("../utils/permissions");
 
 const router = express.Router();
@@ -10,7 +10,7 @@ const router = express.Router();
 // can review them and decide whether to keep or discard.
 const canView = (req) => isOwner(req) || hasPermission(req, "view_all_leads");
 
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   if (!canView(req)) return res.status(403).json({ error: "Permission denied" });
   try {
     const result = await pool.query(
@@ -24,7 +24,7 @@ router.get("/", auth, async (req, res) => {
 });
 
 // Must be registered before /:id, otherwise Express matches "bulk" as an :id.
-router.delete("/bulk", auth, async (req, res) => {
+router.delete("/bulk", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   if (!canView(req)) return res.status(403).json({ error: "Permission denied" });
   const { ids } = req.body || {};
   if (!Array.isArray(ids) || ids.length === 0) {
@@ -41,7 +41,7 @@ router.delete("/bulk", auth, async (req, res) => {
   }
 });
 
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   if (!canView(req)) return res.status(403).json({ error: "Permission denied" });
   try {
     await pool.query("DELETE FROM pending_leads WHERE id=$1 AND user_id=$2", [

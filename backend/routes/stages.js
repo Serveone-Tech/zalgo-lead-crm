@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../db');
-const { auth } = require('../middleware/auth');
+const { auth, requireSubscription, requirePlanFeature } = require('../middleware/auth');
 
 const DEFAULT_STAGES = [
   { name: 'New',       color: '#2f9e6f', sort_order: 0 },
@@ -24,7 +24,7 @@ async function seedDefaults(tenantId) {
 }
 
 // GET /api/stages
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     let { rows } = await pool.query(
       'SELECT * FROM stages WHERE user_id=$1 ORDER BY sort_order ASC, id ASC',
@@ -44,7 +44,7 @@ router.get('/', auth, async (req, res) => {
 });
 
 // POST /api/stages
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage stages' });
   try {
     const { name, color = '#00868a', sort_order = 99 } = req.body;
@@ -65,7 +65,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT /api/stages/:id
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage stages' });
   const client = await pool.connect();
   try {
@@ -117,7 +117,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE /api/stages/:id
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   if (req.user.parentId) return res.status(403).json({ error: 'Only account owner can manage stages' });
   try {
     const count = await pool.query('SELECT COUNT(*) FROM stages WHERE user_id=$1', [req.tenantId]);

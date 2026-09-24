@@ -2,7 +2,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
-import { PERMISSION_MODULES } from "../../lib/permissions";
+import { PERMISSION_MODULES, visiblePermissionModules } from "../../lib/permissions";
+import { parsePlanFeatures } from "../../lib/plan-features";
 import { Users } from "lucide-react";
 import Pagination from "../../components/Pagination";
 
@@ -75,6 +76,11 @@ export default function EmployeesPage() {
   const activeCount = employees.filter((e) => !e.is_blocked).length;
   const employeeLimit = sub ? (sub.employee_limit_override ?? sub.max_employees) : null;
   const atLimit = employeeLimit !== null && employeeLimit !== -1 && activeCount >= employeeLimit;
+
+  // Only offer checkboxes for modules the owner's own plan actually
+  // includes — granting a permission for a module the owner can't use
+  // themselves would just 403 the moment the employee tried it.
+  const grantableModules = visiblePermissionModules(parsePlanFeatures(sub));
 
   const openAdd = () => {
     setEditing(null);
@@ -503,7 +509,7 @@ export default function EmployeesPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {PERMISSION_MODULES.map((mod) => (
+                      {grantableModules.map((mod) => (
                         <tr key={mod.key} style={{ borderBottom: "1px solid var(--border)" }}>
                           <td
                             style={{

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import api, { refreshUser } from "../lib/api";
 import { hasPerm, isOwnerUser } from "../lib/permissions";
+import { parsePlanFeatures, makeHasPlanFeature } from "../lib/plan-features";
 import { WhatsAppGlyph } from "./BrandIcons";
 
 export default function Sidebar() {
@@ -113,16 +114,8 @@ export default function Sidebar() {
   };
 
   // Parse plan feature keys from subscription
-  const planFeatures = sub?.features
-    ? (typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features)
-    : null; // null = no subscription loaded yet (employee or loading)
-
-  // For owners: check plan features; for employees: always show (backend guards anyway)
-  const hasPlanFeature = (feat) => {
-    if (!user || user.parent_id) return true; // employees — defer to backend
-    if (!planFeatures) return true;            // owner but sub not loaded yet
-    return planFeatures.includes(feat);
-  };
+  const planFeatures = parsePlanFeatures(sub); // null = no subscription loaded yet (employee or loading)
+  const hasPlanFeature = makeHasPlanFeature(user, planFeatures);
 
   const NAV = [
     {

@@ -1,7 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const { pool } = require("../db");
-const { auth, requirePermission } = require("../middleware/auth");
+const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -20,7 +20,7 @@ const CURRENCIES = [
 
 router.get("/currencies", (req, res) => res.json(CURRENCIES));
 
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     let result = await pool.query(
       "SELECT * FROM user_settings WHERE user_id=$1",
@@ -42,6 +42,8 @@ router.get("/", auth, async (req, res) => {
 router.put(
   "/",
   auth,
+  requireSubscription,
+  requirePlanFeature("core"),
   requirePermission("manage_settings"),
   async (req, res) => {
     const {

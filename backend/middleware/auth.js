@@ -104,7 +104,7 @@ const requireSubscription = async (req, res, next) => {
 };
 
 // ── Plan feature gate — requireSubscription must run first
-// Feature keys: 'customers', 'automation', 'bulk_upload', 'employees'
+// Feature keys: 'core', 'customers', 'lead_sources', 'automation', 'employees'
 const requirePlanFeature = (feat) => (req, res, next) => {
   if (req.userRole === 'superadmin') return next();
   if (!req.subscription) return res.status(403).json({ error: 'NO_SUBSCRIPTION' });

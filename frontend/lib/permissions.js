@@ -23,10 +23,17 @@ export const PERMISSION_KEYS = [
 // above (storage format is unchanged — this is presentation only). A module
 // that has no concept of one of the three actions (e.g. Settings has no
 // "delete") simply omits that cell, which the UI renders as "—".
+// `planFeature` is which plan-feature key (from backend/middleware/auth.js's
+// requirePlanFeature calls) must be on the OWNER's own plan for this module
+// to be worth granting at all — an owner on a plan without it can't use the
+// module themselves, so offering the checkbox to an employee would be
+// granting access to something that 403s the moment they try it. `null`
+// means every plan includes it, so it's never filtered out.
 export const PERMISSION_MODULES = [
   {
     key: "leads",
     label: "Leads",
+    planFeature: "core",
     read: { keys: ["view_all_leads"], hint: "See every lead, not just ones assigned to you" },
     write: {
       keys: ["edit_lead_details", "assign_leads", "bulk_upload_leads"],
@@ -37,6 +44,7 @@ export const PERMISSION_MODULES = [
   {
     key: "customers",
     label: "Customers",
+    planFeature: "customers",
     read: { keys: ["view_customers"], hint: "View the Customers section at all" },
     write: { keys: ["manage_customers"], hint: "Add/edit customers, orders, delivery & payment info" },
     delete: { keys: ["delete_customers"], hint: "Delete customers" },
@@ -44,6 +52,7 @@ export const PERMISSION_MODULES = [
   {
     key: "inventory",
     label: "Inventory",
+    planFeature: "customers",
     read: { keys: ["view_inventory"], hint: "View the Inventory section at all" },
     write: { keys: ["manage_inventory"], hint: "Add/edit inventory items and stock" },
     delete: { keys: ["delete_inventory"], hint: "Delete inventory items" },
@@ -51,24 +60,35 @@ export const PERMISSION_MODULES = [
   {
     key: "automation",
     label: "Automation",
+    planFeature: "automation",
     write: { keys: ["manage_automation"], hint: "Configure lead-source webhooks, WhatsApp, delivery providers" },
   },
   {
     key: "whatsapp",
     label: "WhatsApp Inbox",
+    planFeature: "automation",
     read: { keys: ["view_whatsapp"], hint: "Open the WhatsApp inbox and view/reply to chats" },
   },
   {
     key: "team",
     label: "Team",
+    planFeature: "employees",
     write: { keys: ["manage_employees"], hint: "Add/edit/remove employees and their permissions" },
   },
   {
     key: "settings",
     label: "Settings",
+    planFeature: "core",
     write: { keys: ["manage_settings"], hint: "View and change organization settings" },
   },
 ];
+
+// Modules an owner on `planFeatures` can actually use — the list an
+// employee-permission UI should offer checkboxes for.
+export function visiblePermissionModules(planFeatures) {
+  if (!planFeatures) return PERMISSION_MODULES; // not loaded yet — don't hide anything prematurely
+  return PERMISSION_MODULES.filter((m) => !m.planFeature || planFeatures.includes(m.planFeature));
+}
 
 export function isOwnerUser(user) {
   return !!user && (user.role === "user" || user.role === "superadmin");

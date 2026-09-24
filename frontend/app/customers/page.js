@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
+import { parsePlanFeatures, makeHasPlanFeature } from "../../lib/plan-features";
 import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar, Download, XCircle } from "lucide-react";
 import SendToSelectedModal from "../../components/SendToSelectedModal";
 import Pagination from "../../components/Pagination";
@@ -98,14 +99,8 @@ export default function CustomersPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const planFeatures = sub?.features
-    ? typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features
-    : null;
-  const hasPlanFeature = (feat) => {
-    if (!user || user.parent_id) return true; // employees — backend guards anyway
-    if (!planFeatures) return true; // owner but sub not loaded yet
-    return planFeatures.includes(feat);
-  };
+  const planFeatures = parsePlanFeatures(sub);
+  const hasPlanFeature = makeHasPlanFeature(user, planFeatures);
 
   const changeOrderStage = async (c, stage) => {
     if (!c.latest_order_id) return;

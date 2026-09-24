@@ -849,15 +849,26 @@ const initDB = async () => {
     // ── STEP 5: Migrate plan features to machine-readable keys ──
     // Only updates plans that still have old human-readable feature strings
     await client.query(`
-      UPDATE plans SET features='["customers","bulk_upload"]'::jsonb
+      UPDATE plans SET features='["customers"]'::jsonb
       WHERE sort_order=0 AND (features IS NULL OR features::text LIKE '%Up to%' OR features::text LIKE '%Day Free%');
 
-      UPDATE plans SET features='["customers","bulk_upload"]'::jsonb
+      UPDATE plans SET features='["customers"]'::jsonb
       WHERE sort_order=1 AND (features IS NULL OR features::text LIKE '%Up to%');
 
-      UPDATE plans SET features='["customers","automation","bulk_upload","employees"]'::jsonb
+      UPDATE plans SET features='["customers","automation","employees"]'::jsonb
       WHERE sort_order=2 AND (features IS NULL OR features::text LIKE '%Unlimited%' OR features::text LIKE '%Full Automation%');
     `).catch((e) => console.log("plan migration skip:", e.message));
+
+    // ── STEP 5b: every plan gets "core" for free ────────────────
+    // Basic lead + order management (Leads, Inventory read, Settings, lead/
+    // order Stage config, Unverified Leads) must never be miscategorized as
+    // a paid add-on — every tenant on any plan needs it to function at all.
+    // Idempotent: only touches plans that don't already have the key, so
+    // this is safe to run on every boot and also self-heals any future
+    // plan an admin creates without remembering to include it.
+    await client
+      .query(`UPDATE plans SET features = features || '["core"]'::jsonb WHERE NOT (features @> '["core"]'::jsonb)`)
+      .catch((e) => console.log("core feature backfill skip:", e.message));
 
     // ── STEP 6: Seed superadmin ──────────────────────────────
     const bcrypt = require("bcryptjs");

@@ -16,6 +16,7 @@ import {
   stageStyle,
 } from "../../lib/stages";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
+import { parsePlanFeatures, makeHasPlanFeature } from "../../lib/plan-features";
 
 // Overdue = the exact scheduled moment (date + time) has already passed —
 // not just that the calendar day has rolled over.
@@ -142,14 +143,8 @@ function LeadsContent() {
   const canAssign = isOwnerUser(user) || hasPerm(user, "assign_leads");
   const canBulkUpload = isOwnerUser(user) || hasPerm(user, "bulk_upload_leads");
 
-  const planFeatures = sub?.features
-    ? (typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features)
-    : null;
-  const hasPlanFeature = (feat) => {
-    if (!user || user.parent_id) return true; // employees — backend guards anyway
-    if (!planFeatures) return true; // owner but subscription not loaded yet
-    return planFeatures.includes(feat);
-  };
+  const planFeatures = parsePlanFeatures(sub);
+  const hasPlanFeature = makeHasPlanFeature(user, planFeatures);
 
   const employeeNames = useMemo(
     () => Object.fromEntries(employees.map((e) => [e.id, e.name])),

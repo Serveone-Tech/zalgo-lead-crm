@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
+import { parsePlanFeatures, makeHasPlanFeature } from "../../lib/plan-features";
 import { WhatsAppGlyph, GoogleAdsGlyph } from "../../components/BrandIcons";
 import WhatsAppEmbeddedSignup from "../../components/WhatsAppEmbeddedSignup";
 
@@ -286,16 +287,9 @@ export default function AutomationPage() {
     load();
   }, []);
 
-  const planFeatures = sub?.features
-    ? typeof sub.features === "string" ? JSON.parse(sub.features) : sub.features
-    : null;
-  const hasPlanFeature = (feat) => {
-    const cachedUser = typeof window !== "undefined" ? localStorage.getItem("crm_user") : null;
-    const u = cachedUser ? JSON.parse(cachedUser) : null;
-    if (!u || u.parent_id) return true; // employees — backend guards anyway
-    if (!planFeatures) return true; // owner but sub not loaded yet
-    return planFeatures.includes(feat);
-  };
+  const planFeatures = parsePlanFeatures(sub);
+  const cachedUser = typeof window !== "undefined" ? localStorage.getItem("crm_user") : null;
+  const hasPlanFeature = makeHasPlanFeature(cachedUser ? JSON.parse(cachedUser) : null, planFeatures);
 
   const approvedTemplates = templates.filter((t) => t.status === "approved");
 

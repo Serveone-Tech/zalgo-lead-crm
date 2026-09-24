@@ -220,66 +220,45 @@ function parseFeatures(p) {
 }
 const planIcons = [Sprout, BarChart3, Building2, Rocket];
 
-/* compare table — rows fixed as in the design; a plan gets ✓ when any of its
-   feature keys/labels matches the row's keywords, otherwise — */
+/* compare table — rows fixed as in the design; a plan gets ✓ when its real
+   `features` array (backend/middleware/auth.js's requirePlanFeature keys)
+   includes any of the row's keys — no more guessing from label text, so a
+   future key rename or relabel can't silently break a checkmark here. */
 const compareGroups = [
   {
     title: "Lead Management",
     icon: Users2,
     rows: [
-      {
-        label: "Connected lead capture",
-        test: /lead capture|capture|meta|google ads|sheets/i,
-      },
-      {
-        label: "Lead assignment & reminders",
-        test: /assign|remind|follow|lead management|customer/i,
-      },
+      { label: "Connected lead capture", keys: ["lead_sources"] },
+      { label: "Lead assignment & reminders", keys: ["core"] },
     ],
   },
   {
     title: "WhatsApp & Automation",
     icon: MessageCircle,
     rows: [
-      {
-        label: "Shared WhatsApp & assigned chats",
-        test: /shared whatsapp|whatsapp inbox|whatsapp/i,
-      },
-      {
-        label: "Bulk campaigns & automated messages",
-        test: /bulk|campaign|automation|outbound|sms|email/i,
-      },
+      { label: "Shared WhatsApp & assigned chats", keys: ["automation"] },
+      { label: "Bulk campaigns & automated messages", keys: ["automation"] },
     ],
   },
   {
     title: "Orders & Delivery",
     icon: Package,
     rows: [
-      {
-        label: "Inventory & order management",
-        test: /inventory|order|stock|payment/i,
-      },
-      {
-        label: "Courier APIs & shipment tracking",
-        test: /courier|shipment|delivery|tracking/i,
-      },
+      { label: "Inventory & order management", keys: ["customers"] },
+      { label: "Courier APIs & shipment tracking", keys: ["customers"] },
     ],
   },
   {
     title: "Team Access",
     icon: Users2,
     rows: [
-      {
-        label: "Included users & usage limits",
-        test: /team|employee|user|agent|seat|limit/i,
-      },
+      { label: "Included users & usage limits", keys: ["employees"] },
     ],
   },
 ];
-function planHas(plan, test) {
-  return plan.features.some((k) =>
-    test.test(`${k} ${FEATURE_LABELS[k] || ""}`),
-  );
+function planHas(plan, keys) {
+  return keys.some((k) => plan.features.includes(k));
 }
 
 const faqs = [
@@ -2104,7 +2083,7 @@ function GroupRows({ g, cards, popularIdx }) {
                 r === g.rows.length - 1 && g.title === "Team Access",
               )}
             >
-              {planHas(p, row.test) ? (
+              {planHas(p, row.keys) ? (
                 <Tile size={32} radius={16} bg={blue} color="#fff">
                   <Check size={16} strokeWidth={3} />
                 </Tile>

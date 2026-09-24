@@ -77,7 +77,7 @@ function buildLeadFilterClause(req, query, startIndex) {
 // happens in SQL now instead of over the full array in the browser.
 // Returns the total matching count via a window function so pagination
 // controls work without a second round trip.
-router.get("/paged", auth, async (req, res) => {
+router.get("/paged", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize) || 25));
@@ -104,7 +104,7 @@ router.get("/paged", auth, async (req, res) => {
 // the table view) it genuinely can't work against just one page. Only
 // fetched when the user actually switches to Kanban view, so the default
 // (table) experience never pays this cost.
-router.get("/filtered-all", auth, async (req, res) => {
+router.get("/filtered-all", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const { where, params } = buildLeadFilterClause(req, req.query, 2);
     const result = await pool.query(`SELECT * FROM leads WHERE ${where} ORDER BY created_at DESC`, params);
@@ -119,7 +119,7 @@ router.get("/filtered-all", auth, async (req, res) => {
 // matching" for bulk actions, since with server-side pagination the
 // browser no longer holds every matching row (just the current page) to
 // derive that list from client-side the way it used to.
-router.get("/matching-ids", auth, async (req, res) => {
+router.get("/matching-ids", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const { where, params } = buildLeadFilterClause(req, req.query, 2);
     const result = await pool.query(`SELECT id FROM leads WHERE ${where}`, params);
@@ -133,7 +133,7 @@ router.get("/matching-ids", auth, async (req, res) => {
 // GET the distinct platform values used across this tenant's leads — powers
 // the "All Platforms" filter dropdown, which used to be derived client-side
 // from the full fetched table (new Set(leads.map(l => l.platform))).
-router.get("/platforms", auth, async (req, res) => {
+router.get("/platforms", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const result = await pool.query(
@@ -152,7 +152,7 @@ router.get("/platforms", auth, async (req, res) => {
 // table (every column, every lead) that often was by far the single
 // heaviest recurring cost in the app — this trims both the row set (phone
 // IS NOT NULL) and the column set down to only what the chat list renders.
-router.get("/whatsapp-inbox", auth, async (req, res) => {
+router.get("/whatsapp-inbox", auth, requireSubscription, requirePlanFeature("automation"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const result = await pool.query(
@@ -173,7 +173,7 @@ router.get("/whatsapp-inbox", auth, async (req, res) => {
 // etc. do. On a tenant with a few thousand leads, fetching the entire table
 // just to count a handful of matches was measured taking 1.8s+ per poll;
 // these are plain COUNT(*) queries instead, a few ms each.
-router.get("/sidebar-counts", auth, async (req, res) => {
+router.get("/sidebar-counts", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const canViewAll = isOwner(req) || hasPermission(req, "view_all_leads");
@@ -223,7 +223,7 @@ router.get("/sidebar-counts", auth, async (req, res) => {
 });
 
 // GET all leads
-router.get("/", auth, async (req, res) => {
+router.get("/", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const result = await pool.query(
@@ -239,7 +239,7 @@ router.get("/", auth, async (req, res) => {
 // GET overdue
 // "Overdue" = the exact scheduled moment (date+time) has already passed —
 // not just that the calendar day has rolled over.
-router.get("/overdue", auth, async (req, res) => {
+router.get("/overdue", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const result = await pool.query(
@@ -258,7 +258,7 @@ router.get("/overdue", auth, async (req, res) => {
 // every column) just to keep the handful matching a date condition —
 // same fix as /sidebar-counts below, but this one still needs to return
 // real rows (the widget shows name/phone/stage), not just a count.
-router.get("/followups", auth, async (req, res) => {
+router.get("/followups", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const result = await pool.query(
@@ -283,7 +283,7 @@ router.get("/followups", auth, async (req, res) => {
 });
 
 // GET stats
-router.get("/stats", auth, async (req, res) => {
+router.get("/stats", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
     const visToday = visibilityClause(req, 2);
@@ -338,7 +338,7 @@ router.get("/stats", auth, async (req, res) => {
 });
 
 // POST create lead
-router.post("/", auth, requireSubscription, async (req, res) => {
+router.post("/", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   const {
     name,
     phone,
@@ -417,7 +417,7 @@ router.post("/", auth, requireSubscription, async (req, res) => {
 });
 
 // POST bulk create leads
-router.post("/bulk", auth, async (req, res) => {
+router.post("/bulk", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   if (!isOwner(req) && !hasPermission(req, "bulk_upload_leads")) {
     return res.status(403).json({ error: "Permission denied" });
   }
@@ -491,7 +491,7 @@ router.post("/bulk", auth, async (req, res) => {
 });
 
 // PUT bulk assign leads to an employee
-router.put("/bulk-assign", auth, async (req, res) => {
+router.put("/bulk-assign", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   const { lead_ids, assigned_to } = req.body;
   if (!Array.isArray(lead_ids) || lead_ids.length === 0)
     return res.status(400).json({ error: "No leads selected" });
@@ -517,7 +517,7 @@ router.put("/bulk-assign", auth, async (req, res) => {
 });
 
 // PUT bulk change stage for a set of leads
-router.put("/bulk-stage", auth, async (req, res) => {
+router.put("/bulk-stage", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   const { lead_ids, stage } = req.body;
   if (!Array.isArray(lead_ids) || lead_ids.length === 0)
     return res.status(400).json({ error: "No leads selected" });
@@ -555,7 +555,7 @@ router.put("/bulk-stage", auth, async (req, res) => {
 });
 
 // DELETE bulk delete leads (owner or delete_leads permission)
-router.delete("/bulk", auth, async (req, res) => {
+router.delete("/bulk", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   const { lead_ids } = req.body;
   if (!Array.isArray(lead_ids) || lead_ids.length === 0)
     return res.status(400).json({ error: "No leads selected" });
@@ -574,7 +574,7 @@ router.delete("/bulk", auth, async (req, res) => {
 });
 
 // GET employee-wise lead report (owner / view_all_leads only)
-router.get("/report/by-employee", auth, async (req, res) => {
+router.get("/report/by-employee", auth, requireSubscription, requirePlanFeature("employees"), async (req, res) => {
   if (!isOwner(req) && !hasPermission(req, "view_all_leads"))
     return res.status(403).json({ error: "Permission denied" });
   try {
@@ -619,7 +619,7 @@ router.get("/report/by-employee", auth, async (req, res) => {
 });
 
 // PUT update lead
-router.put("/:id", auth, async (req, res) => {
+router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   const {
     name,
     phone,
@@ -715,7 +715,7 @@ router.put("/:id", auth, async (req, res) => {
 });
 
 // DELETE lead
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   if (!isOwner(req) && !hasPermission(req, "delete_leads")) {
     return res.status(403).json({ error: "Permission denied" });
   }
@@ -735,7 +735,7 @@ router.delete("/:id", auth, async (req, res) => {
 // returns everything including private call-log notes (LeadModal's own
 // "Conversation Log" view, which is plain text, not chat bubbles, and is
 // meant to show the telecaller's full history including their own notes).
-router.get("/:id/messages", auth, async (req, res) => {
+router.get("/:id/messages", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const lead = await pool.query(
       "SELECT id, assigned_to FROM leads WHERE id=$1 AND user_id=$2",
@@ -765,7 +765,7 @@ router.get("/:id/messages", auth, async (req, res) => {
 // always 'call_log' here; only the real /whatsapp-send routes below use
 // 'whatsapp' — this is what keeps these notes out of the WhatsApp chat
 // views instead of looking like a message that was actually delivered.
-router.post("/:id/messages", auth, async (req, res) => {
+router.post("/:id/messages", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   const { message, message_date } = req.body;
   if (!message) return res.status(400).json({ error: "Message required" });
   try {
@@ -915,7 +915,7 @@ router.post(
 // the admin-configured order-fulfillment stage. Open to every employee, no
 // permission required — anyone working a lead should be able to log its
 // order without needing to be granted manage_customers separately.
-router.post("/:id/fulfill-order", auth, async (req, res) => {
+router.post("/:id/fulfill-order", auth, requireSubscription, requirePlanFeature("customers"), async (req, res) => {
   const {
     name,
     email,
