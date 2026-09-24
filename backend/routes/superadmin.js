@@ -4,7 +4,8 @@ const { pool } = require('../db');
 const { superadminAuth } = require('../middleware/auth');
 const { PERMISSION_KEYS } = require('../utils/permissions');
 const mailer = require('../utils/mailer');
-const { getRazorpay } = require('../utils/razorpay-billing');
+const { getRazorpay, activateFromCharge } = require('../utils/razorpay-billing');
+const { logAdminAction } = require('../utils/admin-audit');
 
 const router = express.Router();
 
@@ -32,6 +33,8 @@ router.get('/users', superadminAuth, async (req, res) => {
         s.id as sub_id, s.status as sub_status, s.billing_cycle,
         s.starts_at, s.ends_at, s.trial_ends_at, s.amount_paid,
         s.employee_limit_override,
+        s.razorpay_customer_id, s.razorpay_subscription_id,
+        s.past_due_since, s.cancel_at_period_end,
         p.id as plan_id, p.name as plan_name, p.price_monthly, p.max_employees,
         (SELECT COUNT(*) FROM leads l WHERE l.user_id=u.id) as lead_count,
         (SELECT COUNT(*) FROM customers c WHERE c.user_id=u.id) as customer_count,
@@ -47,6 +50,55 @@ router.get('/users', superadminAuth, async (req, res) => {
     `);
     res.json(result.rows);
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── POST manually retry reconciliation for one tenant's subscription ──
+// Same razorpay.subscriptions.fetch() fallback the tenant-facing
+// /payments/subscription-status poll uses (see utils/razorpay-billing.js),
+// exposed here for support: a webhook can be delayed or dropped, and this
+// lets an admin force a live check instead of waiting or SSH-ing in to poke
+// the DB directly. Only acts when Razorpay reports the subscription as
+// actually active/authenticated — it activates a tenant that's stuck
+// un-activated after really paying, it does not silently downgrade/cancel
+// anyone based on a live status read (that stays a deliberate, separate
+// admin action).
+router.post('/users/:id/reconcile-subscription', superadminAuth, async (req, res) => {
+  try {
+    const owner = await requireOwner(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'Owner not found' });
+    const subRes = await pool.query(
+      'SELECT * FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1',
+      [req.params.id],
+    );
+    const row = subRes.rows[0];
+    if (!row?.razorpay_subscription_id) {
+      return res.status(400).json({ error: 'This tenant has no Razorpay subscription to reconcile — they never set up a recurring mandate.' });
+    }
+    const razorpay = getRazorpay();
+    if (!razorpay) return res.status(503).json({ error: 'Razorpay is not configured on this server.' });
+
+    const live = await razorpay.subscriptions.fetch(row.razorpay_subscription_id);
+    let result;
+    if (live.status === 'active' || live.status === 'authenticated') {
+      const endsAt = await activateFromCharge(row, {
+        razorpaySubId: row.razorpay_subscription_id,
+        billingCycle: live.notes?.billing_cycle,
+        planId: live.notes?.plan_id ? parseInt(live.notes.plan_id) : null,
+      });
+      result = { reconciled: true, local_status: 'active', razorpay_status: live.status, ends_at: endsAt };
+    } else {
+      result = { reconciled: false, local_status: row.status, razorpay_status: live.status };
+    }
+
+    await logAdminAction(req.userId, 'reconcile_subscription', 'tenant', parseInt(req.params.id), {
+      razorpay_subscription_id: row.razorpay_subscription_id,
+      ...result,
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('Reconcile subscription failed:', e.message);
+    res.status(500).json({ error: 'Could not reach Razorpay to reconcile — try again shortly.' });
+  }
 });
 
 // ── GET one owner's employees — powers the nested view on the dashboard
@@ -395,6 +447,63 @@ router.put('/config/:key', superadminAuth, async (req, res) => {
       [req.params.key, String(value)],
     );
     res.json({ success: true, key: req.params.key, value: String(value) });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── GET the logged-in admin's own account info ─────────────────────
+router.get('/account', superadminAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query('SELECT id, name, email FROM users WHERE id=$1', [req.userId]);
+    if (!rows[0]) return res.status(404).json({ error: 'Account not found' });
+    res.json(rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUT update the logged-in admin's own name/email ─────────────────
+// Env vars SUPERADMIN_EMAIL/SUPERADMIN_PASSWORD only ever matter for the
+// one-time seed (db/index.js) — once that row exists, this is the real,
+// permanent source of truth. Changing it here does not touch the env var,
+// which becomes irrelevant after first login, same as any seeded account.
+router.put('/account', superadminAuth, async (req, res) => {
+  const { name, email } = req.body;
+  if (!name?.trim() || !email?.trim()) return res.status(400).json({ error: 'Name and email are required' });
+  const trimmedEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) return res.status(400).json({ error: 'Invalid email address' });
+  try {
+    const dup = await pool.query('SELECT id FROM users WHERE email=$1 AND id<>$2', [trimmedEmail, req.userId]);
+    if (dup.rows.length > 0) return res.status(400).json({ error: 'Email already in use' });
+
+    const before = await pool.query('SELECT name, email FROM users WHERE id=$1', [req.userId]);
+    const result = await pool.query(
+      'UPDATE users SET name=$1, email=$2 WHERE id=$3 RETURNING id, name, email',
+      [name.trim(), trimmedEmail, req.userId],
+    );
+    await logAdminAction(req.userId, 'account_update', 'admin_account', req.userId, {
+      fields_changed: {
+        name: before.rows[0].name !== name.trim() ? { from: before.rows[0].name, to: name.trim() } : undefined,
+        email: before.rows[0].email !== trimmedEmail ? { from: before.rows[0].email, to: trimmedEmail } : undefined,
+      },
+    });
+    res.json(result.rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUT change the logged-in admin's own password ───────────────────
+router.put('/account/password', superadminAuth, async (req, res) => {
+  const { current_password, new_password } = req.body;
+  if (!current_password || !new_password) return res.status(400).json({ error: 'Current and new password are required' });
+  if (new_password.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  try {
+    const { rows } = await pool.query('SELECT password FROM users WHERE id=$1', [req.userId]);
+    if (!rows[0]) return res.status(404).json({ error: 'Account not found' });
+    const match = await bcrypt.compare(current_password, rows[0].password);
+    if (!match) return res.status(400).json({ error: 'Current password is incorrect' });
+
+    const hashed = await bcrypt.hash(new_password, 10);
+    await pool.query('UPDATE users SET password=$1 WHERE id=$2', [hashed, req.userId]);
+    // Never put the actual password (old or new) in the audit log.
+    await logAdminAction(req.userId, 'account_update', 'admin_account', req.userId, { fields_changed: { password: true } });
+    res.json({ success: true });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 

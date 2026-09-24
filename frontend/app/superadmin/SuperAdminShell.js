@@ -202,9 +202,24 @@ export default function SuperAdminShell({ children, headerRight }) {
           }}
         >
           <div style={{ flex: 1 }}>{headerRight}</div>
-          <div style={{ fontSize: 13, color: "var(--text-secondary)", fontFamily: "var(--font-main)", fontWeight: 600, whiteSpace: "nowrap", marginLeft: 16 }}>
-            {adminName || "Admin"}
-          </div>
+          <Link
+            href="/superadmin/account"
+            title="Account Settings"
+            style={{
+              fontSize: 13,
+              color: pathname === "/superadmin/account" ? "var(--teal-light)" : "var(--text-secondary)",
+              fontFamily: "var(--font-main)",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+              marginLeft: 16,
+              textDecoration: "none",
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            ⚙ {adminName || "Admin"}
+          </Link>
         </header>
         <main style={{ flex: 1, padding: "28px 32px" }}>{children}</main>
       </div>

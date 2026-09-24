@@ -39,6 +39,7 @@ export default function SuperAdminDashboard() {
   const [employeesModalUser, setEmployeesModalUser] = useState(null);
   const [savingLimit, setSavingLimit]   = useState(false);
   const [saving, setSaving]   = useState(false);
+  const [reconciling, setReconciling] = useState(null);
   const [toast, setToast]     = useState(null);
 
   useEffect(() => {
@@ -84,6 +85,17 @@ export default function SuperAdminDashboard() {
     if (!confirm("Delete this user permanently? All their data will be lost.")) return;
     try { await api.delete(`/superadmin/users/${id}`); showToast("User deleted"); loadAll(); }
     catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
+  };
+
+  const reconcileSubscription = async (u) => {
+    if (!confirm(`This will check Razorpay directly for ${u.name}'s subscription status. If Razorpay confirms it's actually active (e.g. a webhook was missed), their plan will be activated immediately. It will NOT cancel or downgrade anything.`)) return;
+    setReconciling(u.id);
+    try {
+      const { data } = await api.post(`/superadmin/users/${u.id}/reconcile-subscription`);
+      showToast(data.reconciled ? `Reconciled — plan is now active (Razorpay confirmed: ${data.razorpay_status})` : `No change — Razorpay reports: ${data.razorpay_status}`);
+      loadAll();
+    } catch (err) { showToast(err.response?.data?.error || "Failed to reconcile", "error"); }
+    setReconciling(null);
   };
 
   const filtered = users.filter(u => {
@@ -253,6 +265,37 @@ export default function SuperAdminDashboard() {
                 <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>{actionUser.name} — {actionUser.email}</div>
               </div>
               <button onClick={()=>setActionUser(null)} style={{ background:"none", border:"none", color:"var(--text-muted)", fontSize:20, cursor:"pointer" }}>✕</button>
+            </div>
+
+            {/* Razorpay billing visibility */}
+            <div style={{ marginBottom:20, padding:12, border:"1px solid var(--border)", borderRadius:10, background:"var(--bg-surface)" }}>
+              <Lbl>Razorpay Billing</Lbl>
+              {actionUser.razorpay_subscription_id ? (
+                <>
+                  <div style={{ fontSize:11, color:"var(--text-secondary)", fontFamily:"monospace", marginBottom:2 }}>
+                    Customer: {actionUser.razorpay_customer_id || "—"}
+                  </div>
+                  <div style={{ fontSize:11, color:"var(--text-secondary)", fontFamily:"monospace", marginBottom:8 }}>
+                    Subscription: {actionUser.razorpay_subscription_id}
+                  </div>
+                  {actionUser.sub_status === "past_due" && (
+                    <div style={{ fontSize:11, color:"var(--warn)", marginBottom:8 }}>
+                      Payment issue since {fmtDate(actionUser.past_due_since)}
+                    </div>
+                  )}
+                  <button
+                    onClick={()=>reconcileSubscription(actionUser)}
+                    disabled={reconciling===actionUser.id}
+                    style={{ padding:"6px 12px", borderRadius:6, background:"transparent", border:"1px solid var(--teal)", color:"var(--teal-light)", fontSize:11, fontWeight:600, cursor: reconciling===actionUser.id?"not-allowed":"pointer", fontFamily:"var(--font-main)" }}
+                  >
+                    {reconciling===actionUser.id ? "Checking with Razorpay…" : "🔄 Retry Reconciliation"}
+                  </button>
+                </>
+              ) : (
+                <div style={{ fontSize:11, color:"var(--text-muted)" }}>
+                  No recurring mandate — this tenant is on manual renewal (never set up auto-pay).
+                </div>
+              )}
             </div>
 
             {/* Action selector */}

@@ -903,6 +903,23 @@ const initDB = async () => {
       )
     `).catch((e) => console.log("razorpay_webhook_events create skip:", e.message));
 
+    // Every state-changing Super Admin action (plan changes, subscription
+    // overrides, tenant suspend/reactivate, impersonation, account-settings
+    // changes, ...) writes one row here — see utils/admin-audit.js. Purely
+    // read-only actions (viewing a tenant, viewing logs) don't log anything.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id SERIAL PRIMARY KEY,
+        admin_user_id INTEGER REFERENCES users(id),
+        action_type VARCHAR(60) NOT NULL,
+        target_type VARCHAR(40),
+        target_id INTEGER,
+        details JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch((e) => console.log("admin_audit_log create skip:", e.message));
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created_at ON admin_audit_log(created_at DESC)`).catch(() => {});
+
     // One-time rename: 'trial'->'trialing', 'cancelled'->'canceled' so the
     // whole app (backend + frontend) reads one consistent 5-state
     // vocabulary (trialing/active/past_due/canceled/expired). 'active' and
@@ -913,6 +930,13 @@ const initDB = async () => {
     `).catch((e) => console.log("status rename skip:", e.message));
 
     // ── STEP 6: Seed superadmin ──────────────────────────────
+    // SUPERADMIN_EMAIL/SUPERADMIN_PASSWORD only matter for this one-time
+    // seed (or if the row was deleted and needs recreating). Once the row
+    // exists, `PUT /superadmin/account` and `PUT /superadmin/account/password`
+    // (routes/superadmin.js) update the DB row directly and never touch
+    // these env vars — they become irrelevant after first login, same as
+    // any seeded admin account. Don't expect changing the env var to change
+    // an existing admin's live credentials.
     const bcrypt = require("bcryptjs");
     const saEmail = process.env.SUPERADMIN_EMAIL || "superadmin@zalgo.com";
     const saPass = process.env.SUPERADMIN_PASSWORD || "superadmin123";
