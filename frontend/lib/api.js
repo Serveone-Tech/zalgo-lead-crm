@@ -9,9 +9,15 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("crm_token") : null;
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  // A caller can pass its own Authorization header (e.g. the Super Admin
+  // impersonation banner authenticating as the stashed admin, not whatever
+  // token is currently active in localStorage) — only fall back to the
+  // stored token when the caller hasn't already set one.
+  if (!config.headers.Authorization) {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("crm_token") : null;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
@@ -24,6 +30,24 @@ api.interceptors.response.use(
         window.location.href = "/plans";
       } else if (code === "FEATURE_NOT_IN_PLAN") {
         window.location.href = "/plans?upgrade=1";
+      } else if (code === "ACCOUNT_BLOCKED" || code === "TENANT_SUSPENDED") {
+        const impersonating = localStorage.getItem("crm_impersonating");
+        if (impersonating) {
+          // Impersonating a tenant that turns out to be suspended/blocked —
+          // snap back to the admin's own session instead of logging the
+          // admin out of the whole app over someone else's account state.
+          try {
+            const stash = JSON.parse(impersonating);
+            localStorage.setItem("crm_token", stash.adminToken);
+            localStorage.setItem("crm_user", stash.adminUser);
+          } catch {}
+          localStorage.removeItem("crm_impersonating");
+          window.location.href = "/superadmin";
+        } else {
+          localStorage.removeItem("crm_token");
+          localStorage.removeItem("crm_user");
+          window.location.href = "/login";
+        }
       } else if (err?.response?.status === 401) {
         localStorage.removeItem("crm_token");
         localStorage.removeItem("crm_user");

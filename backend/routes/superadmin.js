@@ -144,6 +144,30 @@ router.post('/users/:id/impersonate', superadminAuth, async (req, res) => {
   }
 });
 
+// ── POST log the end of an impersonation session ────────────────────
+// Called by the frontend's "Return to Admin" action, authenticated as the
+// ADMIN (the frontend passes the stashed admin token explicitly, not
+// whatever token is currently active), so this always attributes correctly
+// even though the browser was just acting as the tenant a moment ago.
+// KNOWN GAP: if the admin closes the tab instead of clicking "Return to
+// Admin," or just lets the 30-minute token expire, no end event fires —
+// JWTs are stateless, so the server has no signal that a token merely
+// expired without ever being used again. The start event plus the token's
+// own 30-minute expiry bounds how stale an "unended" session can be, but a
+// real end timestamp isn't recoverable for that path.
+router.post('/impersonate/end', superadminAuth, async (req, res) => {
+  const { tenant_id, tenant_name } = req.body;
+  try {
+    await logAdminAction(req.userId, 'impersonate_end', 'tenant', parseInt(tenant_id) || null, {
+      tenant_name: tenant_name || '',
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('Impersonate-end logging failed:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ── GET one owner's employees — powers the nested view on the dashboard
 // (mixing owners and their sub-accounts into one flat list was confusing).
 router.get('/users/:id/employees', superadminAuth, async (req, res) => {

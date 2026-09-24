@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import api from "../lib/api";
 
 // Rendered unconditionally from the root layout (works on every
 // authenticated page, sidebar or not) — self-checks localStorage and
@@ -24,7 +25,19 @@ export default function ImpersonationBanner() {
 
   if (!impersonating) return null;
 
-  const returnToAdmin = () => {
+  const returnToAdmin = async () => {
+    // Authenticated explicitly as the ADMIN (the stashed token, not
+    // whatever's currently active — that's still the tenant's) so the end
+    // event attributes correctly. Best-effort — a failure here shouldn't
+    // block actually returning to the admin session.
+    await api
+      .post(
+        "/superadmin/impersonate/end",
+        { tenant_id: impersonating.tenantId, tenant_name: impersonating.tenantName },
+        { headers: { Authorization: `Bearer ${impersonating.adminToken}` } },
+      )
+      .catch(() => {});
+
     localStorage.setItem("crm_token", impersonating.adminToken);
     localStorage.setItem("crm_user", impersonating.adminUser);
     localStorage.removeItem("crm_impersonating");

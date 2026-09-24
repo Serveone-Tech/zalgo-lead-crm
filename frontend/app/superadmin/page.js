@@ -137,6 +137,7 @@ export default function SuperAdminDashboard() {
       // without a fresh login — ImpersonationBanner (rendered globally from
       // the root layout) reads this same key.
       localStorage.setItem("crm_impersonating", JSON.stringify({
+        tenantId: u.id,
         tenantName: u.name,
         adminToken: localStorage.getItem("crm_token"),
         adminUser: localStorage.getItem("crm_user"),
