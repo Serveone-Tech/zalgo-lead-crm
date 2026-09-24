@@ -21,6 +21,10 @@ const NAV_GROUPS = [
     items: [{ label: "Webhook Events", icon: "🔌", href: "/superadmin/webhook-events" }],
   },
   {
+    section: "TEAM",
+    items: [{ label: "Employee Search", icon: "🔎", href: "/superadmin/employees" }],
+  },
+  {
     section: "SYSTEM",
     items: [{ label: "Contact Requests", icon: "📩", href: "/superadmin/contact-requests" }],
   },

@@ -54,6 +54,31 @@ router.get('/users', superadminAuth, async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
+// ── GET search any employee by name/email across every tenant — the
+// existing nested view (GET /users/:id/employees) only shows one tenant's
+// staff at a time; this is for "find this specific person regardless of
+// which tenant they belong to" (support/abuse requests referencing an
+// email, not a company). Owners are excluded — this is about sub-accounts,
+// the tenant list above already covers owners. Requires an actual query;
+// an empty search returns nothing rather than dumping every employee.
+router.get('/employees/search', superadminAuth, async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json([]);
+  try {
+    const result = await pool.query(
+      `SELECT e.id, e.name, e.email, e.role_label, e.permissions, e.is_blocked, e.created_at,
+              e.parent_id AS tenant_id, o.name AS tenant_name, o.email AS tenant_email
+       FROM users e
+       JOIN users o ON o.id = e.parent_id
+       WHERE e.role='employee' AND (e.name ILIKE $1 OR e.email ILIKE $1)
+       ORDER BY e.created_at DESC
+       LIMIT 100`,
+      [`%${q}%`],
+    );
+    res.json(result.rows);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ── POST manually retry reconciliation for one tenant's subscription ──
 // Same razorpay.subscriptions.fetch() fallback the tenant-facing
 // /payments/subscription-status poll uses (see utils/razorpay-billing.js),
@@ -246,13 +271,19 @@ router.put('/users/:id/employees/:empId', superadminAuth, async (req, res) => {
 // ── PUT block/unblock an employee — they simply can't log in or use an
 // existing token while blocked; nothing else about their account changes.
 router.put('/users/:id/employees/:empId/block', superadminAuth, async (req, res) => {
+  const blocked = !!req.body.blocked;
   try {
     const result = await pool.query(
       `UPDATE users SET is_blocked=$1 WHERE id=$2 AND parent_id=$3
        RETURNING id, name, email, role_label, permissions, is_blocked, created_at`,
-      [!!req.body.blocked, req.params.empId, req.params.id],
+      [blocked, req.params.empId, req.params.id],
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Employee not found' });
+    await logAdminAction(req.userId, blocked ? 'employee_deactivate' : 'employee_reactivate', 'employee', parseInt(req.params.empId), {
+      employee_name: result.rows[0].name,
+      employee_email: result.rows[0].email,
+      tenant_id: parseInt(req.params.id),
+    });
     res.json(result.rows[0]);
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
