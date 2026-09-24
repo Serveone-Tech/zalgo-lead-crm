@@ -1,15 +1,13 @@
-// Shared human-readable labels for plan feature keys — used by the
-// authenticated in-app plan-selection page (app/plans/page.js) and the
-// public marketing pricing page (app/pricing/page.js), so both stay in
-// sync with whatever feature keys the backend actually gates
-// (backend/middleware/auth.js's requirePlanFeature calls).
-export const FEATURE_LABELS = {
-  core: "Lead Management (core)",
-  customers: "Customer & Payment Management",
-  lead_sources: "Automatic Lead Capture (Google Sheets, Google Ads, Meta Ads, WhatsApp, Calls)",
-  automation: "Outbound Automation (WhatsApp + Email + SMS)",
-  employees: "Team / Employee Management",
-};
+// Derived from ../../shared/plan-modules.js — that file is the single
+// canonical list of real plan feature keys (see its own header comment),
+// shared with backend/utils/plan-modules.js's validation. This is not a
+// second hand-maintained copy of the key list, just the label lookup built
+// on top of it for the authenticated in-app plan-selection page
+// (app/plans/page.js), the public marketing pricing page
+// (app/pricing/page.js), and the Super Admin plan editor's checkboxes.
+import { MODULES } from "../../shared/plan-modules";
+
+export const FEATURE_LABELS = Object.fromEntries(MODULES.map((m) => [m.key, m.label]));
 
 // `sub` is whatever `/auth/subscription` (or `GET /auth/me`'s embedded
 // subscription) last returned — `features` may come back as a JSON string

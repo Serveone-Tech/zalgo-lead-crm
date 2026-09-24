@@ -47,13 +47,13 @@ export default function SuperAdminPlansPage() {
   const openAdd = () => { setEditPlan(null); setForm(EMPTY); setShowForm(true); };
   const openEdit = (p) => {
     setEditPlan(p);
-    // Only keys the checkboxes actually know about survive here — any
-    // legacy junk from the old free-text days (a typo, a since-removed
-    // key) silently drops on the next save instead of being unenforceable
-    // forever.
+    // Keep the RAW features as-loaded — including any legacy junk key from
+    // the old free-text days (a typo, a since-removed key). Checkboxes only
+    // render/control keys the panel actually knows about; junk keys stay
+    // invisible but present until the admin explicitly confirms removing
+    // them at save time (see savePlan) — never stripped silently.
     const rawFeatures = Array.isArray(p.features)?p.features:JSON.parse(p.features||"[]");
-    const features = rawFeatures.filter((f)=>FEATURE_LABELS[f]);
-    setForm({ ...p, features, price_monthly:p.price_monthly||"", price_yearly:p.price_yearly||"", max_leads: p.max_leads||"-1", max_customers: p.max_customers||"-1", sort_order: p.sort_order||"0", trial_days: p.trial_days||"0" });
+    setForm({ ...p, features: rawFeatures, price_monthly:p.price_monthly||"", price_yearly:p.price_yearly||"", max_leads: p.max_leads||"-1", max_customers: p.max_customers||"-1", sort_order: p.sort_order||"0", trial_days: p.trial_days||"0" });
     setShowForm(true);
   };
 
@@ -65,9 +65,17 @@ export default function SuperAdminPlansPage() {
   };
 
   const savePlan = async (e) => {
-    e.preventDefault(); setSaving(true);
+    e.preventDefault();
+    const knownFeatures = form.features.filter((f)=>FEATURE_LABELS[f]);
+    const junkFeatures = form.features.filter((f)=>!FEATURE_LABELS[f]);
+    if (junkFeatures.length > 0) {
+      if (!confirm(`Removing unrecognized key(s): ${junkFeatures.join(", ")} — these aren't enforced by anything and have no checkbox. Continue saving without them?`)) {
+        return;
+      }
+    }
+    setSaving(true);
     try {
-      const payload = { ...form, features: form.features };
+      const payload = { ...form, features: knownFeatures };
       if (editPlan) await api.put(`/superadmin/plans/${editPlan.id}`, payload);
       else await api.post("/superadmin/plans", payload);
       showToast(editPlan?"Plan updated!":"Plan created!");
