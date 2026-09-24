@@ -6,6 +6,7 @@ const { PERMISSION_KEYS } = require('../utils/permissions');
 const mailer = require('../utils/mailer');
 const { getRazorpay, activateFromCharge } = require('../utils/razorpay-billing');
 const { logAdminAction } = require('../utils/admin-audit');
+const { validateFeatures } = require('../utils/plan-modules');
 
 const router = express.Router();
 
@@ -274,6 +275,8 @@ router.get('/plans', superadminAuth, async (req, res) => {
 router.post('/plans', superadminAuth, async (req, res) => {
   const { name, description, price_monthly, price_yearly, trial_days, is_free, max_leads, max_customers, features, sort_order } = req.body;
   if (!name) return res.status(400).json({ error: 'Plan name required' });
+  const featuresError = validateFeatures(features || []);
+  if (featuresError) return res.status(400).json({ error: featuresError });
   try {
     const result = await pool.query(
       `INSERT INTO plans (name, description, price_monthly, price_yearly, trial_days, is_free, max_leads, max_customers, features, sort_order, is_active)
@@ -289,6 +292,8 @@ router.post('/plans', superadminAuth, async (req, res) => {
 // ── PUT update plan
 router.put('/plans/:id', superadminAuth, async (req, res) => {
   const { name, description, price_monthly, price_yearly, trial_days, is_free, max_leads, max_customers, features, is_active, sort_order } = req.body;
+  const featuresError = validateFeatures(features || []);
+  if (featuresError) return res.status(400).json({ error: featuresError });
   try {
     const result = await pool.query(
       `UPDATE plans SET name=$1, description=$2, price_monthly=$3, price_yearly=$4,

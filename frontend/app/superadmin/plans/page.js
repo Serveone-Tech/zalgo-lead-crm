@@ -3,8 +3,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../../lib/api";
 import SuperAdminShell from "../SuperAdminShell";
+import { FEATURE_LABELS } from "../../../lib/plan-features";
 
-const EMPTY = { name:"", description:"", price_monthly:"", price_yearly:"", trial_days:"0", is_free:false, max_leads:"-1", max_customers:"-1", is_active:true, sort_order:"0", features:"" };
+const EMPTY = { name:"", description:"", price_monthly:"", price_yearly:"", trial_days:"0", is_free:false, max_leads:"-1", max_customers:"-1", is_active:true, sort_order:"0", features:[] };
 
 export default function SuperAdminPlansPage() {
   const router = useRouter();
@@ -46,16 +47,27 @@ export default function SuperAdminPlansPage() {
   const openAdd = () => { setEditPlan(null); setForm(EMPTY); setShowForm(true); };
   const openEdit = (p) => {
     setEditPlan(p);
-    const features = Array.isArray(p.features)?p.features:JSON.parse(p.features||"[]");
-    setForm({ ...p, features: features.join("\n"), price_monthly:p.price_monthly||"", price_yearly:p.price_yearly||"", max_leads: p.max_leads||"-1", max_customers: p.max_customers||"-1", sort_order: p.sort_order||"0", trial_days: p.trial_days||"0" });
+    // Only keys the checkboxes actually know about survive here — any
+    // legacy junk from the old free-text days (a typo, a since-removed
+    // key) silently drops on the next save instead of being unenforceable
+    // forever.
+    const rawFeatures = Array.isArray(p.features)?p.features:JSON.parse(p.features||"[]");
+    const features = rawFeatures.filter((f)=>FEATURE_LABELS[f]);
+    setForm({ ...p, features, price_monthly:p.price_monthly||"", price_yearly:p.price_yearly||"", max_leads: p.max_leads||"-1", max_customers: p.max_customers||"-1", sort_order: p.sort_order||"0", trial_days: p.trial_days||"0" });
     setShowForm(true);
+  };
+
+  const toggleFeature = (key) => {
+    setForm((f) => ({
+      ...f,
+      features: f.features.includes(key) ? f.features.filter((k)=>k!==key) : [...f.features, key],
+    }));
   };
 
   const savePlan = async (e) => {
     e.preventDefault(); setSaving(true);
     try {
-      const features = form.features.split("\n").map(f=>f.trim()).filter(Boolean);
-      const payload = { ...form, features };
+      const payload = { ...form, features: form.features };
       if (editPlan) await api.put(`/superadmin/plans/${editPlan.id}`, payload);
       else await api.post("/superadmin/plans", payload);
       showToast(editPlan?"Plan updated!":"Plan created!");
@@ -145,7 +157,7 @@ export default function SuperAdminPlansPage() {
                     <ul style={{ listStyle:"none", margin:"0 0 16px", padding:0 }}>
                       {features.slice(0,4).map((f,i)=>(
                         <li key={i} style={{ fontSize:11, color:"var(--text-secondary)", marginBottom:4, display:"flex", gap:6 }}>
-                          <span style={{ color:"var(--success)" }}>✓</span>{f}
+                          <span style={{ color:"var(--success)" }}>✓</span>{FEATURE_LABELS[f] || f}
                         </li>
                       ))}
                       {features.length>4 && <li style={{ fontSize:11, color:"var(--text-muted)" }}>+{features.length-4} more...</li>}
@@ -220,8 +232,20 @@ export default function SuperAdminPlansPage() {
                 </div>
 
                 <div style={{ gridColumn:"1/-1" }}>
-                  <Lbl>Features (one per line)</Lbl>
-                  <textarea name="features" value={form.features} onChange={handle} rows={5} placeholder={"Unlimited Leads\nPayment Tracking\nAutomation\nEmail Support"} style={{ ...inp, resize:"vertical", minHeight:100 }} />
+                  <Lbl>Modules Included</Lbl>
+                  <div style={{ display:"flex", flexDirection:"column", gap:8, background:"var(--bg-input)", border:"1px solid var(--border)", borderRadius:8, padding:"10px 12px" }}>
+                    {Object.entries(FEATURE_LABELS).map(([key, label]) => (
+                      <div key={key} style={{ display:"flex", alignItems:"center", gap:10 }}>
+                        <input
+                          type="checkbox"
+                          id={`feat-${key}`}
+                          checked={form.features.includes(key)}
+                          onChange={()=>toggleFeature(key)}
+                        />
+                        <label htmlFor={`feat-${key}`} style={{ fontSize:12.5, color:"var(--text-secondary)", cursor:"pointer" }}>{label}</label>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
