@@ -330,6 +330,131 @@ router.get('/stats', superadminAuth, async (req, res) => {
 // survives restarts), and whether Razorpay's webhook secret is configured
 // (nothing activates/renews automatically without it — see the billing
 // work's own go-live checklist). Cheap, all read-only, no caching needed.
+// ── GET revenue/growth analytics ────────────────────────────────────
+// One shared `days` window (default 30, options 30/60/90 from the
+// frontend) drives the 3 time-windowed metrics below (conversion, churn,
+// signups) so they stay comparable to each other. MRR and the subscriber
+// breakdown are always "right now" snapshots, not affected by the window
+// — there's no dedicated subscription-history/event table, so those two
+// wouldn't be meaningfully reconstructable for a past date anyway.
+//
+// IMPORTANT CAVEAT, worth reading before trusting these numbers: MRR uses
+// each plan's CURRENT list price (price_monthly, or price_yearly/12 for
+// annual), not `subscriptions.amount_paid` — every single amount_paid
+// value in the live DB is 0.00 (these subscriptions were almost all
+// manually activated by Super Admin, which never set it, rather than
+// through a real Razorpay payment), so amount_paid is currently useless
+// as a revenue signal. Conversion and churn are reconstructed from
+// existing row timestamps (starts_at/ends_at/trial_ends_at) rather than a
+// true event log, since most historical plan changes insert a NEW
+// subscriptions row per transition instead of updating one in place (only
+// the newer Razorpay-webhook-driven recurring flow updates in place) — a
+// user's trial "converting" is inferred as that same user later having
+// any row reach active/past_due, not a single row's own status changing.
+router.get('/analytics', superadminAuth, async (req, res) => {
+  const days = [30, 60, 90].includes(parseInt(req.query.days)) ? parseInt(req.query.days) : 30;
+  try {
+    // 1. MRR by plan (current snapshot)
+    const mrrRows = await pool.query(`
+      SELECT p.id AS plan_id, p.name AS plan_name,
+             SUM(CASE WHEN s.billing_cycle='yearly' THEN p.price_yearly / 12.0 ELSE p.price_monthly END) AS mrr,
+             COUNT(*) AS subscriber_count
+      FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+      WHERE s.status IN ('active','past_due')
+      GROUP BY p.id, p.name
+      ORDER BY mrr DESC
+    `);
+    const mrrTotal = mrrRows.rows.reduce((sum, r) => sum + parseFloat(r.mrr), 0);
+
+    // 2. Subscriber breakdown by plan + status (current snapshot)
+    const breakdownRows = await pool.query(`
+      SELECT p.name AS plan_name, s.status, COUNT(*) AS count
+      FROM subscriptions s JOIN plans p ON p.id = s.plan_id
+      WHERE s.status IN ('trialing','active','past_due','canceled','expired')
+      GROUP BY p.name, s.status
+      ORDER BY p.name, s.status
+    `);
+
+    // 3. Trial-to-paid conversion — first trial row per user that started
+    // within the window; "converted" = that same user later has any row
+    // reach active/past_due.
+    const conversionRes = await pool.query(`
+      WITH trials AS (
+        SELECT DISTINCT ON (user_id) user_id, starts_at
+        FROM subscriptions
+        WHERE trial_ends_at IS NOT NULL
+          AND starts_at >= NOW() - INTERVAL '${days} days'
+        ORDER BY user_id, starts_at ASC
+      )
+      SELECT
+        COUNT(*) AS trial_count,
+        COUNT(*) FILTER (
+          WHERE EXISTS (
+            SELECT 1 FROM subscriptions p2
+            WHERE p2.user_id = trials.user_id AND p2.status IN ('active','past_due') AND p2.starts_at >= trials.starts_at
+          )
+        ) AS converted_count
+      FROM trials
+    `);
+
+    // 4. Churn — users with a non-trial row covering the start of the
+    // window, of those, how many have a row that ended (canceled/expired)
+    // during the window.
+    const churnRes = await pool.query(`
+      WITH active_at_start AS (
+        SELECT DISTINCT user_id
+        FROM subscriptions
+        WHERE status <> 'trialing'
+          AND starts_at <= NOW() - INTERVAL '${days} days'
+          AND (ends_at IS NULL OR ends_at > NOW() - INTERVAL '${days} days')
+      ),
+      churned AS (
+        SELECT DISTINCT a.user_id
+        FROM active_at_start a
+        JOIN subscriptions s2 ON s2.user_id = a.user_id
+        WHERE s2.status IN ('canceled','expired')
+          AND s2.ends_at IS NOT NULL
+          AND s2.ends_at > NOW() - INTERVAL '${days} days'
+          AND s2.ends_at <= NOW()
+      )
+      SELECT (SELECT COUNT(*) FROM active_at_start) AS base_count, (SELECT COUNT(*) FROM churned) AS churned_count
+    `);
+
+    // 5. New signups per day over the window
+    const signupsRes = await pool.query(`
+      SELECT DATE(created_at) AS day, COUNT(*) AS count
+      FROM users
+      WHERE role='user' AND parent_id IS NULL
+        AND created_at >= NOW() - INTERVAL '${days} days'
+      GROUP BY DATE(created_at)
+      ORDER BY day ASC
+    `);
+
+    const conv = conversionRes.rows[0];
+    const churn = churnRes.rows[0];
+
+    res.json({
+      window_days: days,
+      mrr: {
+        total: mrrTotal,
+        by_plan: mrrRows.rows.map((r) => ({ plan_name: r.plan_name, mrr: parseFloat(r.mrr), subscriber_count: parseInt(r.subscriber_count) })),
+      },
+      subscribers: breakdownRows.rows.map((r) => ({ plan_name: r.plan_name, status: r.status, count: parseInt(r.count) })),
+      conversion: {
+        trial_count: parseInt(conv.trial_count),
+        converted_count: parseInt(conv.converted_count),
+        rate: parseInt(conv.trial_count) > 0 ? (parseInt(conv.converted_count) / parseInt(conv.trial_count)) * 100 : null,
+      },
+      churn: {
+        base_count: parseInt(churn.base_count),
+        churned_count: parseInt(churn.churned_count),
+        rate: parseInt(churn.base_count) > 0 ? (parseInt(churn.churned_count) / parseInt(churn.base_count)) * 100 : null,
+      },
+      signups: signupsRes.rows.map((r) => ({ day: r.day, count: parseInt(r.count) })),
+    });
+  } catch (e) { console.error('Analytics query failed:', e.message); res.status(500).json({ error: 'Server error' }); }
+});
+
 router.get('/health', superadminAuth, async (req, res) => {
   const health = {
     db_ok: false,

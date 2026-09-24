@@ -10,7 +10,10 @@ import Image from "next/image";
 const NAV_GROUPS = [
   {
     section: "OVERVIEW",
-    items: [{ label: "Tenants", icon: "🏢", href: "/superadmin" }],
+    items: [
+      { label: "Tenants", icon: "🏢", href: "/superadmin" },
+      { label: "Analytics", icon: "📈", href: "/superadmin/analytics" },
+    ],
   },
   {
     section: "PLANS",
