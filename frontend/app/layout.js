@@ -33,6 +33,17 @@ export default function RootLayout({ children }) {
               y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
           })(window, document, "clarity", "script", "ymtpm0f0oq");`}
         </Script>
+        <Script
+          id="ga-gtag-src"
+          strategy="afterInteractive"
+          src="https://www.googletagmanager.com/gtag/js?id=G-1SMBDYMK3W"
+        />
+        <Script id="ga-gtag-init" strategy="afterInteractive">
+          {`window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-1SMBDYMK3W');`}
+        </Script>
       </head>
       <body>
         {hideSidebar ? (
