@@ -21,7 +21,8 @@ async function sweepGraceExpiry() {
      FROM subscriptions s
      JOIN plans p ON p.id = s.plan_id
      JOIN users u ON u.id = s.user_id
-     WHERE s.status='past_due' AND s.past_due_since < NOW() - INTERVAL '${GRACE_DAYS} days'`,
+     WHERE s.status='past_due' AND s.razorpay_subscription_id IS NOT NULL
+       AND s.past_due_since < NOW() - INTERVAL '${GRACE_DAYS} days'`,
   );
   for (const row of rows) {
     await pool.query("UPDATE subscriptions SET status='expired' WHERE id=$1", [row.id]);
