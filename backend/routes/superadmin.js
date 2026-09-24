@@ -307,6 +307,7 @@ router.get('/health', superadminAuth, async (req, res) => {
     razorpay_keys_configured: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
     razorpay_webhook_secret_configured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
     superadmin_count: null,
+    failed_webhooks_24h: null,
   };
   try {
     await pool.query('SELECT 1');
@@ -332,6 +333,18 @@ router.get('/health', superadminAuth, async (req, res) => {
     health.superadmin_count = parseInt(saCount.rows[0].count);
   } catch (e) {
     console.error('Health check: superadmin count query failed:', e.message);
+  }
+  try {
+    // Failed webhooks get no automatic retry from either side (see
+    // routes/webhooks.js) — this is currently the only passive signal that
+    // one happened at all, short of opening the dedicated Webhook Events
+    // page.
+    const failedRow = await pool.query(
+      "SELECT COUNT(*) FROM razorpay_webhook_events WHERE status='failed' AND processed_at > NOW() - INTERVAL '24 hours'",
+    );
+    health.failed_webhooks_24h = parseInt(failedRow.rows[0].count);
+  } catch (e) {
+    console.error('Health check: failed-webhooks query failed:', e.message);
   }
   res.json(health);
 });

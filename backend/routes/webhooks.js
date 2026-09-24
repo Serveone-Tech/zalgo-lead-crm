@@ -603,6 +603,23 @@ router.post("/razorpay", async (req, res) => {
     // also doubles as the event log the Super Admin panel reads — status
     // starts 'received' and is updated to 'processed'/'failed' below once
     // we know the outcome.
+    //
+    // KNOWN EDGE CASE (documented, not fixed — see chat history for the
+    // full analysis): the claim below and the status update at the bottom
+    // of this handler are two separate statements, not one transaction. If
+    // the process crashes/restarts in the narrow window between them, the
+    // row is left stuck at status='received' forever — a Razorpay retry of
+    // that same event then hits ON CONFLICT DO NOTHING and gets silently
+    // skipped as a "duplicate," even though it was never actually
+    // processed. This isn't new — the original claim-then-process
+    // structure always had this gap; the status tracking here just makes
+    // a stuck row observable (superadmin/webhook-events UI flags anything
+    // stuck at 'received' past ~10 minutes) instead of leaving it
+    // invisible. Deliberately NOT redesigning this into a claim-as-
+    // "processing" + background-requeue-sweep pattern right now — that's
+    // a real change to the idempotency core of a live billing system, and
+    // the failure window is narrow enough (a crash in the few
+    // milliseconds between these two statements) to accept for now.
     if (eventId) {
       const claim = await pool.query(
         "INSERT INTO razorpay_webhook_events (event_id, event_type) VALUES ($1,$2) ON CONFLICT (event_id) DO NOTHING RETURNING event_id",

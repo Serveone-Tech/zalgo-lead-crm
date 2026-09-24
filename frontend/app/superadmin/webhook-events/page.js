@@ -54,7 +54,15 @@ export default function WebhookEventsPage() {
     [filtered, page, pageSize],
   );
 
+  // A row still sitting at 'received' more than ~10 minutes after arriving
+  // never finished processing (most likely a server crash/restart between
+  // the claim and the status update — see the comment at the claim in
+  // routes/webhooks.js) — Razorpay itself has already given up retrying it
+  // by this point (it treats our 200-OK receipt as delivered), so nothing
+  // else is coming. Flagging it here is the only place this becomes visible.
+  const isStuck = (e) => e.status === "received" && Date.now() - new Date(e.processed_at).getTime() > 10 * 60 * 1000;
   const failedCount = events.filter((e) => e.status === "failed").length;
+  const stuckCount = events.filter(isStuck).length;
 
   return (
     <SuperAdminShell>
@@ -64,6 +72,9 @@ export default function WebhookEventsPage() {
           Every Razorpay webhook received — the last 200 events, newest first.
           {failedCount > 0 && (
             <span style={{ color: "var(--danger)", fontWeight: 700 }}> {failedCount} failed — review below.</span>
+          )}
+          {stuckCount > 0 && (
+            <span style={{ color: "var(--warn)", fontWeight: 700 }}> {stuckCount} stuck mid-processing — never completed, nothing will retry them automatically.</span>
           )}
         </p>
       </div>
@@ -105,12 +116,20 @@ export default function WebhookEventsPage() {
                 </thead>
                 <tbody>
                   {paged.map((e) => {
-                    const sc = STATUS_COLORS[e.status] || { bg: "rgba(100,100,100,0.12)", color: "#888", label: e.status || "—" };
+                    const stuck = isStuck(e);
+                    const sc = stuck
+                      ? { bg: "rgba(230,168,23,0.15)", color: "#e6a817", label: "Stuck" }
+                      : STATUS_COLORS[e.status] || { bg: "rgba(100,100,100,0.12)", color: "#888", label: e.status || "—" };
                     return (
                       <tr key={e.event_id} style={{ borderBottom: "1px solid var(--border)" }}>
                         <td style={{ padding: "12px 14px", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 12.5, color: "var(--text-primary)" }}>{e.event_type || "—"}</td>
                         <td style={{ padding: "12px 14px" }}>
-                          <span style={{ background: sc.bg, color: sc.color, fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "3px 10px", fontFamily: "var(--font-main)" }}>{sc.label}</span>
+                          <span
+                            title={stuck ? "Never finished processing — a retry from Razorpay will be silently skipped as a duplicate. No automatic recovery; see the tenant's Manage Subscription modal to manually reconcile if needed." : undefined}
+                            style={{ background: sc.bg, color: sc.color, fontSize: 10, fontWeight: 700, borderRadius: 20, padding: "3px 10px", fontFamily: "var(--font-main)" }}
+                          >
+                            {stuck ? "⚠ " : ""}{sc.label}
+                          </span>
                         </td>
                         <td style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-secondary)" }}>{e.tenant_name || "—"}</td>
                         <td style={{ padding: "12px 14px", fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtDate(e.processed_at)}</td>

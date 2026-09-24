@@ -560,6 +560,11 @@ function HealthStrip({ health }) {
       ok: health.superadmin_count === 1,
       detail: health.superadmin_count == null ? "Unknown" : health.superadmin_count === 1 ? "1 (expected)" : `${health.superadmin_count} — unexpected, review`,
     },
+    {
+      label: "Failed Webhooks (24h)",
+      ok: !health.failed_webhooks_24h,
+      detail: health.failed_webhooks_24h == null ? "Unknown" : health.failed_webhooks_24h === 0 ? "None" : `${health.failed_webhooks_24h} — no auto-retry, review Webhook Events`,
+    },
   ];
   return (
     <div style={{ display:"flex", flexWrap:"wrap", gap:10, marginBottom:24 }}>
