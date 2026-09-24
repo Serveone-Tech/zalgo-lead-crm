@@ -27,6 +27,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     setTheme(localStorage.getItem("crm_theme") || "dark");
+    // Plain window.location.search read (not useSearchParams) so this page
+    // doesn't need a Suspense boundary just for this one param.
+    if (new URLSearchParams(window.location.search).get("reason") === "suspended") {
+      setError("This account has been suspended. Contact support.");
+    }
     const token = localStorage.getItem("crm_token");
     const user = localStorage.getItem("crm_user");
     if (token && user) {

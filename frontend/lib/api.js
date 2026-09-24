@@ -46,7 +46,11 @@ api.interceptors.response.use(
         } else {
           localStorage.removeItem("crm_token");
           localStorage.removeItem("crm_user");
-          window.location.href = "/login";
+          // ?reason=suspended so the login page can show a clear message
+          // immediately instead of a silent redirect to a blank form — the
+          // person only otherwise finds out why if they try logging back
+          // in, which /auth/login already messages, just not proactively.
+          window.location.href = "/login?reason=suspended";
         }
       } else if (err?.response?.status === 401) {
         localStorage.removeItem("crm_token");
