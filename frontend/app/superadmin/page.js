@@ -47,6 +47,7 @@ export default function SuperAdminDashboard() {
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast]     = useState(null);
+  const [health, setHealth]   = useState(null);
 
   useEffect(() => {
     const user = localStorage.getItem("crm_user");
@@ -54,6 +55,10 @@ export default function SuperAdminDashboard() {
     const u = JSON.parse(user);
     if (u.role !== "superadmin") { router.push("/dashboard"); return; }
     loadAll();
+    // Separate from loadAll — a health-check hiccup shouldn't boot the
+    // admin back to /login the way a real auth failure on the core data
+    // would.
+    api.get("/superadmin/health").then((r)=>setHealth(r.data)).catch(()=>{});
   }, []);
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
@@ -185,6 +190,8 @@ export default function SuperAdminDashboard() {
           <h1 style={{ fontFamily:"var(--font-main)", fontSize:22, fontWeight:700, color:"var(--text-primary)" }}>Tenants</h1>
           <p style={{ color:"var(--text-muted)", fontSize:13, marginTop:4 }}>Manage all tenants, subscriptions and plans</p>
         </div>
+
+        {health && <HealthStrip health={health} />}
 
         {/* Stats */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(160px,1fr))", gap:12, marginBottom:32 }}>
@@ -519,5 +526,59 @@ export default function SuperAdminDashboard() {
 
 function Lbl({children}) {
   return <label style={{ display:"block", fontSize:10, color:"var(--text-secondary)", marginBottom:5, fontWeight:500, letterSpacing:"0.05em", textTransform:"uppercase", fontFamily:"var(--font-main)" }}>{children}</label>;
+}
+
+function timeAgo(iso) {
+  if (!iso) return null;
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  return `${hrs}h ago`;
+}
+
+function HealthStrip({ health }) {
+  const items = [
+    { label: "Database", ok: health.db_ok, detail: health.db_ok ? "Connected" : "Unreachable" },
+    {
+      label: "Billing Cron",
+      ok: health.cron_last_run != null && !health.cron_stale,
+      detail: health.cron_last_run ? `Last ran ${timeAgo(health.cron_last_run)}` : "Never ran",
+    },
+    {
+      label: "Razorpay Keys",
+      ok: health.razorpay_keys_configured,
+      detail: health.razorpay_keys_configured ? "Configured" : "Missing",
+    },
+    {
+      label: "Webhook Secret",
+      ok: health.razorpay_webhook_secret_configured,
+      detail: health.razorpay_webhook_secret_configured ? "Configured" : "Missing — renewals won't auto-activate",
+    },
+    {
+      label: "Admin Accounts",
+      ok: health.superadmin_count === 1,
+      detail: health.superadmin_count == null ? "Unknown" : health.superadmin_count === 1 ? "1 (expected)" : `${health.superadmin_count} — unexpected, review`,
+    },
+  ];
+  return (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:10, marginBottom:24 }}>
+      {items.map((it) => (
+        <div
+          key={it.label}
+          title={it.detail}
+          style={{
+            display:"flex", alignItems:"center", gap:8, padding:"8px 14px",
+            background:"var(--bg-card)", border:`1px solid ${it.ok ? "var(--border)" : "rgba(224,82,82,0.4)"}`,
+            borderRadius:20, fontSize:11.5, fontFamily:"var(--font-main)",
+          }}
+        >
+          <span style={{ width:8, height:8, borderRadius:"50%", background: it.ok ? "var(--success)" : "var(--danger)", flexShrink:0 }} />
+          <span style={{ color:"var(--text-secondary)", fontWeight:600 }}>{it.label}</span>
+          <span style={{ color: it.ok ? "var(--text-muted)" : "var(--danger)" }}>{it.detail}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 const inp = { width:"100%", padding:"9px 11px", background:"var(--bg-input)", border:"1px solid var(--border)", borderRadius:8, color:"var(--text-primary)", fontSize:13, outline:"none" };

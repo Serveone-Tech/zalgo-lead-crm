@@ -98,6 +98,19 @@ async function sweepMigrationNotices() {
 }
 
 async function runAllSweeps() {
+  // Written up front, not after — this records "the cron actually fired,"
+  // which is what a health check needs (is it alive at all), independent
+  // of whether any individual sweep below succeeds. Persisted (not just
+  // in-memory) so it survives a restart instead of showing "unknown"
+  // right after a deploy.
+  await pool
+    .query(
+      `INSERT INTO platform_config (key, value) VALUES ('billing_cron_last_run', $1)
+       ON CONFLICT (key) DO UPDATE SET value=$1`,
+      [new Date().toISOString()],
+    )
+    .catch((e) => console.error("[billing-cron] failed to record last-run time:", e.message));
+
   try {
     await sweepGraceExpiry();
     await sweepTrialReminders();

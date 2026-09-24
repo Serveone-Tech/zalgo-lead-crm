@@ -294,6 +294,48 @@ router.get('/stats', superadminAuth, async (req, res) => {
   } catch { res.status(500).json({ error: 'Server error' }); }
 });
 
+// ── GET a quick system health snapshot — DB connectivity, whether the
+// billing cron is actually alive (last-run timestamp, persisted so it
+// survives restarts), and whether Razorpay's webhook secret is configured
+// (nothing activates/renews automatically without it — see the billing
+// work's own go-live checklist). Cheap, all read-only, no caching needed.
+router.get('/health', superadminAuth, async (req, res) => {
+  const health = {
+    db_ok: false,
+    cron_last_run: null,
+    cron_stale: null,
+    razorpay_keys_configured: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+    razorpay_webhook_secret_configured: !!process.env.RAZORPAY_WEBHOOK_SECRET,
+    superadmin_count: null,
+  };
+  try {
+    await pool.query('SELECT 1');
+    health.db_ok = true;
+  } catch (e) {
+    console.error('Health check: DB ping failed:', e.message);
+  }
+  try {
+    const cronRow = await pool.query("SELECT value FROM platform_config WHERE key='billing_cron_last_run'");
+    if (cronRow.rows[0]) {
+      health.cron_last_run = cronRow.rows[0].value;
+      // The cron runs hourly — more than 90 minutes since the last run
+      // means it's either stuck or the process restarted and hasn't
+      // ticked yet, worth flagging rather than silently trusting a stale
+      // timestamp.
+      health.cron_stale = (Date.now() - new Date(cronRow.rows[0].value).getTime()) > 90 * 60 * 1000;
+    }
+  } catch (e) {
+    console.error('Health check: cron status query failed:', e.message);
+  }
+  try {
+    const saCount = await pool.query("SELECT COUNT(*) FROM users WHERE role='superadmin'");
+    health.superadmin_count = parseInt(saCount.rows[0].count);
+  } catch (e) {
+    console.error('Health check: superadmin count query failed:', e.message);
+  }
+  res.json(health);
+});
+
 // ── GET contact form submissions (marketing site inbox)
 router.get('/contact-requests', superadminAuth, async (req, res) => {
   try {
