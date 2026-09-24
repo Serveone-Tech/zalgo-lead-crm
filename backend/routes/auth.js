@@ -122,6 +122,17 @@ router.post("/login", async (req, res) => {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ error: "Invalid credentials" });
     if (user.is_blocked) return res.status(403).json({ error: "This account has been blocked. Contact your admin." });
+    // A Super Admin suspension on the OWNER locks out every employee too —
+    // matches the same cascading check in middleware/auth.js's `auth`, just
+    // surfaced with a clear message at login instead of a generic 403 on
+    // the first API call after.
+    const ownerId = user.parent_id || user.id;
+    const ownerRow = user.parent_id
+      ? (await pool.query("SELECT suspended_by_admin FROM users WHERE id=$1", [ownerId])).rows[0]
+      : user;
+    if (ownerRow?.suspended_by_admin) {
+      return res.status(403).json({ error: "This account has been suspended. Contact support." });
+    }
     // Only self-registered owners go through OTP verification (see
     // /register) — employees/superadmin-created accounts default to
     // verified so this never affects them.

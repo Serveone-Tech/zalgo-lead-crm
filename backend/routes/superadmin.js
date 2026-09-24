@@ -28,7 +28,7 @@ router.get('/users', superadminAuth, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        u.id, u.name, u.email, u.role, u.onboarded, u.created_at,
+        u.id, u.name, u.email, u.role, u.onboarded, u.created_at, u.suspended_by_admin,
         o.name as org_name, o.phone as org_phone, o.logo_url,
         s.id as sub_id, s.status as sub_status, s.billing_cycle,
         s.starts_at, s.ends_at, s.trial_ends_at, s.amount_paid,
@@ -426,11 +426,61 @@ router.put('/users/:id/employee-limit', superadminAuth, async (req, res) => {
 });
 
 // ── DELETE user
-router.delete('/users/:id', superadminAuth, async (req, res) => {
+// ── PUT suspend/reactivate a whole tenant ───────────────────────────
+// Now the default "remove access" action — reversible, and unlike hard
+// delete, keeps every byte of the tenant's data intact. See the cascading
+// check in middleware/auth.js: suspending the owner locks out every one of
+// their employees too, without touching any employee's own is_blocked
+// state, so reactivating restores everyone exactly as they were.
+router.put('/users/:id/suspend', superadminAuth, async (req, res) => {
+  const suspended = !!req.body.suspended;
   try {
-    await pool.query('DELETE FROM users WHERE id=$1 AND role!=\'superadmin\'', [req.params.id]);
+    const owner = await requireOwner(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'Owner not found' });
+    const result = await pool.query(
+      'UPDATE users SET suspended_by_admin=$1 WHERE id=$2 RETURNING id, name, email, suspended_by_admin',
+      [suspended, req.params.id],
+    );
+    await logAdminAction(req.userId, suspended ? 'tenant_suspend' : 'tenant_reactivate', 'tenant', parseInt(req.params.id), {
+      tenant_name: result.rows[0].name,
+    });
+    res.json(result.rows[0]);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── DELETE a tenant permanently — irreversible, requires typing the exact
+// tenant name to confirm (checked here, not just in the UI, so this can
+// never be triggered by a stray/replayed API call without that match).
+// Suspend (above) is the default action now; this stays available for
+// genuine cleanup (spam signups, GDPR-style requests, etc.).
+router.delete('/users/:id', superadminAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const owner = await requireOwner(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'Owner not found' });
+    const target = await pool.query('SELECT name FROM users WHERE id=$1', [req.params.id]);
+    const tenantName = target.rows[0]?.name || '';
+    if (!req.body.confirm_name || req.body.confirm_name.trim() !== tenantName.trim()) {
+      return res.status(400).json({ error: `Type the tenant's exact name ("${tenantName}") to confirm deletion.` });
+    }
+    // Employees reference the owner via parent_id with no cascade rule —
+    // delete them first or the owner delete below hits a foreign key
+    // violation whenever the tenant has any employees (pre-existing bug,
+    // only ever hit if a tenant with staff was actually deleted, which the
+    // old confirm()-only guard apparently never got tested against).
+    await client.query('BEGIN');
+    await client.query("DELETE FROM users WHERE parent_id=$1", [req.params.id]);
+    await client.query("DELETE FROM users WHERE id=$1 AND role!='superadmin'", [req.params.id]);
+    await client.query('COMMIT');
+    await logAdminAction(req.userId, 'tenant_hard_delete', 'tenant', parseInt(req.params.id), { tenant_name: tenantName });
     res.json({ success: true });
-  } catch { res.status(500).json({ error: 'Server error' }); }
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Tenant hard-delete failed:', e.message);
+    res.status(500).json({ error: 'Server error' });
+  } finally {
+    client.release();
+  }
 });
 
 // ── GET platform-wide pricing config (currently just the employee

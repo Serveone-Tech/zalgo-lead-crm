@@ -10,13 +10,23 @@ const auth = async (req, res, next) => {
     req.userId = decoded.userId;
     req.userRole = decoded.role;
 
+    // Left-joins the owner's own row (whether this request IS the owner, or
+    // is one of their employees) so a Super Admin suspension on the owner
+    // locks out the whole tenant without touching any employee's own
+    // is_blocked flag — reactivating the owner restores everyone exactly
+    // as they were.
     const result = await pool.query(
-      'SELECT id, role, parent_id, permissions, role_label, is_blocked FROM users WHERE id=$1',
+      `SELECT u.id, u.role, u.parent_id, u.permissions, u.role_label, u.is_blocked,
+              COALESCE(owner.suspended_by_admin, u.suspended_by_admin, false) AS tenant_suspended
+       FROM users u
+       LEFT JOIN users owner ON owner.id = u.parent_id
+       WHERE u.id=$1`,
       [decoded.userId]
     );
     const row = result.rows[0];
     if (!row) return res.status(401).json({ error: 'Invalid token' });
     if (row.is_blocked) return res.status(403).json({ error: 'ACCOUNT_BLOCKED', message: 'This account has been blocked. Contact your admin.' });
+    if (row.tenant_suspended) return res.status(403).json({ error: 'TENANT_SUSPENDED', message: 'This account has been suspended. Contact support.' });
 
     req.user = {
       id: row.id,

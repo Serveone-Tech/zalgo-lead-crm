@@ -48,6 +48,15 @@ const initDB = async () => {
       // stays unaffected; only the /register route explicitly sets this
       // false, gating login until the OTP step completes.
       `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT true`,
+      // Super Admin suspending a whole tenant (distinct from is_blocked,
+      // which a tenant owner uses to deactivate their own employees).
+      // Only meaningful on an owner row (parent_id IS NULL) — see the
+      // `auth` middleware, which checks the OWNER's flag for every request
+      // from that owner AND every one of their employees, so suspending
+      // the owner locks the whole tenant out without touching any
+      // employee's own is_blocked state — reactivating restores everyone
+      // to exactly whatever state they were already in.
+      `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_by_admin BOOLEAN DEFAULT false`,
     ];
     for (const q of alterUsers) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));

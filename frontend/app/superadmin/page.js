@@ -41,6 +41,10 @@ export default function SuperAdminDashboard() {
   const [saving, setSaving]   = useState(false);
   const [reconciling, setReconciling] = useState(null);
   const [reconcileResult, setReconcileResult] = useState(null);
+  const [suspending, setSuspending] = useState(null);
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [toast, setToast]     = useState(null);
 
   useEffect(() => {
@@ -82,10 +86,31 @@ export default function SuperAdminDashboard() {
     setSaving(false);
   };
 
-  const deleteUser = async (id) => {
-    if (!confirm("Delete this user permanently? All their data will be lost.")) return;
-    try { await api.delete(`/superadmin/users/${id}`); showToast("User deleted"); loadAll(); }
-    catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
+  const toggleSuspend = async (u) => {
+    const suspending_ = !u.suspended_by_admin;
+    const msg = suspending_
+      ? `This will immediately suspend ${u.name}. Every employee under this tenant loses access too — they'll all be logged out on their next request. Nothing is deleted; reactivating restores everyone exactly as they were.`
+      : `This will restore ${u.name}'s access, and every one of their employees who wasn't separately deactivated by the tenant itself.`;
+    if (!confirm(msg)) return;
+    setSuspending(u.id);
+    try {
+      await api.put(`/superadmin/users/${u.id}/suspend`, { suspended: suspending_ });
+      showToast(suspending_ ? "Tenant suspended" : "Tenant reactivated");
+      loadAll();
+    } catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
+    setSuspending(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmUser || deleteConfirmInput.trim() !== deleteConfirmUser.name.trim()) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/superadmin/users/${deleteConfirmUser.id}`, { data: { confirm_name: deleteConfirmInput.trim() } });
+      showToast("Tenant permanently deleted");
+      setDeleteConfirmUser(null);
+      loadAll();
+    } catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
+    setDeleting(false);
   };
 
   const reconcileSubscription = async (u) => {
@@ -205,6 +230,9 @@ export default function SuperAdminDashboard() {
                       <td style={{ padding:"12px 14px", fontSize:12, color:"var(--text-secondary)" }}>{u.plan_name||"—"}</td>
                       <td style={{ padding:"12px 14px" }}>
                         <span style={{ background:sc.bg, color:sc.color, fontSize:10, fontWeight:700, borderRadius:20, padding:"3px 10px", fontFamily:"var(--font-main)" }}>{sc.label}</span>
+                        {u.suspended_by_admin && (
+                          <span style={{ display:"block", marginTop:4, background:"rgba(224,82,82,0.12)", color:"var(--danger)", fontSize:9, fontWeight:700, borderRadius:20, padding:"2px 8px", fontFamily:"var(--font-main)", width:"fit-content" }}>🔒 Suspended</span>
+                        )}
                       </td>
                       <td style={{ padding:"12px 14px", fontSize:12, whiteSpace:"nowrap" }}>
                         {expiry ? (
@@ -232,7 +260,14 @@ export default function SuperAdminDashboard() {
                           <button onClick={()=>{ setActionUser(u); setReconcileResult(null); setActionData(d=>({...d, plan_id: u.plan_id||plans[0]?.id||""})); setEmpLimitInput(u.employee_limit_override ?? ""); }} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--teal)", fontSize:11, cursor:"pointer", fontWeight:600 }}
                             onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal)"}
                             onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>Manage</button>
-                          <button onClick={()=>deleteUser(u.id)} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--danger)", fontSize:11, cursor:"pointer", fontWeight:600 }}
+                          <button
+                            onClick={()=>toggleSuspend(u)}
+                            disabled={suspending===u.id}
+                            style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:`1px solid ${u.suspended_by_admin?"var(--success)":"var(--warn)"}`, color:u.suspended_by_admin?"var(--success)":"var(--warn)", fontSize:11, cursor: suspending===u.id?"not-allowed":"pointer", fontWeight:600 }}
+                          >
+                            {suspending===u.id ? "…" : u.suspended_by_admin ? "Reactivate" : "Suspend"}
+                          </button>
+                          <button onClick={()=>{ setDeleteConfirmUser(u); setDeleteConfirmInput(""); }} title="Permanently delete (irreversible)" style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--danger)", fontSize:11, cursor:"pointer", fontWeight:600 }}
                             onMouseEnter={e=>e.currentTarget.style.borderColor="var(--danger)"}
                             onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>Del</button>
                         </div>
@@ -412,6 +447,39 @@ export default function SuperAdminDashboard() {
           onClose={()=>setEmployeesModalUser(null)}
           onChanged={loadAll}
         />
+      )}
+
+      {deleteConfirmUser && (
+        <div onClick={e=>{if(e.target===e.currentTarget)setDeleteConfirmUser(null);}} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:300, padding:20 }}>
+          <div style={{ background:"var(--bg-card)", border:"1px solid var(--danger)", borderRadius:14, padding:"26px 24px", width:"100%", maxWidth:440 }}>
+            <h2 style={{ fontFamily:"var(--font-main)", fontSize:16, fontWeight:700, color:"var(--danger)", marginBottom:10 }}>⚠ Permanently Delete Tenant</h2>
+            <p style={{ fontSize:12.5, color:"var(--text-secondary)", lineHeight:1.6, marginBottom:6 }}>
+              This will permanently delete <strong>{deleteConfirmUser.name}</strong> ({deleteConfirmUser.email}) and every
+              lead, customer, order, and employee under their account. <strong>This cannot be undone.</strong>
+            </p>
+            <p style={{ fontSize:12, color:"var(--text-muted)", marginBottom:16 }}>
+              Consider <strong>Suspend</strong> instead — it's reversible and keeps their data intact.
+            </p>
+            <Lbl>Type the tenant's exact name to confirm: {deleteConfirmUser.name}</Lbl>
+            <input
+              value={deleteConfirmInput}
+              onChange={e=>setDeleteConfirmInput(e.target.value)}
+              placeholder={deleteConfirmUser.name}
+              style={inp}
+              autoFocus
+            />
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
+              <button onClick={()=>setDeleteConfirmUser(null)} style={{ padding:"9px 18px", borderRadius:8, background:"transparent", border:"1px solid var(--border)", color:"var(--text-secondary)", fontSize:13, cursor:"pointer" }}>Cancel</button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting || deleteConfirmInput.trim() !== deleteConfirmUser.name.trim()}
+                style={{ padding:"9px 20px", borderRadius:8, background: deleteConfirmInput.trim()===deleteConfirmUser.name.trim() ? "var(--danger)" : "var(--bg-hover)", border:"none", color:"#fff", fontFamily:"var(--font-main)", fontWeight:600, fontSize:13, cursor: deleteConfirmInput.trim()===deleteConfirmUser.name.trim() ? "pointer" : "not-allowed" }}
+              >
+                {deleting ? "Deleting…" : "Permanently Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </SuperAdminShell>
   );
