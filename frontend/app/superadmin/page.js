@@ -40,6 +40,7 @@ export default function SuperAdminDashboard() {
   const [savingLimit, setSavingLimit]   = useState(false);
   const [saving, setSaving]   = useState(false);
   const [reconciling, setReconciling] = useState(null);
+  const [reconcileResult, setReconcileResult] = useState(null);
   const [toast, setToast]     = useState(null);
 
   useEffect(() => {
@@ -75,7 +76,7 @@ export default function SuperAdminDashboard() {
       if (payload.action === "activate") delete payload.days;
       await api.post(`/superadmin/users/${actionUser.id}/subscription`, payload);
       showToast("Action completed successfully!");
-      setActionUser(null);
+      setActionUser(null); setReconcileResult(null);
       loadAll();
     } catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
     setSaving(false);
@@ -88,11 +89,14 @@ export default function SuperAdminDashboard() {
   };
 
   const reconcileSubscription = async (u) => {
-    if (!confirm(`This will check Razorpay directly for ${u.name}'s subscription status. If Razorpay confirms it's actually active (e.g. a webhook was missed), their plan will be activated immediately. It will NOT cancel or downgrade anything.`)) return;
+    if (!confirm(`This will check Razorpay directly for ${u.name}'s subscription status. If Razorpay confirms it's actually active (e.g. a webhook was missed), their plan will be activated immediately. It will NOT cancel or downgrade anything — a mismatch the other way (Razorpay shows cancelled/halted) will be flagged for you to review, not auto-corrected.`)) return;
     setReconciling(u.id);
+    setReconcileResult(null);
     try {
       const { data } = await api.post(`/superadmin/users/${u.id}/reconcile-subscription`);
-      showToast(data.reconciled ? `Reconciled — plan is now active (Razorpay confirmed: ${data.razorpay_status})` : `No change — Razorpay reports: ${data.razorpay_status}`);
+      setReconcileResult(data);
+      if (data.reconciled) showToast(`Reconciled — plan is now active (Razorpay confirmed: ${data.razorpay_status})`);
+      else if (!data.mismatch) showToast(`No change — Razorpay reports: ${data.razorpay_status}`);
       loadAll();
     } catch (err) { showToast(err.response?.data?.error || "Failed to reconcile", "error"); }
     setReconciling(null);
@@ -225,7 +229,7 @@ export default function SuperAdminDashboard() {
                       </td>
                       <td style={{ padding:"12px 14px" }}>
                         <div style={{ display:"flex", gap:6 }}>
-                          <button onClick={()=>{ setActionUser(u); setActionData(d=>({...d, plan_id: u.plan_id||plans[0]?.id||""})); setEmpLimitInput(u.employee_limit_override ?? ""); }} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--teal)", fontSize:11, cursor:"pointer", fontWeight:600 }}
+                          <button onClick={()=>{ setActionUser(u); setReconcileResult(null); setActionData(d=>({...d, plan_id: u.plan_id||plans[0]?.id||""})); setEmpLimitInput(u.employee_limit_override ?? ""); }} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--teal)", fontSize:11, cursor:"pointer", fontWeight:600 }}
                             onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal)"}
                             onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>Manage</button>
                           <button onClick={()=>deleteUser(u.id)} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--danger)", fontSize:11, cursor:"pointer", fontWeight:600 }}
@@ -257,14 +261,14 @@ export default function SuperAdminDashboard() {
 
       {/* Action Modal */}
       {actionUser && (
-        <div onClick={e=>{if(e.target===e.currentTarget)setActionUser(null)}} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:20 }}>
+        <div onClick={e=>{if(e.target===e.currentTarget){setActionUser(null); setReconcileResult(null);}}} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:20 }}>
           <div style={{ background:"var(--bg-card)", border:"1px solid var(--border-strong)", borderRadius:14, padding:"26px 24px", width:"100%", maxWidth:460 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
               <div>
                 <h2 style={{ fontFamily:"var(--font-main)", fontSize:16, fontWeight:700, color:"var(--text-primary)" }}>Manage Subscription</h2>
                 <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>{actionUser.name} — {actionUser.email}</div>
               </div>
-              <button onClick={()=>setActionUser(null)} style={{ background:"none", border:"none", color:"var(--text-muted)", fontSize:20, cursor:"pointer" }}>✕</button>
+              <button onClick={()=>{setActionUser(null); setReconcileResult(null);}} style={{ background:"none", border:"none", color:"var(--text-muted)", fontSize:20, cursor:"pointer" }}>✕</button>
             </div>
 
             {/* Razorpay billing visibility */}
@@ -290,6 +294,16 @@ export default function SuperAdminDashboard() {
                   >
                     {reconciling===actionUser.id ? "Checking with Razorpay…" : "🔄 Retry Reconciliation"}
                   </button>
+                  {reconcileResult?.mismatch && (
+                    <div style={{ marginTop:10, padding:"10px 12px", borderRadius:8, background:"rgba(224,82,82,0.12)", border:"1px solid rgba(224,82,82,0.4)" }}>
+                      <div style={{ fontSize:11.5, color:"var(--danger)", fontWeight:700, marginBottom:3 }}>⚠ Status mismatch — not auto-corrected</div>
+                      <div style={{ fontSize:11, color:"var(--text-secondary)", lineHeight:1.5 }}>
+                        Razorpay reports this subscription as <strong>{reconcileResult.razorpay_status}</strong>, but the local
+                        record still shows <strong>{reconcileResult.local_status}</strong>. This was left as-is deliberately —
+                        review and use the actions below to change it manually if that's correct.
+                      </div>
+                    </div>
+                  )}
                 </>
               ) : (
                 <div style={{ fontSize:11, color:"var(--text-muted)" }}>
@@ -368,7 +382,7 @@ export default function SuperAdminDashboard() {
                       await api.put(`/superadmin/users/${actionUser.id}/employee-limit`, { limit: empLimitInput === "" ? null : parseInt(empLimitInput) });
                       showToast("Employee seat limit updated!");
                       loadAll();
-                      setActionUser(null);
+                      setActionUser(null); setReconcileResult(null);
                     } catch { showToast("Failed to update seat limit", "error"); }
                     setSavingLimit(false);
                   }}
@@ -383,7 +397,7 @@ export default function SuperAdminDashboard() {
             </div>
 
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
-              <button onClick={()=>setActionUser(null)} style={{ padding:"9px 18px", borderRadius:8, background:"transparent", border:"1px solid var(--border)", color:"var(--text-secondary)", fontSize:13, cursor:"pointer" }}>Cancel</button>
+              <button onClick={()=>{setActionUser(null); setReconcileResult(null);}} style={{ padding:"9px 18px", borderRadius:8, background:"transparent", border:"1px solid var(--border)", color:"var(--text-secondary)", fontSize:13, cursor:"pointer" }}>Cancel</button>
               <button onClick={doAction} disabled={saving} style={{ padding:"9px 20px", borderRadius:8, background: actionData.action==="cancel"?"var(--danger)":"var(--teal)", border:"none", color:"#fff", fontFamily:"var(--font-main)", fontWeight:600, fontSize:13, cursor:"pointer" }}>
                 {saving ? "Processing..." : "Confirm Action"}
               </button>

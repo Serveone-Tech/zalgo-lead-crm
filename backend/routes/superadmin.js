@@ -87,7 +87,18 @@ router.post('/users/:id/reconcile-subscription', superadminAuth, async (req, res
       });
       result = { reconciled: true, local_status: 'active', razorpay_status: live.status, ends_at: endsAt };
     } else {
-      result = { reconciled: false, local_status: row.status, razorpay_status: live.status };
+      // Deliberately never auto-downgrades — but a tenant sitting
+      // active/past_due locally while Razorpay says otherwise should never
+      // be invisible, so flag it explicitly for the admin to act on
+      // manually rather than silently reporting "no change."
+      const localLooksLive = ['active', 'past_due', 'trialing'].includes(row.status);
+      const razorpayLooksDead = ['cancelled', 'halted', 'expired'].includes(live.status);
+      result = {
+        reconciled: false,
+        local_status: row.status,
+        razorpay_status: live.status,
+        mismatch: localLooksLive && razorpayLooksDead,
+      };
     }
 
     await logAdminAction(req.userId, 'reconcile_subscription', 'tenant', parseInt(req.params.id), {
