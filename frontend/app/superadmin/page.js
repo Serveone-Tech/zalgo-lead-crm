@@ -42,6 +42,7 @@ export default function SuperAdminDashboard() {
   const [reconciling, setReconciling] = useState(null);
   const [reconcileResult, setReconcileResult] = useState(null);
   const [suspending, setSuspending] = useState(null);
+  const [impersonating, setImpersonating] = useState(false);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -125,6 +126,26 @@ export default function SuperAdminDashboard() {
       loadAll();
     } catch (err) { showToast(err.response?.data?.error || "Failed to reconcile", "error"); }
     setReconciling(null);
+  };
+
+  const startImpersonation = async (u) => {
+    if (!confirm(`This will log you in as ${u.name}, exactly as they'd see the app — including any suspension or plan limits currently in effect. This is logged. Continue?`)) return;
+    setImpersonating(true);
+    try {
+      const { data } = await api.post(`/superadmin/users/${u.id}/impersonate`);
+      // Stash the CURRENT admin session so "Return to Admin" can restore it
+      // without a fresh login — ImpersonationBanner (rendered globally from
+      // the root layout) reads this same key.
+      localStorage.setItem("crm_impersonating", JSON.stringify({
+        tenantName: u.name,
+        adminToken: localStorage.getItem("crm_token"),
+        adminUser: localStorage.getItem("crm_user"),
+      }));
+      localStorage.setItem("crm_token", data.token);
+      localStorage.setItem("crm_user", JSON.stringify({ id: data.tenant.id, name: data.tenant.name, email: data.tenant.email, role: "user" }));
+      window.location.href = "/dashboard";
+    } catch (err) { showToast(err.response?.data?.error || "Failed to impersonate", "error"); }
+    setImpersonating(false);
   };
 
   const filtered = users.filter(u => {
@@ -303,7 +324,17 @@ export default function SuperAdminDashboard() {
                 <h2 style={{ fontFamily:"var(--font-main)", fontSize:16, fontWeight:700, color:"var(--text-primary)" }}>Manage Subscription</h2>
                 <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>{actionUser.name} — {actionUser.email}</div>
               </div>
-              <button onClick={()=>{setActionUser(null); setReconcileResult(null);}} style={{ background:"none", border:"none", color:"var(--text-muted)", fontSize:20, cursor:"pointer" }}>✕</button>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <button
+                  onClick={()=>startImpersonation(actionUser)}
+                  disabled={impersonating}
+                  title="Log in as this tenant to see exactly what they see"
+                  style={{ padding:"6px 12px", borderRadius:6, background:"transparent", border:"1px solid var(--warn)", color:"var(--warn)", fontSize:11, fontWeight:600, cursor: impersonating?"not-allowed":"pointer", fontFamily:"var(--font-main)", whiteSpace:"nowrap" }}
+                >
+                  {impersonating ? "Logging in…" : "🔍 Impersonate"}
+                </button>
+                <button onClick={()=>{setActionUser(null); setReconcileResult(null);}} style={{ background:"none", border:"none", color:"var(--text-muted)", fontSize:20, cursor:"pointer" }}>✕</button>
+              </div>
             </div>
 
             {/* Razorpay billing visibility */}

@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
 const { superadminAuth } = require('../middleware/auth');
 const { PERMISSION_KEYS } = require('../utils/permissions');
@@ -110,6 +111,36 @@ router.post('/users/:id/reconcile-subscription', superadminAuth, async (req, res
   } catch (e) {
     console.error('Reconcile subscription failed:', e.message);
     res.status(500).json({ error: 'Could not reach Razorpay to reconcile — try again shortly.' });
+  }
+});
+
+// ── POST impersonate a tenant owner — support tool. Issues a short-lived
+// (30 min) token for the target account, valid exactly like their own
+// normal session (same role, same middleware checks — this deliberately
+// does NOT bypass suspension/subscription gating, so the admin sees
+// exactly what the tenant would see). The frontend is responsible for
+// stashing the admin's own session before swapping in this token, and
+// restoring it via "Return to Admin" — this route only ever issues the
+// token and logs the action; it never touches the calling admin's own
+// session server-side.
+router.post('/users/:id/impersonate', superadminAuth, async (req, res) => {
+  try {
+    const owner = await requireOwner(req.params.id);
+    if (!owner) return res.status(404).json({ error: 'Owner not found' });
+    const target = await pool.query('SELECT id, name, email FROM users WHERE id=$1', [req.params.id]);
+    const t = target.rows[0];
+
+    const token = jwt.sign({ userId: t.id, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '30m' });
+
+    await logAdminAction(req.userId, 'impersonate_start', 'tenant', parseInt(req.params.id), {
+      tenant_name: t.name,
+      tenant_email: t.email,
+    });
+
+    res.json({ token, tenant: { id: t.id, name: t.name, email: t.email } });
+  } catch (e) {
+    console.error('Impersonate failed:', e.message);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

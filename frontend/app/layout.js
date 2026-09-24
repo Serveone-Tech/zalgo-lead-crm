@@ -3,6 +3,7 @@ import './globals.css';
 import { usePathname } from 'next/navigation';
 import Script from 'next/script';
 import Sidebar from '../components/Sidebar';
+import ImpersonationBanner from '../components/ImpersonationBanner';
 
 const NO_SIDEBAR = [
   '/', '/login', '/register', '/onboarding', '/plans', '/superadmin',
@@ -46,6 +47,7 @@ export default function RootLayout({ children }) {
         </Script>
       </head>
       <body>
+        <ImpersonationBanner />
         {hideSidebar ? (
           children
         ) : (
