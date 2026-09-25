@@ -6,6 +6,7 @@ import api, { formatCurrency, refreshUser, API_ORIGIN } from "../../../lib/api";
 const isImageAttachment = (name) => /\.(jpe?g|png|webp|gif)$/i.test(name || "");
 import OrderFulfillmentModal from "../../../components/OrderFulfillmentModal";
 import { isOwnerUser, hasPerm } from "../../../lib/permissions";
+import { useConfirmDialog } from "../../../components/ConfirmDialogProvider";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -19,6 +20,7 @@ function fmtDate(d) {
 export default function CustomerDetailPage() {
   const router = useRouter();
   const { id } = useParams();
+  const confirmDialog = useConfirmDialog();
   const [customer, setCustomer] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -190,14 +192,17 @@ export default function CustomerDetailPage() {
   };
 
   const deleteOrder = async (orderId) => {
-    if (!confirm("Delete this order? This can't be undone.")) return;
-    setDeletingOrder(orderId);
-    try {
-      await api.delete(`/customers/${id}/orders/${orderId}`);
-      load();
-    } catch {
-      // no-op — leave the order in place so the user can retry
-    }
+    await confirmDialog({
+      title: "Delete Order",
+      message: "Delete this order? This can't be undone.",
+      confirmLabel: "Delete Order",
+      danger: true,
+      onConfirm: async () => {
+        setDeletingOrder(orderId);
+        await api.delete(`/customers/${id}/orders/${orderId}`);
+        load();
+      },
+    });
     setDeletingOrder(null);
   };
 

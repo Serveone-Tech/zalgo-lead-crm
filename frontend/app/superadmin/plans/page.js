@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import api from "../../../lib/api";
 import SuperAdminShell from "../SuperAdminShell";
 import { FEATURE_LABELS } from "../../../lib/plan-features";
+import { useToast } from "../../../components/ToastProvider";
+import { useConfirmDialog } from "../../../components/ConfirmDialogProvider";
 
 const EMPTY = { name:"", description:"", price_monthly:"", price_yearly:"", trial_days:"0", is_free:false, max_leads:"-1", max_customers:"-1", is_active:true, sort_order:"0", features:[] };
 
@@ -15,7 +17,8 @@ export default function SuperAdminPlansPage() {
   const [editPlan, setEditPlan] = useState(null);
   const [form, setForm]       = useState(EMPTY);
   const [saving, setSaving]   = useState(false);
-  const [toast, setToast]     = useState(null);
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [addonPrice, setAddonPrice] = useState("");
   const [savingAddonPrice, setSavingAddonPrice] = useState(false);
 
@@ -26,8 +29,6 @@ export default function SuperAdminPlansPage() {
     load();
     api.get("/superadmin/config").then(({data}) => setAddonPrice(data.employee_addon_price || "499")).catch(() => {});
   }, []);
-
-  const showToast = (msg,type="success")=>{ setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
 
   const load = async () => {
     setLoading(true);
@@ -68,26 +69,41 @@ export default function SuperAdminPlansPage() {
     e.preventDefault();
     const knownFeatures = form.features.filter((f)=>FEATURE_LABELS[f]);
     const junkFeatures = form.features.filter((f)=>!FEATURE_LABELS[f]);
+    const doSave = async () => {
+      setSaving(true);
+      try {
+        const payload = { ...form, features: knownFeatures };
+        if (editPlan) await api.put(`/superadmin/plans/${editPlan.id}`, payload);
+        else await api.post("/superadmin/plans", payload);
+        showToast(editPlan?"Plan updated!":"Plan created!");
+        setShowForm(false); load();
+      } catch (err) { showToast(err.response?.data?.error||"Failed","error"); }
+      setSaving(false);
+    };
     if (junkFeatures.length > 0) {
-      if (!confirm(`Removing unrecognized key(s): ${junkFeatures.join(", ")} — these aren't enforced by anything and have no checkbox. Continue saving without them?`)) {
-        return;
-      }
+      await confirmDialog({
+        title: "Remove Unrecognized Keys",
+        message: `Removing unrecognized key(s): ${junkFeatures.join(", ")} — these aren't enforced by anything and have no checkbox. Continue saving without them?`,
+        confirmLabel: "Save Without Them",
+        onConfirm: doSave,
+      });
+    } else {
+      await doSave();
     }
-    setSaving(true);
-    try {
-      const payload = { ...form, features: knownFeatures };
-      if (editPlan) await api.put(`/superadmin/plans/${editPlan.id}`, payload);
-      else await api.post("/superadmin/plans", payload);
-      showToast(editPlan?"Plan updated!":"Plan created!");
-      setShowForm(false); load();
-    } catch (err) { showToast(err.response?.data?.error||"Failed","error"); }
-    setSaving(false);
   };
 
   const deletePlan = async (id) => {
-    if (!confirm("Delete this plan?")) return;
-    try { await api.delete(`/superadmin/plans/${id}`); showToast("Plan deleted"); load(); }
-    catch (err) { showToast(err.response?.data?.error||"Cannot delete","error"); }
+    await confirmDialog({
+      title: "Delete Plan",
+      message: "Delete this plan?",
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/superadmin/plans/${id}`);
+        showToast("Plan deleted");
+        load();
+      },
+    });
   };
 
   const handle = (e) => {
@@ -97,8 +113,6 @@ export default function SuperAdminPlansPage() {
 
   return (
     <SuperAdminShell>
-      {toast && <div style={{ position:"fixed",top:20,right:20,zIndex:9999,background:toast.type==="success"?"var(--success)":"var(--danger)",color:"#fff",borderRadius:10,padding:"12px 20px",fontFamily:"var(--font-main)",fontWeight:600,fontSize:13,boxShadow:"0 4px 20px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
-
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28 }}>
           <div>
             <h1 style={{ fontFamily:"var(--font-main)", fontSize:22, fontWeight:700, color:"var(--text-primary)" }}>Plans Management</h1>

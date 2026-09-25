@@ -5,6 +5,8 @@ import api from '../../lib/api';
 import { hasPerm, isOwnerUser } from '../../lib/permissions';
 import { loadRazorpayScript } from '../../lib/razorpay';
 import { Pencil, Trash2, Plus, GripVertical, Check, X } from 'lucide-react';
+import { useToast } from '../../components/ToastProvider';
+import { useConfirmDialog } from '../../components/ConfirmDialogProvider';
 
 const COLOR_PALETTE = [
   '#2f9e6f', '#0066cc', '#b06a00', '#2a6fb0',
@@ -48,6 +50,8 @@ const TABS = [
 
 export default function SettingsPage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [activeTab, setActiveTab]      = useState('general');
   const [currencies, setCurrencies]    = useState([]);
   const [settings, setSettings]        = useState({ currency: 'INR', currency_symbol: '₹', institute_name: '', order_fulfillment_stage: '' });
@@ -180,7 +184,7 @@ export default function SettingsPage() {
             setAddonMsg(`✓ ${data.seats_added} seats added — you now have ${data.new_limit} total.`);
             setTimeout(() => setAddonMsg(''), 6000);
           } catch {
-            alert('Payment succeeded but activation failed — contact support.');
+            showToast('Payment succeeded but activation failed — contact support.', 'error');
           } finally {
             setBuyingAddon(false);
           }
@@ -190,7 +194,7 @@ export default function SettingsPage() {
       rzp.on('payment.failed', () => setBuyingAddon(false));
       rzp.open();
     } catch (err) {
-      alert(err?.response?.data?.error || err.message || 'Could not start payment');
+      showToast(err?.response?.data?.error || err.message || 'Could not start payment', 'error');
       setBuyingAddon(false);
     }
   };
@@ -229,22 +233,24 @@ export default function SettingsPage() {
       rzp.on('payment.failed', () => setEnablingAutoRenew(false));
       rzp.open();
     } catch (err) {
-      alert(err?.response?.data?.error || err.message || 'Could not start payment');
+      showToast(err?.response?.data?.error || err.message || 'Could not start payment', 'error');
       setEnablingAutoRenew(false);
     }
   };
 
   const cancelAutoRenew = async () => {
-    if (!confirm('Cancel auto-renewal? You keep full access until your current period ends, then you\'ll need to renew manually.')) return;
     setCancellingAutoRenew(true);
-    try {
-      const { data } = await api.post('/payments/cancel');
-      setSub((s) => ({ ...s, cancel_at_period_end: true, ends_at: data.ends_at }));
-    } catch (err) {
-      alert(err?.response?.data?.error || 'Could not cancel auto-renewal');
-    } finally {
-      setCancellingAutoRenew(false);
-    }
+    await confirmDialog({
+      title: 'Cancel Auto-Renewal',
+      message: "Cancel auto-renewal? You keep full access until your current period ends, then you'll need to renew manually.",
+      confirmLabel: 'Cancel Auto-Renewal',
+      danger: true,
+      onConfirm: async () => {
+        const { data } = await api.post('/payments/cancel');
+        setSub((s) => ({ ...s, cancel_at_period_end: true, ends_at: data.ends_at }));
+      },
+    });
+    setCancellingAutoRenew(false);
   };
 
   const loadAll = async () => {
@@ -317,12 +323,16 @@ export default function SettingsPage() {
   };
 
   const deleteStage = async (s) => {
-    if (!confirm(`Delete stage "${s.name}"? Leads using this stage must be moved first.`)) return;
-    setStageError('');
-    try {
-      await api.delete(`/stages/${s.id}`);
-      await loadStages();
-    } catch (err) { setStageError(err.response?.data?.error || 'Cannot delete this stage'); }
+    await confirmDialog({
+      title: 'Delete Stage',
+      message: `Delete stage "${s.name}"? Leads using this stage must be moved first.`,
+      confirmLabel: 'Delete Stage',
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/stages/${s.id}`);
+        await loadStages();
+      },
+    });
   };
 
   const loadOrderStages = async () => {
@@ -380,12 +390,16 @@ export default function SettingsPage() {
   };
 
   const deleteOrderStage = async (s) => {
-    if (!confirm(`Delete order stage "${s.name}"? Orders using this stage must be moved first.`)) return;
-    setOrderStageError('');
-    try {
-      await api.delete(`/order-stages/${s.id}`);
-      await loadOrderStages();
-    } catch (err) { setOrderStageError(err.response?.data?.error || 'Cannot delete this stage'); }
+    await confirmDialog({
+      title: 'Delete Order Stage',
+      message: `Delete order stage "${s.name}"? Orders using this stage must be moved first.`,
+      confirmLabel: 'Delete Stage',
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/order-stages/${s.id}`);
+        await loadOrderStages();
+      },
+    });
   };
 
   // ── Change Password ─────────────────────────────────────────────

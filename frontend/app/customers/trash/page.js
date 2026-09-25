@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../../lib/api";
 import { isOwnerUser } from "../../../lib/permissions";
 import { Trash2, ArrowLeft, RotateCcw } from "lucide-react";
+import { useConfirmDialog } from "../../../components/ConfirmDialogProvider";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -21,6 +22,7 @@ export default function OrderTrashPage() {
   const [user, setUser] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [restoring, setRestoring] = useState(null);
+  const confirmDialog = useConfirmDialog();
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -53,14 +55,17 @@ export default function OrderTrashPage() {
   };
 
   const destroy = async (orderId) => {
-    if (!confirm("Permanently delete this order? This cannot be undone.")) return;
     setDeleting(orderId);
-    try {
-      await api.delete(`/customers/trash/orders/${orderId}`);
-      load();
-    } catch {
-      // no-op — leave it in the list so the user can retry
-    }
+    await confirmDialog({
+      title: "Delete Order",
+      message: "Permanently delete this order? This cannot be undone.",
+      confirmLabel: "Delete Permanently",
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/customers/trash/orders/${orderId}`);
+        load();
+      },
+    });
     setDeleting(null);
   };
 

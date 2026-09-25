@@ -17,6 +17,8 @@ import {
 } from "../../lib/stages";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 import { parsePlanFeatures, makeHasPlanFeature } from "../../lib/plan-features";
+import { useToast } from "../../components/ToastProvider";
+import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
 // Overdue = the exact scheduled moment (date + time) has already passed —
 // not just that the calendar day has rolled over.
@@ -76,7 +78,8 @@ function LeadsContent() {
   const [modalOpen, setModal] = useState(false);
   const [editLead, setEditLead] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [toast, setToast] = useState(null);
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [view, setView] = useState("table");
   const [employees, setEmployees] = useState([]);
   const [user, setUser] = useState(null);
@@ -217,11 +220,6 @@ function LeadsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, filterKey]);
 
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const openAdd = () => {
     setEditLead(null);
     setModal(true);
@@ -247,12 +245,18 @@ function LeadsContent() {
   };
 
   const deleteLead = async (id) => {
-    if (!confirm("Delete this lead permanently?")) return;
-    setDeleting(id);
-    await api.delete(`/leads/${id}`);
+    const ok = await confirmDialog({
+      title: "Delete Lead",
+      message: "This will permanently delete this lead. This cannot be undone.",
+      confirmLabel: "Delete Lead",
+      danger: true,
+      onConfirm: async () => {
+        setDeleting(id);
+        await api.delete(`/leads/${id}`);
+      },
+    });
     setDeleting(null);
-    load();
-    loadStats();
+    if (ok) { load(); loadStats(); }
   };
 
   const changeStage = async (lead, stage) => {
@@ -352,28 +356,24 @@ function LeadsContent() {
 
   const bulkDelete = async () => {
     if (selected.size === 0) return;
-    if (
-      !confirm(
-        `Permanently delete ${selected.size} selected lead${selected.size !== 1 ? "s" : ""}? This cannot be undone.`,
-      )
-    )
-      return;
-    setBulkDeleting(true);
-    try {
-      const { data } = await api.delete("/leads/bulk", {
-        data: { lead_ids: Array.from(selected) },
-      });
-      showToast(
-        `✓ ${data.deleted} lead${data.deleted !== 1 ? "s" : ""} deleted.`,
-      );
-      clearSelection();
-      load();
-      loadStats();
-    } catch {
-      showToast("Failed to delete leads. Please try again.", "error");
-    } finally {
-      setBulkDeleting(false);
-    }
+    const count = selected.size;
+    await confirmDialog({
+      title: "Delete Leads",
+      message: `This will permanently delete ${count} selected lead${count !== 1 ? "s" : ""}. This cannot be undone.`,
+      confirmLabel: `Delete ${count} Lead${count !== 1 ? "s" : ""}`,
+      danger: true,
+      onConfirm: async () => {
+        setBulkDeleting(true);
+        const { data } = await api.delete("/leads/bulk", {
+          data: { lead_ids: Array.from(selected) },
+        });
+        showToast(`✓ ${data.deleted} lead${data.deleted !== 1 ? "s" : ""} deleted.`);
+        clearSelection();
+        load();
+        loadStats();
+      },
+    });
+    setBulkDeleting(false);
   };
 
   const overdueCount = stats?.overdue ?? 0;
@@ -383,29 +383,6 @@ function LeadsContent() {
 
   return (
     <div style={{ padding: "28px 32px" }}>
-      {/* Toast */}
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            top: 20,
-            right: 20,
-            zIndex: 9999,
-            background:
-              toast.type === "error" ? "var(--danger)" : "var(--success)",
-            color: "#fff",
-            borderRadius: 10,
-            padding: "12px 20px",
-            fontFamily: "var(--font-main)",
-            fontWeight: 600,
-            fontSize: 13,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-          }}
-        >
-          {toast.msg}
-        </div>
-      )}
-
       {/* Header */}
       <div
         style={{
@@ -1428,7 +1405,7 @@ function LeadsContent() {
           target="leads"
           onClose={() => setSendModalOpen(false)}
           onSent={(campaign) => {
-            alert(`Sent! ${campaign.sent_count} delivered, ${campaign.failed_count} failed, out of ${campaign.recipient_count} recipients.`);
+            showToast(`Sent! ${campaign.sent_count} delivered, ${campaign.failed_count} failed, out of ${campaign.recipient_count} recipients.`);
             clearSelection();
           }}
         />

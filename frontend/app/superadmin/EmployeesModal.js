@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import api from "../../lib/api";
+import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
 const emptyForm = { name: "", email: "", password: "", role_label: "" };
 
@@ -13,6 +14,7 @@ export default function EmployeesModal({ owner, onClose, onChanged }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const confirmDialog = useConfirmDialog();
 
   const load = async () => {
     setLoading(true);
@@ -71,13 +73,18 @@ export default function EmployeesModal({ owner, onClose, onChanged }) {
   };
 
   const remove = async (emp) => {
-    if (!confirm(`Remove ${emp.name}? Their assigned leads will become unassigned.`)) return;
     setBusyId(emp.id);
-    try {
-      await api.delete(`/superadmin/users/${owner.id}/employees/${emp.id}`);
-      load();
-      onChanged?.();
-    } catch {}
+    await confirmDialog({
+      title: "Remove Employee",
+      message: `Remove ${emp.name}? Their assigned leads will become unassigned.`,
+      confirmLabel: "Remove",
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/superadmin/users/${owner.id}/employees/${emp.id}`);
+        load();
+        onChanged?.();
+      },
+    });
     setBusyId(null);
   };
 

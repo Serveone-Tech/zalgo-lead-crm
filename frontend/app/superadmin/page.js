@@ -6,6 +6,8 @@ import api from "../../lib/api";
 import EmployeesModal from "./EmployeesModal";
 import Pagination from "../../components/Pagination";
 import SuperAdminShell from "./SuperAdminShell";
+import { useToast } from "../../components/ToastProvider";
+import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -46,7 +48,8 @@ export default function SuperAdminDashboard() {
   const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [deleting, setDeleting] = useState(false);
-  const [toast, setToast]     = useState(null);
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [health, setHealth]   = useState(null);
 
   useEffect(() => {
@@ -60,8 +63,6 @@ export default function SuperAdminDashboard() {
     // would.
     api.get("/superadmin/health").then((r)=>setHealth(r.data)).catch(()=>{});
   }, []);
-
-  const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3000); };
 
   const loadAll = async () => {
     setLoading(true);
@@ -97,13 +98,18 @@ export default function SuperAdminDashboard() {
     const msg = suspending_
       ? `This will immediately suspend ${u.name}. Every employee under this tenant loses access too — they'll all be logged out on their next request. Nothing is deleted; reactivating restores everyone exactly as they were.`
       : `This will restore ${u.name}'s access, and every one of their employees who wasn't separately deactivated by the tenant itself.`;
-    if (!confirm(msg)) return;
     setSuspending(u.id);
-    try {
-      await api.put(`/superadmin/users/${u.id}/suspend`, { suspended: suspending_ });
-      showToast(suspending_ ? "Tenant suspended" : "Tenant reactivated");
-      loadAll();
-    } catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
+    await confirmDialog({
+      title: suspending_ ? "Suspend Tenant" : "Reactivate Tenant",
+      message: msg,
+      confirmLabel: suspending_ ? "Suspend" : "Reactivate",
+      danger: suspending_,
+      onConfirm: async () => {
+        await api.put(`/superadmin/users/${u.id}/suspend`, { suspended: suspending_ });
+        showToast(suspending_ ? "Tenant suspended" : "Tenant reactivated");
+        loadAll();
+      },
+    });
     setSuspending(null);
   };
 
@@ -120,37 +126,45 @@ export default function SuperAdminDashboard() {
   };
 
   const reconcileSubscription = async (u) => {
-    if (!confirm(`This will check Razorpay directly for ${u.name}'s subscription status. If Razorpay confirms it's actually active (e.g. a webhook was missed), their plan will be activated immediately. It will NOT cancel or downgrade anything — a mismatch the other way (Razorpay shows cancelled/halted) will be flagged for you to review, not auto-corrected.`)) return;
     setReconciling(u.id);
     setReconcileResult(null);
-    try {
-      const { data } = await api.post(`/superadmin/users/${u.id}/reconcile-subscription`);
-      setReconcileResult(data);
-      if (data.reconciled) showToast(`Reconciled — plan is now active (Razorpay confirmed: ${data.razorpay_status})`);
-      else if (!data.mismatch) showToast(`No change — Razorpay reports: ${data.razorpay_status}`);
-      loadAll();
-    } catch (err) { showToast(err.response?.data?.error || "Failed to reconcile", "error"); }
+    await confirmDialog({
+      title: "Reconcile Subscription",
+      message: `This will check Razorpay directly for ${u.name}'s subscription status. If Razorpay confirms it's actually active (e.g. a webhook was missed), their plan will be activated immediately. It will NOT cancel or downgrade anything — a mismatch the other way (Razorpay shows cancelled/halted) will be flagged for you to review, not auto-corrected.`,
+      confirmLabel: "Check Razorpay",
+      onConfirm: async () => {
+        const { data } = await api.post(`/superadmin/users/${u.id}/reconcile-subscription`);
+        setReconcileResult(data);
+        if (data.reconciled) showToast(`Reconciled — plan is now active (Razorpay confirmed: ${data.razorpay_status})`);
+        else if (!data.mismatch) showToast(`No change — Razorpay reports: ${data.razorpay_status}`);
+        loadAll();
+      },
+    });
     setReconciling(null);
   };
 
   const startImpersonation = async (u) => {
-    if (!confirm(`This will log you in as ${u.name}, exactly as they'd see the app — including any suspension or plan limits currently in effect. This is logged. Continue?`)) return;
     setImpersonating(true);
-    try {
-      const { data } = await api.post(`/superadmin/users/${u.id}/impersonate`);
-      // Stash the CURRENT admin session so "Return to Admin" can restore it
-      // without a fresh login — ImpersonationBanner (rendered globally from
-      // the root layout) reads this same key.
-      localStorage.setItem("crm_impersonating", JSON.stringify({
-        tenantId: u.id,
-        tenantName: u.name,
-        adminToken: localStorage.getItem("crm_token"),
-        adminUser: localStorage.getItem("crm_user"),
-      }));
-      localStorage.setItem("crm_token", data.token);
-      localStorage.setItem("crm_user", JSON.stringify({ id: data.tenant.id, name: data.tenant.name, email: data.tenant.email, role: "user" }));
-      window.location.href = "/dashboard";
-    } catch (err) { showToast(err.response?.data?.error || "Failed to impersonate", "error"); }
+    await confirmDialog({
+      title: "Impersonate Tenant",
+      message: `This will log you in as ${u.name}, exactly as they'd see the app — including any suspension or plan limits currently in effect. This is logged. Continue?`,
+      confirmLabel: "Impersonate",
+      onConfirm: async () => {
+        const { data } = await api.post(`/superadmin/users/${u.id}/impersonate`);
+        // Stash the CURRENT admin session so "Return to Admin" can restore it
+        // without a fresh login — ImpersonationBanner (rendered globally from
+        // the root layout) reads this same key.
+        localStorage.setItem("crm_impersonating", JSON.stringify({
+          tenantId: u.id,
+          tenantName: u.name,
+          adminToken: localStorage.getItem("crm_token"),
+          adminUser: localStorage.getItem("crm_user"),
+        }));
+        localStorage.setItem("crm_token", data.token);
+        localStorage.setItem("crm_user", JSON.stringify({ id: data.tenant.id, name: data.tenant.name, email: data.tenant.email, role: "user" }));
+        window.location.href = "/dashboard";
+      },
+    });
     setImpersonating(false);
   };
 
@@ -184,8 +198,6 @@ export default function SuperAdminDashboard() {
 
   return (
     <SuperAdminShell>
-      {toast && <div style={{ position:"fixed", top:20, right:20, zIndex:9999, background:toast.type==="success"?"var(--success)":"var(--danger)", color:"#fff", borderRadius:10, padding:"12px 20px", fontFamily:"var(--font-main)", fontWeight:600, fontSize:13, boxShadow:"0 4px 20px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
-
         <div style={{ marginBottom:28 }}>
           <h1 style={{ fontFamily:"var(--font-main)", fontSize:22, fontWeight:700, color:"var(--text-primary)" }}>Tenants</h1>
           <p style={{ color:"var(--text-muted)", fontSize:13, marginTop:4 }}>Manage all tenants, subscriptions and plans</p>

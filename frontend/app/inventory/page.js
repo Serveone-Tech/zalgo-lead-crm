@@ -5,9 +5,11 @@ import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 import { Package, Plus, Pencil, Trash2 } from "lucide-react";
 import Pagination from "../../components/Pagination";
+import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
 export default function InventoryPage() {
   const router = useRouter();
+  const confirmDialog = useConfirmDialog();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -122,14 +124,17 @@ export default function InventoryPage() {
   };
 
   const del = async (item) => {
-    if (!confirm(`Delete "${item.name}" from inventory? Past orders keep their own item details either way.`)) return;
-    setDeleting(item.id);
-    try {
-      await api.delete(`/inventory/${item.id}`);
-      load();
-    } catch {
-      // no-op — leave the row in place so the user can retry
-    }
+    await confirmDialog({
+      title: "Delete Inventory Item",
+      message: `Delete "${item.name}" from inventory? Past orders keep their own item details either way.`,
+      confirmLabel: "Delete Item",
+      danger: true,
+      onConfirm: async () => {
+        setDeleting(item.id);
+        await api.delete(`/inventory/${item.id}`);
+        load();
+      },
+    });
     setDeleting(null);
   };
 

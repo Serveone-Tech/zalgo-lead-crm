@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import api from "../lib/api";
 import { WhatsAppGlyph } from "./BrandIcons";
+import { useConfirmDialog } from "./ConfirmDialogProvider";
 
 const VARS = ["{name}", "{phone}", "{email}", "{business_name}"];
 
@@ -10,6 +11,7 @@ const VARS = ["{name}", "{phone}", "{email}", "{business_name}"];
 // the segment-based Broadcast tab, just with an explicit id list instead
 // of a segment rule. `target` picks which table the ids belong to.
 export default function SendToSelectedModal({ customerIds, target = "customers", onClose, onSent }) {
+  const confirmDialog = useConfirmDialog();
   const [channels, setChannels] = useState([]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -38,7 +40,12 @@ export default function SendToSelectedModal({ customerIds, target = "customers",
       usingTemplate && channels.includes("whatsapp")
         ? ` (~₹${(customerIds.length * whatsappRate).toFixed(2)} estimated WhatsApp cost)`
         : "";
-    if (!confirm(`Send this to ${customerIds.length} selected ${label}(s)?${costNote}`)) return;
+    const ok = await confirmDialog({
+      title: "Send Message",
+      message: `Send this to ${customerIds.length} selected ${label}${customerIds.length !== 1 ? "s" : ""}?${costNote}`,
+      confirmLabel: "Send",
+    });
+    if (!ok) return;
     setSending(true);
     setError("");
     try {

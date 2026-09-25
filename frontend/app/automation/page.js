@@ -5,6 +5,8 @@ import api from "../../lib/api";
 import { parsePlanFeatures, makeHasPlanFeature } from "../../lib/plan-features";
 import { WhatsAppGlyph, GoogleAdsGlyph } from "../../components/BrandIcons";
 import WhatsAppEmbeddedSignup from "../../components/WhatsAppEmbeddedSignup";
+import { useToast } from "../../components/ToastProvider";
+import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
 const TRIGGER_DEFS = [
   {
@@ -221,7 +223,8 @@ export default function AutomationPage() {
   const [savingChan, setSavingChan] = useState(null);
   const [savingTrig, setSavingTrig] = useState(null);
   const [sending, setSending] = useState(false);
-  const [toast, setToast] = useState(null);
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [manual, setManual] = useState({
     channel: "email",
     to: "",
@@ -359,23 +362,22 @@ export default function AutomationPage() {
       usingTemplate && broadcast.channels.includes("whatsapp") && audienceCount
         ? ` (~₹${(audienceCount * whatsappRate).toFixed(2)} estimated WhatsApp cost)`
         : "";
-    if (!confirm(`Send this to ${reach} customer(s)?${costNote} This can't be undone.`)) return;
-    setBroadcasting(true);
-    try {
-      const { data } = await api.post("/automation/broadcast", broadcast);
-      showToast(`Sent! ${data.sent_count} delivered, ${data.failed_count} failed, out of ${data.recipient_count} recipients.`);
-      setBroadcast((b) => ({ ...b, message: "", template_id: "", variable_mapping: [] }));
-      setBroadcastHistory((h) => [data, ...h]);
-    } catch (err) {
-      showToast(err?.response?.data?.error || "Broadcast failed", "error");
-    } finally {
-      setBroadcasting(false);
-    }
-  };
-
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 4000);
+    await confirmDialog({
+      title: "Send Broadcast",
+      message: `Send this to ${reach} customer(s)?${costNote} This can't be undone.`,
+      confirmLabel: "Send",
+      onConfirm: async () => {
+        setBroadcasting(true);
+        try {
+          const { data } = await api.post("/automation/broadcast", broadcast);
+          showToast(`Sent! ${data.sent_count} delivered, ${data.failed_count} failed, out of ${data.recipient_count} recipients.`);
+          setBroadcast((b) => ({ ...b, message: "", template_id: "", variable_mapping: [] }));
+          setBroadcastHistory((h) => [data, ...h]);
+        } finally {
+          setBroadcasting(false);
+        }
+      },
+    });
   };
 
   const load = async () => {
@@ -457,14 +459,17 @@ export default function AutomationPage() {
 
   const deleteDeliveryPanel = async (provider) => {
     const label = deliveryProviders.find((p) => p.id === provider)?.label || provider;
-    if (!confirm(`Disconnect ${label}? Orders will stop auto-shipping/tracking through it.`)) return;
-    try {
-      await api.delete(`/delivery/credentials/${provider}`);
-      const dc = await api.get("/delivery/credentials").catch(() => null);
-      if (dc) setDeliveryConfigs(dc.data);
-    } catch {
-      showToast("Delete failed", "error");
-    }
+    await confirmDialog({
+      title: "Disconnect Delivery Panel",
+      message: `Disconnect ${label}? Orders will stop auto-shipping/tracking through it.`,
+      confirmLabel: "Disconnect",
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/delivery/credentials/${provider}`);
+        const dc = await api.get("/delivery/credentials").catch(() => null);
+        if (dc) setDeliveryConfigs(dc.data);
+      },
+    });
   };
 
   const saveTrigger = async (id) => {
@@ -482,21 +487,22 @@ export default function AutomationPage() {
   };
 
   const regenerateWebhooks = async () => {
-    if (
-      !confirm(
-        "This will invalidate your current webhook URLs. Any Google Ads or WhatsApp connection using the old URL will stop working until you update it. Continue?",
-      )
-    )
-      return;
-    setRegenerating(true);
-    try {
-      const { data } = await api.post("/automation/webhook-urls/regenerate");
-      setWebhooks(data);
-      showToast("Webhook URLs regenerated. Update your connections with the new URL.");
-    } catch {
-      showToast("Failed to regenerate", "error");
-    }
-    setRegenerating(false);
+    await confirmDialog({
+      title: "Regenerate Webhook URLs",
+      message: "This will invalidate your current webhook URLs. Any Google Ads or WhatsApp connection using the old URL will stop working until you update it. Continue?",
+      confirmLabel: "Regenerate",
+      danger: true,
+      onConfirm: async () => {
+        setRegenerating(true);
+        try {
+          const { data } = await api.post("/automation/webhook-urls/regenerate");
+          setWebhooks(data);
+          showToast("Webhook URLs regenerated. Update your connections with the new URL.");
+        } finally {
+          setRegenerating(false);
+        }
+      },
+    });
   };
 
   const copyToClipboard = (text) => {
@@ -557,29 +563,6 @@ export default function AutomationPage() {
 
   return (
     <div style={{ padding: "28px 32px" }}>
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            top: 20,
-            right: 20,
-            zIndex: 9999,
-            background:
-              toast.type === "success" ? "var(--success)" : "var(--danger)",
-            color: "#fff",
-            borderRadius: 10,
-            padding: "12px 20px",
-            fontFamily: "var(--font-main)",
-            fontWeight: 600,
-            fontSize: 13,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-            maxWidth: 400,
-          }}
-        >
-          {toast.msg}
-        </div>
-      )}
-
       <div style={{ marginBottom: 28 }}>
         <h1
           style={{

@@ -7,6 +7,7 @@ import { parsePlanFeatures, makeHasPlanFeature } from "../../lib/plan-features";
 import { Users, DollarSign, Clock, TrendingUp, Trash2, Calendar, Download, XCircle } from "lucide-react";
 import SendToSelectedModal from "../../components/SendToSelectedModal";
 import Pagination from "../../components/Pagination";
+import { useToast } from "../../components/ToastProvider";
 
 function today() {
   return new Date().toISOString().split("T")[0];
@@ -28,6 +29,7 @@ function isToday(d) {
 
 export default function CustomersPage() {
   const router = useRouter();
+  const showToast = useToast();
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
   const [headerStats, setHeaderStats] = useState(null);
@@ -1680,7 +1682,7 @@ export default function CustomersPage() {
           customerIds={Array.from(selectedIds)}
           onClose={() => setSendModalOpen(false)}
           onSent={(campaign) => {
-            alert(`Sent! ${campaign.sent_count} delivered, ${campaign.failed_count} failed, out of ${campaign.recipient_count} recipients.`);
+            showToast(`Sent! ${campaign.sent_count} delivered, ${campaign.failed_count} failed, out of ${campaign.recipient_count} recipients.`);
             setSelectedIds(new Set());
           }}
         />

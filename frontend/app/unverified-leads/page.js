@@ -5,6 +5,8 @@ import api from "../../lib/api";
 import LeadModal from "../../components/LeadModal";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 import Pagination from "../../components/Pagination";
+import { useToast } from "../../components/ToastProvider";
+import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -21,7 +23,8 @@ export default function UnverifiedLeadsPage() {
   const [stages, setStages] = useState([]);
   const [modalRow, setModalRow] = useState(null);
   const [deleting, setDeleting] = useState(null);
-  const [toast, setToast] = useState(null);
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [selected, setSelected] = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -48,25 +51,23 @@ export default function UnverifiedLeadsPage() {
     setLoading(false);
   };
 
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
-
   const discard = async (row) => {
-    if (!confirm(`Discard "${row.name}"? This cannot be undone.`)) return;
     setDeleting(row.id);
-    try {
-      await api.delete(`/pending-leads/${row.id}`);
-      setRows((r) => r.filter((x) => x.id !== row.id));
-      setSelected((s) => {
-        const next = new Set(s);
-        next.delete(row.id);
-        return next;
-      });
-    } catch {
-      showToast("Failed to discard", "error");
-    }
+    await confirmDialog({
+      title: "Discard Lead",
+      message: `Discard "${row.name}"? This cannot be undone.`,
+      confirmLabel: "Discard",
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/pending-leads/${row.id}`);
+        setRows((r) => r.filter((x) => x.id !== row.id));
+        setSelected((s) => {
+          const next = new Set(s);
+          next.delete(row.id);
+          return next;
+        });
+      },
+    });
     setDeleting(null);
   };
 
@@ -97,23 +98,22 @@ export default function UnverifiedLeadsPage() {
 
   const bulkDiscard = async () => {
     if (selected.size === 0) return;
-    if (
-      !confirm(
-        `Discard ${selected.size} selected lead${selected.size !== 1 ? "s" : ""}? This cannot be undone.`,
-      )
-    )
-      return;
+    const count = selected.size;
     setBulkDeleting(true);
-    try {
-      const { data } = await api.delete("/pending-leads/bulk", {
-        data: { ids: Array.from(selected) },
-      });
-      setRows((r) => r.filter((x) => !selected.has(x.id)));
-      setSelected(new Set());
-      showToast(`✓ ${data.deleted} lead${data.deleted !== 1 ? "s" : ""} discarded.`);
-    } catch {
-      showToast("Failed to discard selected leads", "error");
-    }
+    await confirmDialog({
+      title: "Discard Leads",
+      message: `Discard ${count} selected lead${count !== 1 ? "s" : ""}? This cannot be undone.`,
+      confirmLabel: "Discard",
+      danger: true,
+      onConfirm: async () => {
+        const { data } = await api.delete("/pending-leads/bulk", {
+          data: { ids: Array.from(selected) },
+        });
+        setRows((r) => r.filter((x) => !selected.has(x.id)));
+        setSelected(new Set());
+        showToast(`✓ ${data.deleted} lead${data.deleted !== 1 ? "s" : ""} discarded.`);
+      },
+    });
     setBulkDeleting(false);
   };
 
@@ -133,27 +133,6 @@ export default function UnverifiedLeadsPage() {
 
   return (
     <div style={{ padding: "28px 32px" }}>
-      {toast && (
-        <div
-          style={{
-            position: "fixed",
-            top: 20,
-            right: 20,
-            zIndex: 9999,
-            background: toast.type === "error" ? "var(--danger)" : "var(--success)",
-            color: "#fff",
-            borderRadius: 10,
-            padding: "12px 20px",
-            fontFamily: "var(--font-main)",
-            fontWeight: 600,
-            fontSize: 13,
-            boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
-          }}
-        >
-          {toast.msg}
-        </div>
-      )}
-
       {selected.size > 0 && (
         <div
           style={{

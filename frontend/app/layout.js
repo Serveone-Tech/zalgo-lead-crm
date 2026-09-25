@@ -4,6 +4,8 @@ import { usePathname } from 'next/navigation';
 import Script from 'next/script';
 import Sidebar from '../components/Sidebar';
 import ImpersonationBanner from '../components/ImpersonationBanner';
+import { ToastProvider } from '../components/ToastProvider';
+import { ConfirmDialogProvider } from '../components/ConfirmDialogProvider';
 
 const NO_SIDEBAR = [
   '/', '/login', '/register', '/onboarding', '/plans', '/superadmin',
@@ -47,24 +49,28 @@ export default function RootLayout({ children }) {
         </Script>
       </head>
       <body>
-        <ImpersonationBanner />
-        {hideSidebar ? (
-          children
-        ) : (
-          <div style={{ display: 'flex', minHeight: '100vh' }}>
-            <Sidebar />
-            <main style={{
-              marginLeft: 'var(--sidebar-w)',
-              flex: 1,
-              minHeight: '100vh',
-              background: 'var(--bg-base)',
-              overflow: 'auto',
-              transition: 'margin-left 0.18s ease',
-            }}>
-              {children}
-            </main>
-          </div>
-        )}
+        <ToastProvider>
+          <ConfirmDialogProvider>
+            <ImpersonationBanner />
+            {hideSidebar ? (
+              children
+            ) : (
+              <div style={{ display: 'flex', minHeight: '100vh' }}>
+                <Sidebar />
+                <main style={{
+                  marginLeft: 'var(--sidebar-w)',
+                  flex: 1,
+                  minHeight: '100vh',
+                  background: 'var(--bg-base)',
+                  overflow: 'auto',
+                  transition: 'margin-left 0.18s ease',
+                }}>
+                  {children}
+                </main>
+              </div>
+            )}
+          </ConfirmDialogProvider>
+        </ToastProvider>
       </body>
     </html>
   );

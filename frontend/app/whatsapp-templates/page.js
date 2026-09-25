@@ -5,6 +5,8 @@ import { Plus, Copy, Trash2, RefreshCw, Send, Pencil, MessageSquareText } from "
 import api from "../../lib/api";
 import Pagination from "../../components/Pagination";
 import TemplateStatusBadge from "../../components/whatsapp-templates/TemplateStatusBadge";
+import { useToast } from "../../components/ToastProvider";
+import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
 const STATUS_FILTERS = ["all", "draft", "pending", "approved", "rejected"];
 const CATEGORY_FILTERS = ["all", "MARKETING", "UTILITY", "AUTHENTICATION"];
@@ -18,12 +20,8 @@ export default function WhatsAppTemplatesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [busyId, setBusyId] = useState(null);
-  const [toast, setToast] = useState(null);
-
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  };
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
 
   const load = () => {
     setLoading(true);
@@ -90,26 +88,23 @@ export default function WhatsAppTemplatesPage() {
   };
 
   const remove = async (t) => {
-    if (!confirm(`Delete "${t.name}"? This can't be undone.`)) return;
     setBusyId(t.id);
-    try {
-      await api.delete(`/whatsapp-templates/${t.id}`);
-      showToast("Template deleted");
-      load();
-    } catch (e) {
-      showToast(e?.response?.data?.error || "Could not delete template", "error");
-    }
+    await confirmDialog({
+      title: "Delete Template",
+      message: `Delete "${t.name}"? This can't be undone.`,
+      confirmLabel: "Delete Template",
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/whatsapp-templates/${t.id}`);
+        showToast("Template deleted");
+        load();
+      },
+    });
     setBusyId(null);
   };
 
   return (
     <div style={{ padding: "28px 32px" }}>
-      {toast && (
-        <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: toast.type === "error" ? "var(--danger)" : "var(--success)", color: "#fff", borderRadius: 10, padding: "12px 20px", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>
-          {toast.msg}
-        </div>
-      )}
-
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
           <h1 style={{ fontFamily: "var(--font-main)", fontSize: 22, fontWeight: 700, color: "var(--text-primary)", display: "flex", alignItems: "center", gap: 10 }}>

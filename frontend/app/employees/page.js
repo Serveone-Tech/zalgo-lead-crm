@@ -6,6 +6,8 @@ import { PERMISSION_MODULES, visiblePermissionModules } from "../../lib/permissi
 import { parsePlanFeatures } from "../../lib/plan-features";
 import { Users } from "lucide-react";
 import Pagination from "../../components/Pagination";
+import { useToast } from "../../components/ToastProvider";
+import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
 const emptyForm = {
   name: "",
@@ -38,6 +40,8 @@ function summarizeModulePerms(permissions) {
 
 export default function EmployeesPage() {
   const router = useRouter();
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
   const [employees, setEmployees] = useState([]);
   const [sub, setSub] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -148,26 +152,47 @@ export default function EmployeesPage() {
   };
 
   const removeEmployee = async (id) => {
-    if (!confirm("Remove this employee? Their assigned leads will become unassigned."))
-      return;
-    await api.delete(`/employees/${id}`);
-    load();
+    await confirmDialog({
+      title: "Remove Employee",
+      message: "This will remove the employee's account. Their assigned leads will become unassigned.",
+      confirmLabel: "Remove Employee",
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/employees/${id}`);
+        load();
+      },
+    });
   };
 
   const [statusChanging, setStatusChanging] = useState(null);
   const toggleActive = async (emp) => {
     const goingActive = !!emp.is_blocked;
-    if (!goingActive && !confirm(`Deactivate ${emp.name}? They won't be able to log in, but their data stays exactly as-is — you can reactivate them any time.`))
-      return;
-    setStatusChanging(emp.id);
-    try {
+    const doToggle = async () => {
+      setStatusChanging(emp.id);
       await api.put(`/employees/${emp.id}/status`, { active: goingActive });
       load();
-    } catch (err) {
-      alert(err.response?.data?.error || "Something went wrong");
-    } finally {
-      setStatusChanging(null);
+    };
+    if (!goingActive) {
+      // Deactivating needs confirmation — let a failure surface inline in
+      // the dialog itself rather than swallowing it here, so the dialog
+      // doesn't close as if it succeeded while an error toast fires beside it.
+      await confirmDialog({
+        title: "Deactivate Employee",
+        message: `Deactivate ${emp.name}? They won't be able to log in, but their data stays exactly as-is — you can reactivate them any time.`,
+        confirmLabel: "Deactivate",
+        danger: true,
+        onConfirm: doToggle,
+      });
+    } else {
+      // Reactivating is immediate, no confirmation step — a failure here
+      // has no dialog to show it in, so it's the one path that still toasts.
+      try {
+        await doToggle();
+      } catch (err) {
+        showToast(err.response?.data?.error || "Something went wrong", "error");
+      }
     }
+    setStatusChanging(null);
   };
 
   const [page, setPage] = useState(1);

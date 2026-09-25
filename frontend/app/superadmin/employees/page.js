@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import api from "../../../lib/api";
 import SuperAdminShell from "../SuperAdminShell";
 import { PERMISSION_KEYS } from "../../../lib/permissions";
+import { useToast } from "../../../components/ToastProvider";
+import { useConfirmDialog } from "../../../components/ConfirmDialogProvider";
 
 function fmtDate(d) {
   if (!d) return "—";
@@ -18,15 +20,14 @@ export default function CrossTenantEmployeeSearch() {
   const [loading, setLoading] = useState(false);
   const [toggling, setToggling] = useState(null);
   const [expanded, setExpanded] = useState(null);
-  const [toast, setToast] = useState(null);
+  const showToast = useToast();
+  const confirmDialog = useConfirmDialog();
 
   useEffect(() => {
     const user = localStorage.getItem("crm_user");
     if (!user) { router.push("/login"); return; }
     if (JSON.parse(user).role !== "superadmin") { router.push("/dashboard"); return; }
   }, []);
-
-  const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
 
   const search = async (e) => {
     e?.preventDefault();
@@ -43,16 +44,23 @@ export default function CrossTenantEmployeeSearch() {
 
   const toggleBlock = async (emp) => {
     const blocking = !emp.is_blocked;
-    const msg = blocking
-      ? `This will immediately log ${emp.name} out and prevent them logging back in — nothing else about their account changes, and this does NOT affect ${emp.tenant_name}'s own seat count or any other employee.`
-      : `This will restore ${emp.name}'s access to log in again.`;
-    if (!confirm(msg)) return;
-    setToggling(emp.id);
-    try {
+    const doToggle = async () => {
+      setToggling(emp.id);
       const { data } = await api.put(`/superadmin/users/${emp.tenant_id}/employees/${emp.id}/block`, { blocked: blocking });
       setResults((rows) => rows.map((r) => (r.id === emp.id ? { ...r, is_blocked: data.is_blocked } : r)));
       showToast(blocking ? "Employee deactivated" : "Employee reactivated");
-    } catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
+    };
+    if (blocking) {
+      await confirmDialog({
+        title: "Deactivate Employee",
+        message: `This will immediately log ${emp.name} out and prevent them logging back in — nothing else about their account changes, and this does NOT affect ${emp.tenant_name}'s own seat count or any other employee.`,
+        confirmLabel: "Deactivate",
+        danger: true,
+        onConfirm: doToggle,
+      });
+    } else {
+      try { await doToggle(); } catch (err) { showToast(err.response?.data?.error || "Failed", "error"); }
+    }
     setToggling(null);
   };
 
@@ -60,8 +68,6 @@ export default function CrossTenantEmployeeSearch() {
 
   return (
     <SuperAdminShell>
-      {toast && <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: toast.type === "success" ? "var(--success)" : "var(--danger)", color: "#fff", borderRadius: 10, padding: "12px 20px", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}>{toast.msg}</div>}
-
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontFamily: "var(--font-main)", fontSize: 22, fontWeight: 700, color: "var(--text-primary)" }}>Employee Search</h1>
         <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
