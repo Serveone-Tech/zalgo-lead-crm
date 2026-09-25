@@ -7,8 +7,7 @@ import api, { refreshUser } from "../lib/api";
 import { hasPerm, isOwnerUser } from "../lib/permissions";
 import { parsePlanFeatures, makeHasPlanFeature } from "../lib/plan-features";
 import { WhatsAppGlyph } from "./BrandIcons";
-import { useToast, useToastDismiss } from "./ToastProvider";
-import FollowUpToastContent from "./FollowUpToastContent";
+import FollowUpModal from "./FollowUpModal";
 
 // Per-lead-id dismiss tracking so a rescheduled follow-up (new
 // follow_up_date) fires again, but re-polling the same due state within
@@ -39,8 +38,11 @@ export default function Sidebar() {
   const [sub, setSub] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const showToast = useToast();
-  const dismissToast = useToastDismiss();
+  // Due follow-ups queue one at a time — a fresh lead only ever joins the
+  // back of the queue (see handleDueLeads), the modal always renders
+  // whichever one is at the front, and resolving it (either button) just
+  // shifts the queue so the next one appears immediately if there is one.
+  const [followUpQueue, setFollowUpQueue] = useState([]);
 
   const SIDEBAR_W = { open: "232px", collapsed: "68px" };
 
@@ -128,11 +130,12 @@ export default function Sidebar() {
     } catch {}
   };
 
-  // Shows one grouped/single popup for whichever due leads haven't already
-  // been surfaced for their current follow_up_date — a lead rescheduled to
-  // a new time clears its old dismiss entry automatically (the stored date
-  // no longer matches), but re-polling the same still-due lead every 60s
-  // does not re-fire the popup.
+  // Queues whichever due leads haven't already been surfaced for their
+  // current follow_up_date — a lead rescheduled to a new time clears its
+  // old dismiss entry automatically (the stored date no longer matches),
+  // but re-polling the same still-due lead every 60s does not re-queue it.
+  // Marked dismissed immediately (not on resolve) so a failed/slow action
+  // can't cause the same lead to be queued twice by the next poll tick.
   const handleDueLeads = (dueLeads) => {
     const dismissed = getDismissedFollowups();
     const newlyDue = dueLeads.filter((l) => dismissed[l.id] !== l.follow_up_date);
@@ -142,45 +145,19 @@ export default function Sidebar() {
     newlyDue.forEach((l) => { next[l.id] = l.follow_up_date; });
     setDismissedFollowups(next);
 
-    let toastId;
-    const closeAndRun = (fn) => (lead) => {
-      fn(lead);
-      dismissToast(toastId);
-    };
-    toastId = showToast({
-      content: (
-        <FollowUpToastContent
-          leads={newlyDue}
-          onView={closeAndRun(handleViewLead)}
-          onSnooze={closeAndRun(handleSnoozeLead)}
-          onDone={closeAndRun(handleDoneLead)}
-        />
-      ),
-      persistent: true,
-    });
+    setFollowUpQueue((q) => [...q, ...newlyDue]);
   };
 
-  const handleViewLead = (lead) => {
-    router.push(`/leads?search=${encodeURIComponent(lead.phone || lead.name)}`);
+  const resolveFollowUp = () => setFollowUpQueue((q) => q.slice(1));
+
+  const handleFollowUpNow = (lead) => {
+    resolveFollowUp();
+    router.push(`/leads?openLead=${lead.id}`);
   };
 
-  const handleSnoozeLead = async (lead) => {
-    try {
-      const nextDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-      await api.put(`/leads/${lead.id}/follow-up`, { follow_up_date: nextDate });
-      showToast(`Snoozed "${lead.name}" for 1 hour`);
-    } catch {
-      showToast("Could not snooze — try again", "error");
-    }
-  };
-
-  const handleDoneLead = async (lead) => {
-    try {
-      await api.put(`/leads/${lead.id}/follow-up`, { follow_up_date: null });
-      showToast(`Marked "${lead.name}" as done`);
-    } catch {
-      showToast("Could not update — try again", "error");
-    }
+  const handleIgnoreFollowUp = async (lead, reason) => {
+    await api.post(`/leads/${lead.id}/ignore-followup`, { reason });
+    resolveFollowUp();
   };
 
   const logout = () => {
@@ -356,6 +333,24 @@ export default function Sidebar() {
               },
             ]
           : []),
+        // Owner only — deliberately not gated by view_all_leads like
+        // Reports above. An employee can still trigger an ignore (they're
+        // the one acting on the popup), but only the owner gets to see the
+        // audit trail of who ignored what and why.
+        ...(isOwnerUser(user)
+          ? [
+              {
+                href: "/ignored-followups",
+                label: "Ignored Follow-ups",
+                icon: (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="4.9" y1="4.9" x2="19.1" y2="19.1" />
+                  </svg>
+                ),
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -420,6 +415,14 @@ export default function Sidebar() {
 
   return (
     <>
+      {followUpQueue.length > 0 && (
+        <FollowUpModal
+          lead={followUpQueue[0]}
+          onFollowUpNow={handleFollowUpNow}
+          onIgnore={handleIgnoreFollowUp}
+        />
+      )}
+
       {/* Mobile hamburger — hidden on desktop via CSS, fixed above everything */}
       <button
         onClick={() => setMobileOpen((v) => !v)}

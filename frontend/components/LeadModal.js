@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "../lib/api";
 import { isOwnerUser, hasPerm } from "../lib/permissions";
 import { STAGES as FALLBACK_STAGES } from "../lib/stages";
@@ -24,7 +24,8 @@ function toLocalInput(d) {
   return d ? d.slice(0, 16) : "";
 }
 
-export default function LeadModal({ lead, employees = [], stages = [], onClose, onSave }) {
+export default function LeadModal({ lead, employees = [], stages = [], onClose, onSave, focusFollowUp = false }) {
+  const followUpRef = useRef(null);
   const stageNames = stages.length ? stages.map(s => s.name) : FALLBACK_STAGES;
   const [form, setForm] = useState({
     name: "",
@@ -68,6 +69,19 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
       if (lead.id) loadMessages();
     }
   }, [lead]);
+
+  // Deep-linked here from the Sidebar's due-follow-up modal's "Follow Up
+  // Now" — jump straight to the field the employee actually needs to act
+  // on instead of making them hunt for it in the form.
+  useEffect(() => {
+    if (focusFollowUp && lead) {
+      const t = setTimeout(() => {
+        followUpRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        followUpRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(t);
+    }
+  }, [focusFollowUp, lead]);
 
   const loadMessages = async () => {
     try {
@@ -360,11 +374,12 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
             {/* Follow-up Date */}
             <Field label="Next Follow-up Date & Time">
               <input
+                ref={followUpRef}
                 name="follow_up_date"
                 type="datetime-local"
                 value={form.follow_up_date}
                 onChange={handle}
-                style={inp}
+                style={focusFollowUp ? { ...inp, border: "1px solid var(--teal)", boxShadow: "0 0 0 3px var(--teal-dim)" } : inp}
               />
             </Field>
 

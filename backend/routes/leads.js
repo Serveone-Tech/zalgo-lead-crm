@@ -221,14 +221,17 @@ router.get("/sidebar-counts", auth, requireSubscription, requirePlanFeature("cor
          WHERE ii.user_id=$1 AND ii.stock_qty <= COALESCE(us.low_stock_threshold, 10)`,
         [req.tenantId],
       ),
-      // Actual rows behind followup_count, for the Sidebar's due-follow-up
-      // popup — capped so a tenant with hundreds of overdue leads doesn't
-      // balloon this poll's payload; the badge count above still reflects
-      // the true total.
+      // Rows that power the Sidebar's due-follow-up POPUP specifically —
+      // deliberately stricter than followup_count/due_count above (which
+      // stay "due today" for the badge, a softer "here's what's on deck"
+      // signal). The popup fires per-lead at ITS OWN follow_up_date/time,
+      // not in a same-day bucket, so this only includes leads whose exact
+      // timestamp has already passed — a lead due at 5pm must not appear
+      // here (and therefore must not pop) at 9am the same day.
       pool.query(
         `SELECT id, name, phone, notes, last_message, follow_up_date FROM leads
          WHERE user_id=$1 AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED')
-           AND (follow_up_date < NOW() OR follow_up_date::date = CURRENT_DATE)${vis.clause}
+           AND follow_up_date < NOW()${vis.clause}
          ORDER BY follow_up_date ASC LIMIT 15`,
         [req.tenantId, ...vis.params],
       ),
@@ -740,10 +743,41 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async 
   }
 });
 
-// PUT follow-up date only — the Sidebar's due-follow-up popup's Snooze /
-// Mark Done actions, so they don't need to round-trip the whole lead form
-// just to touch one field.
-router.put("/:id/follow-up", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+// GET a single lead — powers the Sidebar's follow-up popup's "Follow Up
+// Now" deep link (/leads?openLead=<id>), which needs the full row to open
+// LeadModal directly from any page, not just the ones that already hold a
+// fetched list in memory.
+router.get("/:id", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM leads WHERE id=$1 AND user_id=$2",
+      [req.params.id, req.tenantId],
+    );
+    const lead = result.rows[0];
+    if (!lead) return res.status(404).json({ error: "Lead not found" });
+    const canSeeAll = isOwner(req) || hasPermission(req, "view_all_leads");
+    if (!canSeeAll && lead.assigned_to !== req.user.id) {
+      return res.status(403).json({ error: "Permission denied" });
+    }
+    res.json(lead);
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// POST — consciously skip a due follow-up instead of acting on it now.
+// Deliberately does NOT touch leads.follow_up_date (confirmed with the
+// tenant): the lead stays visibly overdue everywhere else (dashboard,
+// sidebar badge, WhatsApp inbox sort) as a signal to the owner, and the
+// popup itself won't re-fire for this same follow_up_date because the
+// Sidebar's existing per-lead dismiss map already keys on it. This is what
+// actually stops the nagging — the row here is purely an audit trail for
+// the owner-facing Ignored Follow-ups view, not a status flag read back
+// anywhere else.
+router.post("/:id/ignore-followup", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  const reason = (req.body.reason || "").trim();
+  if (!reason) return res.status(400).json({ error: "A reason is required" });
   try {
     const existing = await pool.query(
       "SELECT * FROM leads WHERE id=$1 AND user_id=$2",
@@ -757,11 +791,52 @@ router.put("/:id/follow-up", auth, requireSubscription, requirePlanFeature("core
       return res.status(403).json({ error: "Permission denied" });
     }
 
-    const result = await pool.query(
-      "UPDATE leads SET follow_up_date=$1, updated_at=NOW() WHERE id=$2 AND user_id=$3 RETURNING *",
-      [req.body.follow_up_date || null, req.params.id, req.tenantId],
+    await pool.query(
+      `INSERT INTO follow_up_ignores (user_id, lead_id, ignored_by, reason, follow_up_date_at_time)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [req.tenantId, lead.id, req.user.id, reason, lead.follow_up_date],
     );
-    res.json(result.rows[0]);
+    res.json({ success: true });
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET the owner-facing audit list of every ignored follow-up — tenant
+// owner only (not employees, even ones with view_all_leads — this is a
+// deliberate exception to the usual visibility rule, same idea as other
+// owner-only reporting views like Reports).
+router.get("/ignored-followups/list", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const { employeeId, dateFrom, dateTo } = req.query;
+    const conditions = ["f.user_id=$1"];
+    const params = [req.tenantId];
+    if (employeeId) {
+      params.push(employeeId);
+      conditions.push(`f.ignored_by=$${params.length}`);
+    }
+    if (dateFrom) {
+      params.push(dateFrom);
+      conditions.push(`f.created_at::date >= $${params.length}`);
+    }
+    if (dateTo) {
+      params.push(dateTo);
+      conditions.push(`f.created_at::date <= $${params.length}`);
+    }
+    const result = await pool.query(
+      `SELECT f.id, f.reason, f.follow_up_date_at_time, f.created_at,
+              l.id AS lead_id, l.name AS lead_name, l.phone AS lead_phone,
+              u.id AS employee_id, u.name AS employee_name
+       FROM follow_up_ignores f
+       LEFT JOIN leads l ON l.id = f.lead_id
+       LEFT JOIN users u ON u.id = f.ignored_by
+       WHERE ${conditions.join(" AND ")}
+       ORDER BY f.created_at DESC`,
+      params,
+    );
+    res.json(result.rows);
   } catch (e) {
     console.error(e.message);
     res.status(500).json({ error: "Server error" });

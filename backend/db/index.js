@@ -988,6 +988,25 @@ const initDB = async () => {
     `).catch((e) => console.log("admin_audit_log create skip:", e.message));
     await client.query(`CREATE INDEX IF NOT EXISTS idx_admin_audit_log_created_at ON admin_audit_log(created_at DESC)`).catch(() => {});
 
+    // One row per "Ignore" click on the Sidebar's due-follow-up popup —
+    // a deliberate audit trail (why an employee skipped it), separate from
+    // the lead's own general notes history so the owner-facing Ignored
+    // Follow-ups view can list/filter/sort these on their own without
+    // wading through every other note ever added to a lead.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS follow_up_ignores (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+        ignored_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        reason TEXT NOT NULL,
+        follow_up_date_at_time TIMESTAMP,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch((e) => console.log("follow_up_ignores create skip:", e.message));
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_follow_up_ignores_user_id ON follow_up_ignores(user_id)`).catch(() => {});
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_follow_up_ignores_lead_id ON follow_up_ignores(lead_id)`).catch(() => {});
+
     // One-time rename: 'trial'->'trialing', 'cancelled'->'canceled' so the
     // whole app (backend + frontend) reads one consistent 5-state
     // vocabulary (trialing/active/past_due/canceled/expired). 'active' and

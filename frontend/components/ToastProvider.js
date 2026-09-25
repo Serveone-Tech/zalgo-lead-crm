@@ -143,9 +143,8 @@ export function useToast() {
 }
 
 // For callers that need to programmatically close a persistent toast they
-// created (e.g. the Sidebar's follow-up popup, once its own Quick action
-// has handled the lead) — separate from useToast() so every existing
-// showToast(msg) call site doesn't have to change shape.
+// created — separate from useToast() so every existing showToast(msg)
+// call site doesn't have to change shape.
 export function useToastDismiss() {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error("useToastDismiss must be used within ToastProvider");

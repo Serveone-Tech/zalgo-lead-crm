@@ -77,6 +77,7 @@ function LeadsContent() {
   );
   const [modalOpen, setModal] = useState(false);
   const [editLead, setEditLead] = useState(null);
+  const [focusFollowUp, setFocusFollowUp] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const showToast = useToast();
   const confirmDialog = useConfirmDialog();
@@ -141,6 +142,20 @@ function LeadsContent() {
       .get("/settings")
       .then((r) => setFulfillmentStage(r.data.order_fulfillment_stage || ""))
       .catch(() => {});
+
+    // Deep link from the Sidebar's due-follow-up modal's "Follow Up Now" —
+    // opens straight into that lead's edit form instead of just filtering
+    // the table, and clears the param so a refresh doesn't re-open it.
+    const openLeadId = searchParams.get("openLead");
+    if (openLeadId) {
+      api.get(`/leads/${openLeadId}`).then((r) => {
+        setEditLead(r.data);
+        setFocusFollowUp(true);
+        setModal(true);
+      }).catch(() => {});
+      router.replace("/leads");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const canAssign = isOwnerUser(user) || hasPerm(user, "assign_leads");
@@ -222,15 +237,18 @@ function LeadsContent() {
 
   const openAdd = () => {
     setEditLead(null);
+    setFocusFollowUp(false);
     setModal(true);
   };
   const openEdit = (l) => {
     setEditLead(l);
+    setFocusFollowUp(false);
     setModal(true);
   };
   const closeModal = () => {
     setModal(false);
     setEditLead(null);
+    setFocusFollowUp(false);
   };
 
   const saveLead = async (form) => {
@@ -1378,6 +1396,7 @@ function LeadsContent() {
           stages={dynamicStages}
           onClose={closeModal}
           onSave={saveLead}
+          focusFollowUp={focusFollowUp}
         />
       )}
       {bulkOpen && (
