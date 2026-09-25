@@ -17,7 +17,7 @@ const FIELD_ALIASES = {
 };
 
 const VALID_STAGES   = ["New", "Active", "Follow-up", "Booked", "Converted", "Closed"];
-const VALID_PLATFORMS = ["LinkedIn", "Instagram", "WhatsApp", "Email", "Referral", "Other"];
+const VALID_PLATFORMS = ["LinkedIn", "Instagram", "WhatsApp", "Phone Call", "Email", "Referral", "Other"];
 
 const TEMPLATE_HEADERS = ["Name", "Phone", "Email", "Platform", "Platform Link", "Stage", "Last Message", "Follow Up Date", "Notes"];
 const TEMPLATE_SAMPLE  = ["Ravi Kumar", "9876543210", "ravi@email.com", "LinkedIn", "https://linkedin.com/in/ravi", "New", "Interested in course", "2026-07-15", "Referred by Amit"];

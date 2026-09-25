@@ -7,6 +7,7 @@ const PLATFORMS = [
   "LinkedIn",
   "Instagram",
   "WhatsApp",
+  "Phone Call",
   "Email",
   "Referral",
   "Other",
