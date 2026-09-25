@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import api from "../../lib/api";
@@ -31,6 +31,7 @@ export default function SuperAdminDashboard() {
   const router = useRouter();
   const [stats, setStats]     = useState(null);
   const [users, setUsers]     = useState([]);
+  const [usersTotal, setUsersTotal] = useState(0);
   const [plans, setPlans]     = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch]   = useState("");
@@ -52,28 +53,44 @@ export default function SuperAdminDashboard() {
   const confirmDialog = useConfirmDialog();
   const [health, setHealth]   = useState(null);
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, filterStatus]);
+
   useEffect(() => {
     const user = localStorage.getItem("crm_user");
     if (!user) { router.push("/login"); return; }
     const u = JSON.parse(user);
     if (u.role !== "superadmin") { router.push("/dashboard"); return; }
-    loadAll();
     // Separate from loadAll — a health-check hiccup shouldn't boot the
     // admin back to /login the way a real auth failure on the core data
     // would.
     api.get("/superadmin/health").then((r)=>setHealth(r.data)).catch(()=>{});
   }, []);
 
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, debouncedSearch, filterStatus]);
+
   const loadAll = async () => {
     setLoading(true);
     try {
       const [statsRes, usersRes, plansRes] = await Promise.all([
         api.get("/superadmin/stats"),
-        api.get("/superadmin/users"),
+        api.get("/superadmin/users", { params: { page, pageSize, search: debouncedSearch.trim() || undefined, status: filterStatus || undefined } }),
         api.get("/superadmin/plans"),
       ]);
       setStats(statsRes.data);
-      setUsers(usersRes.data);
+      setUsers(usersRes.data.rows);
+      setUsersTotal(usersRes.data.total);
       setPlans(plansRes.data);
     } catch { router.push("/login"); }
     finally { setLoading(false); }
@@ -168,23 +185,6 @@ export default function SuperAdminDashboard() {
     setImpersonating(false);
   };
 
-  const filtered = users.filter(u => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.org_name?.toLowerCase().includes(q);
-    const matchStatus = !filterStatus || u.sub_status === filterStatus;
-    return matchSearch && matchStatus;
-  });
-
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  useEffect(() => {
-    setPage(1);
-  }, [search, filterStatus]);
-  const paged = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
-  );
-
   if (loading) return <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"var(--bg-base)", color:"var(--text-muted)", fontFamily:"var(--font-main)" }}>Loading...</div>;
 
   const statCards = [
@@ -241,9 +241,9 @@ export default function SuperAdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {users.length === 0 ? (
                   <tr><td colSpan={10} style={{ padding:40, textAlign:"center", color:"var(--text-muted)" }}>No users found</td></tr>
-                ) : paged.map((u,i)=>{
+                ) : users.map((u,i)=>{
                   const sc = STATUS_COLORS[u.sub_status] || { bg:"rgba(100,100,100,0.12)", color:"#888", label:u.sub_status||"No Plan" };
                   const expiry = u.sub_status==="trial" ? u.trial_ends_at : u.ends_at;
                   const dl = daysLeft(expiry);
@@ -321,18 +321,18 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
 
-        {filtered.length > 0 && (
+        {usersTotal > 0 && (
           <Pagination
             page={page}
             setPage={setPage}
             pageSize={pageSize}
             setPageSize={setPageSize}
-            total={filtered.length}
+            total={usersTotal}
           />
         )}
 
         <div style={{ marginTop:12, fontSize:12, color:"var(--text-muted)", textAlign:"right" }}>
-          {filtered.length} of {users.length} users
+          {usersTotal} tenant{usersTotal !== 1 ? "s" : ""}
         </div>
 
       {/* Action Modal */}

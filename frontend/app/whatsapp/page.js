@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api, { refreshUser } from "../../lib/api";
 import WhatsAppChat from "../../components/WhatsAppChat";
@@ -47,6 +47,10 @@ export default function WhatsAppInboxPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState(null);
+  // Watermark for delta polling — the newest activity timestamp seen so
+  // far, so each 4s tick only asks the server for what changed since then
+  // instead of re-fetching the whole conversation list every time.
+  const lastPolledAtRef = useRef(null);
 
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
@@ -73,8 +77,27 @@ export default function WhatsAppInboxPage() {
   const load = async (silent) => {
     if (!silent) setLoading(true);
     try {
-      const { data } = await api.get("/leads/whatsapp-inbox");
-      setLeads(data);
+      const since = silent ? lastPolledAtRef.current : null;
+      const { data } = await api.get("/leads/whatsapp-inbox", {
+        params: since ? { since } : undefined,
+      });
+      for (const row of data) {
+        const t = row.updated_at || row.created_at;
+        if (t && (!lastPolledAtRef.current || t > lastPolledAtRef.current)) {
+          lastPolledAtRef.current = t;
+        }
+      }
+      if (since) {
+        // Delta tick — upsert only what changed, keep everything else as-is.
+        setLeads((prev) => {
+          if (data.length === 0) return prev;
+          const byId = new Map(prev.map((l) => [l.id, l]));
+          for (const row of data) byId.set(row.id, row);
+          return Array.from(byId.values());
+        });
+      } else {
+        setLeads(data);
+      }
     } catch {
       // next poll retries
     } finally {

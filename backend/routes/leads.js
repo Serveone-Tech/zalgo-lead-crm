@@ -152,14 +152,28 @@ router.get("/platforms", auth, requireSubscription, requirePlanFeature("core"), 
 // table (every column, every lead) that often was by far the single
 // heaviest recurring cost in the app — this trims both the row set (phone
 // IS NOT NULL) and the column set down to only what the chat list renders.
+//
+// Optional `since` (ISO timestamp): the inbox page's poll cycle passes the
+// last timestamp it saw and merges the delta into what it already holds,
+// instead of re-fetching (and re-serializing) every conversation on every
+// 4s tick — on a tenant with a couple thousand phone-having leads that was
+// genuinely re-transferring ~2000 rows, 8x/minute, whether or not anything
+// had actually changed. The very first load of a page visit still has no
+// `since` and returns the full list, same as before.
 router.get("/whatsapp-inbox", auth, requireSubscription, requirePlanFeature("automation"), async (req, res) => {
   try {
     const vis = visibilityClause(req, 2);
+    const params = [req.tenantId, ...vis.params];
+    let sinceClause = "";
+    if (req.query.since) {
+      params.push(req.query.since);
+      sinceClause = ` AND COALESCE(updated_at, created_at) > $${params.length}`;
+    }
     const result = await pool.query(
       `SELECT id, name, phone, last_message, stage, updated_at, created_at FROM leads
-       WHERE user_id=$1 AND phone IS NOT NULL AND phone <> ''${vis.clause}
+       WHERE user_id=$1 AND phone IS NOT NULL AND phone <> ''${vis.clause}${sinceClause}
        ORDER BY COALESCE(updated_at, created_at) DESC`,
-      [req.tenantId, ...vis.params],
+      params,
     );
     res.json(result.rows);
   } catch (e) {

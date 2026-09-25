@@ -16,6 +16,11 @@ types.setTypeParser(types.builtins.TIMESTAMP, (val) =>
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
+  // Left at pg's default (10) previously, by omission rather than a
+  // deliberate choice — bumped for headroom as tenant count grows. Cheap:
+  // this just raises the ceiling on concurrent in-flight queries, it
+  // doesn't hold 20 connections open at idle.
+  max: 20,
 });
 
 const initDB = async () => {
@@ -834,6 +839,28 @@ const initDB = async () => {
     ];
     for (const q of indexes) {
       await client.query(q).catch((e) => console.log("index skip:", e.message));
+    }
+
+    // ── STEP 3.6b: Trigram search indexes ────────────────────
+    // The leads search box (buildLeadFilterClause in routes/leads.js) does
+    // a leading-wildcard ILIKE across 5 columns — a plain btree index can't
+    // help a `%term%` match at all, so at low row counts Postgres just
+    // scans (cheap today, since the busiest tenant currently has ~2000
+    // leads) but degrades to a real sequential-scan cost as any tenant's
+    // lead count grows. pg_trgm + a GIN index per searched column lets the
+    // planner satisfy `%term%` via a bitmap index scan instead. One index
+    // per column, not a single combined one — Postgres has no single-index
+    // way to cover "OR across 5 different text columns."
+    await client.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm`).catch((e) => console.log("extension skip:", e.message));
+    const trigramIndexes = [
+      `CREATE INDEX IF NOT EXISTS idx_leads_name_trgm ON leads USING GIN (name gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_phone_trgm ON leads USING GIN (phone gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_last_message_trgm ON leads USING GIN (last_message gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_notes_trgm ON leads USING GIN (notes gin_trgm_ops)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_platform_trgm ON leads USING GIN (platform gin_trgm_ops)`,
+    ];
+    for (const q of trigramIndexes) {
+      await client.query(q).catch((e) => console.log("trigram index skip:", e.message));
     }
 
     // ── STEP 4: Seed default plans ───────────────────────────

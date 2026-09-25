@@ -31,15 +31,34 @@ router.get("/list", auth, requireSubscription, requirePlanFeature("employees"), 
   }
 });
 
-// GET all sub-accounts for this tenant
+// GET one page of this tenant's sub-accounts — also returns total row count
+// and activeCount (not blocked) so the Team page's seat-usage summary stays
+// accurate even though the table itself only holds one page at a time.
 router.get("/", auth, requireSubscription, requirePlanFeature("employees"), requirePermission("manage_employees"), async (req, res) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize) || 25));
+    const search = (req.query.search || "").trim();
+    const params = [req.tenantId];
+    let where = "parent_id=$1";
+    if (search) {
+      params.push(`%${search}%`);
+      where += ` AND (name ILIKE $${params.length} OR email ILIKE $${params.length})`;
+    }
+    params.push(pageSize, (page - 1) * pageSize);
     const result = await pool.query(
-      `SELECT id, name, email, role_label, permissions, is_blocked, created_at
-       FROM users WHERE parent_id=$1 ORDER BY created_at DESC`,
+      `SELECT id, name, email, role_label, permissions, is_blocked, created_at, COUNT(*) OVER() AS total_count
+       FROM users WHERE ${where} ORDER BY created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+    const total = result.rows[0]?.total_count ? parseInt(result.rows[0].total_count) : 0;
+    const rows = result.rows.map(({ total_count, ...rest }) => rest);
+    const active = await pool.query(
+      "SELECT COUNT(*) FROM users WHERE parent_id=$1 AND is_blocked=false",
       [req.tenantId],
     );
-    res.json(result.rows);
+    res.json({ rows, total, active_count: parseInt(active.rows[0].count) });
   } catch {
     res.status(500).json({ error: "Server error" });
   }

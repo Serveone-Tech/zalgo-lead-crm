@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api, { formatCurrency, refreshUser } from "../../lib/api";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
@@ -11,6 +11,8 @@ export default function InventoryPage() {
   const router = useRouter();
   const confirmDialog = useConfirmDialog();
   const [items, setItems] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [lowStockCount, setLowStockCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [search, setSearch] = useState("");
@@ -42,7 +44,6 @@ export default function InventoryPage() {
         if (!isOwnerUser(fresh) && !hasPerm(fresh, "view_inventory")) router.push("/dashboard");
       }
     });
-    load();
     api
       .get("/settings")
       .then((r) => {
@@ -59,8 +60,12 @@ export default function InventoryPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/inventory");
-      setItems(data);
+      const { data } = await api.get("/inventory/paged", {
+        params: { page, pageSize, search: debouncedSearch.trim() || undefined },
+      });
+      setItems(data.rows);
+      setTotal(data.total);
+      setLowStockCount(data.low_stock_count);
     } catch {
       // no-op — keep whatever was already loaded
     } finally {
@@ -139,18 +144,21 @@ export default function InventoryPage() {
   };
 
   const fmt = mounted ? formatCurrency : (n) => `₹${parseFloat(n) || 0}`;
-  const filtered = items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase()));
-  const lowStockItems = items.filter((i) => i.stock_qty <= threshold);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350);
+    return () => clearTimeout(t);
+  }, [search]);
   useEffect(() => {
     setPage(1);
-  }, [search]);
-  const paged = useMemo(
-    () => filtered.slice((page - 1) * pageSize, page * pageSize),
-    [filtered, page, pageSize],
-  );
+  }, [debouncedSearch]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize, debouncedSearch]);
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -170,7 +178,7 @@ export default function InventoryPage() {
             <Package size={22} /> Inventory
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
-            {items.length} item{items.length !== 1 ? "s" : ""} — these show up in the Order Fulfillment form's item
+            {total} item{total !== 1 ? "s" : ""} — these show up in the Order Fulfillment form's item
             dropdown, with price filled in automatically.
           </p>
         </div>
@@ -212,11 +220,11 @@ export default function InventoryPage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 18 }}>{lowStockItems.length > 0 ? "⚠️" : "✅"}</span>
+          <span style={{ fontSize: 18 }}>{lowStockCount > 0 ? "⚠️" : "✅"}</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: lowStockItems.length > 0 ? "var(--warn)" : "var(--text-secondary)", fontFamily: "var(--font-main)" }}>
-              {lowStockItems.length > 0
-                ? `${lowStockItems.length} item${lowStockItems.length !== 1 ? "s" : ""} at or below the low-stock alert level`
+            <div style={{ fontSize: 13, fontWeight: 600, color: lowStockCount > 0 ? "var(--warn)" : "var(--text-secondary)", fontFamily: "var(--font-main)" }}>
+              {lowStockCount > 0
+                ? `${lowStockCount} item${lowStockCount !== 1 ? "s" : ""} at or below the low-stock alert level`
                 : "All items are above the low-stock alert level"}
             </div>
             <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
@@ -353,16 +361,16 @@ export default function InventoryPage() {
       <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: 48, textAlign: "center", color: "var(--text-muted)" }}>Loading...</div>
-        ) : filtered.length === 0 ? (
+        ) : items.length === 0 ? (
           <div style={{ padding: 48, textAlign: "center" }}>
             <div style={{ marginBottom: 12, color: "var(--teal)", display: "flex", justifyContent: "center" }}>
               <Package size={36} />
             </div>
             <div style={{ color: "var(--text-secondary)", fontFamily: "var(--font-main)", fontWeight: 600, marginBottom: 6 }}>
-              {items.length === 0 ? "No items yet" : "No matching items"}
+              {total === 0 ? "No items yet" : "No matching items"}
             </div>
             <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
-              {items.length === 0 ? 'Click "+ Add Item" to build your catalog' : "Try adjusting search"}
+              {total === 0 ? 'Click "+ Add Item" to build your catalog' : "Try adjusting search"}
             </div>
           </div>
         ) : (
@@ -390,7 +398,7 @@ export default function InventoryPage() {
               </tr>
             </thead>
             <tbody>
-              {paged.map((item) => (
+              {items.map((item) => (
                 <tr key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
                   <td style={{ padding: "12px 14px", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 13, color: "var(--text-primary)" }}>
                     {item.name}
@@ -466,13 +474,13 @@ export default function InventoryPage() {
         )}
       </div>
 
-      {!loading && filtered.length > 0 && (
+      {!loading && total > 0 && (
         <Pagination
           page={page}
           setPage={setPage}
           pageSize={pageSize}
           setPageSize={setPageSize}
-          total={filtered.length}
+          total={total}
         />
       )}
 

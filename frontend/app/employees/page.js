@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import { PERMISSION_MODULES, visiblePermissionModules } from "../../lib/permissions";
@@ -43,6 +43,8 @@ export default function EmployeesPage() {
   const showToast = useToast();
   const confirmDialog = useConfirmDialog();
   const [employees, setEmployees] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [activeCount, setActiveCount] = useState(0);
   const [sub, setSub] = useState(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModal] = useState(false);
@@ -51,20 +53,29 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   useEffect(() => {
     if (!localStorage.getItem("crm_token")) {
       router.push("/login");
       return;
     }
-    load();
     api.get("/auth/subscription").then((r) => setSub(r.data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/employees");
-      setEmployees(data);
+      const { data } = await api.get("/employees", { params: { page, pageSize } });
+      setEmployees(data.rows);
+      setTotal(data.total);
+      setActiveCount(data.active_count);
     } catch (err) {
       if (err?.response?.status === 403) {
         router.push("/dashboard");
@@ -77,7 +88,8 @@ export default function EmployeesPage() {
   // -1 on the plan means unlimited; a Super Admin-granted override always
   // wins over the plan's own default seat count. Deactivated employees
   // don't count against the seat limit — same rule the backend enforces.
-  const activeCount = employees.filter((e) => !e.is_blocked).length;
+  // activeCount comes from the server now (see load()) since `employees`
+  // only holds the current page, not the whole tenant.
   const employeeLimit = sub ? (sub.employee_limit_override ?? sub.max_employees) : null;
   const atLimit = employeeLimit !== null && employeeLimit !== -1 && activeCount >= employeeLimit;
 
@@ -195,13 +207,6 @@ export default function EmployeesPage() {
     setStatusChanging(null);
   };
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const paged = useMemo(
-    () => employees.slice((page - 1) * pageSize, page * pageSize),
-    [employees, page, pageSize],
-  );
-
   return (
     <div style={{ padding: "28px 32px" }}>
       <div
@@ -226,7 +231,7 @@ export default function EmployeesPage() {
           <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 4 }}>
             {activeCount} active employee{activeCount !== 1 ? "s" : ""}
             {employeeLimit !== null && employeeLimit !== -1 && ` of ${employeeLimit} on your plan`}
-            {employees.length !== activeCount && ` · ${employees.length - activeCount} deactivated`}
+            {total !== activeCount && ` · ${total - activeCount} deactivated`}
           </p>
           {atLimit && (
             <p style={{ color: "var(--danger)", fontSize: 12, marginTop: 4 }}>
@@ -282,7 +287,7 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {paged.map((emp) => (
+                {employees.map((emp) => (
                   <tr key={emp.id} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={td}>
                       <span style={{ fontFamily: "var(--font-main)", fontWeight: 600, color: "var(--text-primary)" }}>
@@ -357,13 +362,13 @@ export default function EmployeesPage() {
         )}
       </div>
 
-      {!loading && employees.length > 0 && (
+      {!loading && total > 0 && (
         <Pagination
           page={page}
           setPage={setPage}
           pageSize={pageSize}
           setPageSize={setPageSize}
-          total={employees.length}
+          total={total}
         />
       )}
 

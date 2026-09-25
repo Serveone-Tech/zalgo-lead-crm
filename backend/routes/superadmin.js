@@ -26,8 +26,27 @@ async function requireOwner(id) {
 }
 
 // ── GET all users with subscription info
+// One page of the tenant list, filtered server-side by search (name/
+// email/org name) and subscription status — the table used to fetch every
+// tenant every load and paginate/filter client-side, fine at today's 10
+// tenants but the same unbounded pattern fixed elsewhere this pass.
 router.get('/users', superadminAuth, async (req, res) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize) || 25));
+    const search = (req.query.search || '').trim();
+    const status = (req.query.status || '').trim();
+    const conditions = [`u.role='user'`, `u.parent_id IS NULL`];
+    const params = [];
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(u.name ILIKE $${params.length} OR u.email ILIKE $${params.length} OR o.name ILIKE $${params.length})`);
+    }
+    if (status) {
+      params.push(status);
+      conditions.push(`s.status = $${params.length}`);
+    }
+    params.push(pageSize, (page - 1) * pageSize);
     const result = await pool.query(`
       SELECT
         u.id, u.name, u.email, u.role, u.onboarded, u.created_at, u.suspended_by_admin,
@@ -40,17 +59,21 @@ router.get('/users', superadminAuth, async (req, res) => {
         p.id as plan_id, p.name as plan_name, p.price_monthly, p.max_employees,
         (SELECT COUNT(*) FROM leads l WHERE l.user_id=u.id) as lead_count,
         (SELECT COUNT(*) FROM customers c WHERE c.user_id=u.id) as customer_count,
-        (SELECT COUNT(*) FROM users e WHERE e.parent_id=u.id) as employee_count
+        (SELECT COUNT(*) FROM users e WHERE e.parent_id=u.id) as employee_count,
+        COUNT(*) OVER() AS total_count
       FROM users u
       LEFT JOIN organisations o ON o.user_id=u.id
       LEFT JOIN LATERAL (
         SELECT * FROM subscriptions WHERE user_id=u.id ORDER BY created_at DESC LIMIT 1
       ) s ON true
       LEFT JOIN plans p ON p.id=s.plan_id
-      WHERE u.role='user' AND u.parent_id IS NULL
+      WHERE ${conditions.join(' AND ')}
       ORDER BY u.created_at DESC
-    `);
-    res.json(result.rows);
+      LIMIT $${params.length - 1} OFFSET $${params.length}
+    `, params);
+    const total = result.rows[0]?.total_count ? parseInt(result.rows[0].total_count) : 0;
+    const rows = result.rows.map(({ total_count, ...rest }) => rest);
+    res.json({ rows, total });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 
