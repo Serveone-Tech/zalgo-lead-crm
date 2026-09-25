@@ -137,6 +137,18 @@ export default function Sidebar() {
   // Marked dismissed immediately (not on resolve) so a failed/slow action
   // can't cause the same lead to be queued twice by the next poll tick.
   const handleDueLeads = (dueLeads) => {
+    // Read the role fresh from localStorage rather than the `user` state
+    // closure — this runs from a useEffect with an empty dep array (mount
+    // + a stable setInterval), so the `user` variable it would otherwise
+    // close over is frozen at its initial-render value (null) and never
+    // reflects the later setUser(fresh) call. This popup is an
+    // employee-facing action (see the backend's matching role check on
+    // due_leads) — an owner/superadmin must never see it, not even
+    // transiently before this check would "catch up."
+    const rawUser = localStorage.getItem("crm_user");
+    const currentUser = rawUser ? JSON.parse(rawUser) : null;
+    if (currentUser?.role !== "employee") return;
+
     const dismissed = getDismissedFollowups();
     const newlyDue = dueLeads.filter((l) => dismissed[l.id] !== l.follow_up_date);
     if (newlyDue.length === 0) return;

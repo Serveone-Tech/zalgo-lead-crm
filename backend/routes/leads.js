@@ -222,19 +222,27 @@ router.get("/sidebar-counts", auth, requireSubscription, requirePlanFeature("cor
         [req.tenantId],
       ),
       // Rows that power the Sidebar's due-follow-up POPUP specifically —
-      // deliberately stricter than followup_count/due_count above (which
-      // stay "due today" for the badge, a softer "here's what's on deck"
-      // signal). The popup fires per-lead at ITS OWN follow_up_date/time,
-      // not in a same-day bucket, so this only includes leads whose exact
-      // timestamp has already passed — a lead due at 5pm must not appear
-      // here (and therefore must not pop) at 9am the same day.
-      pool.query(
-        `SELECT id, name, phone, notes, last_message, follow_up_date FROM leads
-         WHERE user_id=$1 AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED')
-           AND follow_up_date < NOW()${vis.clause}
-         ORDER BY follow_up_date ASC LIMIT 15`,
-        [req.tenantId, ...vis.params],
-      ),
+      // deliberately stricter than followup_count/due_count above in TWO
+      // ways, both intentional:
+      //  1. Timing: only leads whose exact follow_up_date/time has already
+      //     passed (not the badge's same-day bucket) — a lead due at 5pm
+      //     must not pop at 9am the same day.
+      //  2. Visibility: the popup is an employee-facing "go call this
+      //     lead" action, not a browsing view — it must NEVER use the
+      //     general visibilityClause() (which widens to tenant-wide for
+      //     anyone with view_all_leads). It's always strictly
+      //     assigned_to=self for an employee, and it's never shown to an
+      //     owner/superadmin at all — this query returns nothing for them,
+      //     the Sidebar also never renders the popup for a non-employee.
+      req.user.role === "employee"
+        ? pool.query(
+            `SELECT id, name, phone, notes, last_message, follow_up_date FROM leads
+             WHERE user_id=$1 AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED')
+               AND follow_up_date < NOW() AND assigned_to=$2
+             ORDER BY follow_up_date ASC LIMIT 15`,
+            [req.tenantId, req.user.id],
+          )
+        : Promise.resolve({ rows: [] }),
     ];
     const [followup, due, pending, lowStock, dueLeads] = await Promise.all(queries);
 
