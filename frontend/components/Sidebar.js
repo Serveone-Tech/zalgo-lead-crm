@@ -7,6 +7,25 @@ import api, { refreshUser } from "../lib/api";
 import { hasPerm, isOwnerUser } from "../lib/permissions";
 import { parsePlanFeatures, makeHasPlanFeature } from "../lib/plan-features";
 import { WhatsAppGlyph } from "./BrandIcons";
+import { useToast, useToastDismiss } from "./ToastProvider";
+import FollowUpToastContent from "./FollowUpToastContent";
+
+// Per-lead-id dismiss tracking so a rescheduled follow-up (new
+// follow_up_date) fires again, but re-polling the same due state within
+// the 60s cycle doesn't re-show a popup the user already saw.
+const DISMISS_KEY = "dismissed_followups";
+function getDismissedFollowups() {
+  try {
+    return JSON.parse(localStorage.getItem(DISMISS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+function setDismissedFollowups(map) {
+  try {
+    localStorage.setItem(DISMISS_KEY, JSON.stringify(map));
+  } catch {}
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -20,6 +39,8 @@ export default function Sidebar() {
   const [sub, setSub] = useState(null);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const showToast = useToast();
+  const dismissToast = useToastDismiss();
 
   const SIDEBAR_W = { open: "232px", collapsed: "68px" };
 
@@ -103,7 +124,63 @@ export default function Sidebar() {
       setDueCount(data.due_count || 0);
       setPendingCount(data.pending_count || 0);
       setLowStockCount(data.low_stock_count || 0);
+      handleDueLeads(data.due_leads || []);
     } catch {}
+  };
+
+  // Shows one grouped/single popup for whichever due leads haven't already
+  // been surfaced for their current follow_up_date — a lead rescheduled to
+  // a new time clears its old dismiss entry automatically (the stored date
+  // no longer matches), but re-polling the same still-due lead every 60s
+  // does not re-fire the popup.
+  const handleDueLeads = (dueLeads) => {
+    const dismissed = getDismissedFollowups();
+    const newlyDue = dueLeads.filter((l) => dismissed[l.id] !== l.follow_up_date);
+    if (newlyDue.length === 0) return;
+
+    const next = { ...dismissed };
+    newlyDue.forEach((l) => { next[l.id] = l.follow_up_date; });
+    setDismissedFollowups(next);
+
+    let toastId;
+    const closeAndRun = (fn) => (lead) => {
+      fn(lead);
+      dismissToast(toastId);
+    };
+    toastId = showToast({
+      content: (
+        <FollowUpToastContent
+          leads={newlyDue}
+          onView={closeAndRun(handleViewLead)}
+          onSnooze={closeAndRun(handleSnoozeLead)}
+          onDone={closeAndRun(handleDoneLead)}
+        />
+      ),
+      persistent: true,
+    });
+  };
+
+  const handleViewLead = (lead) => {
+    router.push(`/leads?search=${encodeURIComponent(lead.phone || lead.name)}`);
+  };
+
+  const handleSnoozeLead = async (lead) => {
+    try {
+      const nextDate = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      await api.put(`/leads/${lead.id}/follow-up`, { follow_up_date: nextDate });
+      showToast(`Snoozed "${lead.name}" for 1 hour`);
+    } catch {
+      showToast("Could not snooze — try again", "error");
+    }
+  };
+
+  const handleDoneLead = async (lead) => {
+    try {
+      await api.put(`/leads/${lead.id}/follow-up`, { follow_up_date: null });
+      showToast(`Marked "${lead.name}" as done`);
+    } catch {
+      showToast("Could not update — try again", "error");
+    }
   };
 
   const logout = () => {

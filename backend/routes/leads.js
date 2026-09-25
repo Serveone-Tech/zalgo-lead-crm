@@ -207,14 +207,26 @@ router.get("/sidebar-counts", auth, requireSubscription, requirePlanFeature("cor
          WHERE ii.user_id=$1 AND ii.stock_qty <= COALESCE(us.low_stock_threshold, 10)`,
         [req.tenantId],
       ),
+      // Actual rows behind followup_count, for the Sidebar's due-follow-up
+      // popup — capped so a tenant with hundreds of overdue leads doesn't
+      // balloon this poll's payload; the badge count above still reflects
+      // the true total.
+      pool.query(
+        `SELECT id, name, phone, notes, last_message, follow_up_date FROM leads
+         WHERE user_id=$1 AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED')
+           AND (follow_up_date < NOW() OR follow_up_date::date = CURRENT_DATE)${vis.clause}
+         ORDER BY follow_up_date ASC LIMIT 15`,
+        [req.tenantId, ...vis.params],
+      ),
     ];
-    const [followup, due, pending, lowStock] = await Promise.all(queries);
+    const [followup, due, pending, lowStock, dueLeads] = await Promise.all(queries);
 
     res.json({
       followup_count: parseInt(followup.rows[0].count),
       due_count: parseInt(due.rows[0].count),
       pending_count: parseInt(pending.rows[0].count),
       low_stock_count: parseInt(lowStock.rows[0].count),
+      due_leads: dueLeads.rows,
     });
   } catch (e) {
     console.error("sidebar-counts failed:", e.message);
@@ -708,6 +720,34 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async 
     );
 
     res.json(updated);
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PUT follow-up date only — the Sidebar's due-follow-up popup's Snooze /
+// Mark Done actions, so they don't need to round-trip the whole lead form
+// just to touch one field.
+router.put("/:id/follow-up", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  try {
+    const existing = await pool.query(
+      "SELECT * FROM leads WHERE id=$1 AND user_id=$2",
+      [req.params.id, req.tenantId],
+    );
+    const lead = existing.rows[0];
+    if (!lead) return res.status(404).json({ error: "Lead not found" });
+
+    const canSeeAll = isOwner(req) || hasPermission(req, "view_all_leads");
+    if (!canSeeAll && lead.assigned_to !== req.user.id) {
+      return res.status(403).json({ error: "Permission denied" });
+    }
+
+    const result = await pool.query(
+      "UPDATE leads SET follow_up_date=$1, updated_at=NOW() WHERE id=$2 AND user_id=$3 RETURNING *",
+      [req.body.follow_up_date || null, req.params.id, req.tenantId],
+    );
+    res.json(result.rows[0]);
   } catch (e) {
     console.error(e.message);
     res.status(500).json({ error: "Server error" });

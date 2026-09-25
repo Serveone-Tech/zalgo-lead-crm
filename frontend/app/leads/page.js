@@ -65,7 +65,7 @@ function LeadsContent() {
   const [stats, setStats] = useState(null);
   const [platformOptions, setPlatformOptions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(searchParams.get("search") || "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [stageF, setStageF] = useState("");
   const [platformF, setPlatformF] = useState("");
