@@ -180,6 +180,77 @@ export default function PlansPage() {
     }
   };
 
+  // Authorizes a recurring mandate on the CURRENT plan for a tenant who's
+  // already active but on the old manual-checkout flow (no
+  // razorpay_subscription_id yet) — same POST /payments/subscribe call as
+  // payNow, just without the "is this actually activated yet" poll, since
+  // they're already active today; this only adds a saved card for next
+  // time. Mirrors Settings → Billing's identical action.
+  const enableAutoRenew = async (plan) => {
+    setSubscribing(plan.id);
+    try {
+      const ok = await loadRazorpayScript();
+      if (!ok) {
+        showToast("Could not load payment gateway. Check your connection.", "error");
+        setSubscribing(null);
+        return;
+      }
+      const { data: sub } = await axios.post(
+        `${BASE}/payments/subscribe`,
+        { plan_id: plan.id, billing_cycle: billing },
+        { headers: authHeaders() },
+      );
+      const rzp = new window.Razorpay({
+        key: sub.key_id,
+        subscription_id: sub.razorpay_subscription_id,
+        name: "LeadLo",
+        description: `${sub.plan_name} Plan — ${sub.billing_cycle}`,
+        theme: { color: "#0066cc" },
+        handler: () => {
+          showToast("Card saved — future renewals will charge automatically.");
+          setSubscribing(null);
+          loadAll();
+        },
+        modal: { ondismiss: () => setSubscribing(null) },
+      });
+      rzp.on("payment.failed", () => {
+        showToast("Payment failed. Please try again.", "error");
+        setSubscribing(null);
+      });
+      rzp.open();
+    } catch (err) {
+      showToast(err.response?.data?.error || "Could not start payment", "error");
+      setSubscribing(null);
+    }
+  };
+
+  // What the CURRENT plan's own card should show — "Current Plan" as a
+  // dead label is only correct for exactly one of these (active + already
+  // auto-renewing). Every other state has something the tenant actually
+  // needs to do, and previously all of them silently collapsed into the
+  // same disabled label with no way to act from this page.
+  const currentPlanCardState = (sub) => {
+    if (!sub) return { label: "Current Plan", action: null };
+    if (sub.cancel_at_period_end) {
+      return { label: "Reactivate", action: "payNow", tone: "warn" };
+    }
+    if (sub.status === "trialing") {
+      return { label: "activate", action: "payNow", tone: null };
+    }
+    if (sub.status === "past_due") {
+      return { label: "Update Payment Method", action: "payNow", tone: "danger" };
+    }
+    if (sub.status === "expired") {
+      return { label: "Renew Now", action: "payNow", tone: "danger" };
+    }
+    if (sub.status === "active" && !sub.razorpay_subscription_id) {
+      return { label: "Set Up Auto-Renewal", action: "enableAutoRenew", tone: null };
+    }
+    // active + razorpay_subscription_id + not cancelling — genuinely
+    // nothing to do.
+    return { label: "Current Plan", action: null };
+  };
+
   if (loading)
     return (
       <div
@@ -523,6 +594,7 @@ export default function PlansPage() {
         >
           {plans.map((plan, i) => {
             const isCurrentPlan = current?.plan_id === plan.id;
+            const cardState = isCurrentPlan ? currentPlanCardState(current) : null;
             const price =
               billing === "yearly" && !plan.is_free
                 ? plan.price_yearly
@@ -701,38 +773,64 @@ export default function PlansPage() {
                 </div>
 
                 <div style={{ padding: "0 22px 22px" }}>
-                  <button
-                    onClick={() => (isPaidAction ? payNow(plan) : subscribe(plan))}
-                    disabled={subscribing === plan.id || isCurrentPlan}
-                    style={{
-                      width: "100%",
-                      padding: "11px",
-                      borderRadius: 9,
-                      border: "none",
-                      fontFamily: "var(--font-main)",
-                      fontWeight: 600,
-                      fontSize: 14,
-                      cursor:
-                        subscribing === plan.id || isCurrentPlan
-                          ? "not-allowed"
-                          : "pointer",
-                      background: isCurrentPlan
-                        ? "var(--bg-surface)"
-                        : accentColor,
-                      color: isCurrentPlan ? "var(--text-muted)" : "#fff",
-                      opacity: subscribing === plan.id ? 0.7 : 1,
-                    }}
-                  >
-                    {subscribing === plan.id
+                  {(() => {
+                    const isDeadEnd = isCurrentPlan && !cardState.action;
+                    const disabled = subscribing === plan.id || isDeadEnd;
+                    const onClick = () => {
+                      if (isCurrentPlan && cardState.action === "payNow") return payNow(plan);
+                      if (isCurrentPlan && cardState.action === "enableAutoRenew") return enableAutoRenew(plan);
+                      return isPaidAction ? payNow(plan) : subscribe(plan);
+                    };
+                    const btnBg = isDeadEnd
+                      ? "var(--bg-surface)"
+                      : isCurrentPlan && cardState.tone === "danger"
+                        ? "var(--danger)"
+                        : isCurrentPlan && cardState.tone === "warn"
+                          ? "var(--warn)"
+                          : accentColor;
+                    const label = subscribing === plan.id
                       ? "Processing..."
                       : isCurrentPlan
-                        ? "Current Plan"
+                        ? cardState.action === "payNow" && cardState.label === "activate"
+                          ? `Pay ₹${Math.round(price).toLocaleString("en-IN")} — Activate`
+                          : cardState.label
                         : isPaidAction
                           ? `Pay ₹${Math.round(price).toLocaleString("en-IN")} — Activate`
                           : plan.is_free
                             ? `Start ${plan.trial_days}-Day Free Trial`
-                            : "Subscribe Now"}
-                  </button>
+                            : "Subscribe Now";
+                    return (
+                      <button
+                        onClick={onClick}
+                        disabled={disabled}
+                        style={{
+                          width: "100%",
+                          padding: "11px",
+                          borderRadius: 9,
+                          border: "none",
+                          fontFamily: "var(--font-main)",
+                          fontWeight: 600,
+                          fontSize: 14,
+                          cursor: disabled ? "not-allowed" : "pointer",
+                          background: btnBg,
+                          color: isDeadEnd ? "var(--text-muted)" : "#fff",
+                          opacity: subscribing === plan.id ? 0.7 : 1,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })()}
+                  {isCurrentPlan && current?.status === "past_due" && (
+                    <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 8, textAlign: "center" }}>
+                      Your last payment failed — update payment to keep access.
+                    </div>
+                  )}
+                  {isCurrentPlan && current?.cancel_at_period_end && (
+                    <div style={{ fontSize: 11, color: "var(--warn)", marginTop: 8, textAlign: "center" }}>
+                      Cancels on {fmtDate(current.ends_at)} unless reactivated.
+                    </div>
+                  )}
                 </div>
               </div>
             );

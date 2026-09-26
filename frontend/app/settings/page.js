@@ -1164,7 +1164,28 @@ export default function SettingsPage() {
           ) : (
             <>
             <Card title="Payment Method">
-              {sub.razorpay_subscription_id && !sub.cancel_at_period_end ? (
+              {sub.status === 'past_due' ? (
+                <>
+                  <p style={{ fontSize: 13, color: 'var(--danger)', fontWeight: 700, marginBottom: 6 }}>
+                    ⚠ Your last payment failed
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                    You're in a grace period — update your payment method now to keep access and avoid losing your plan.
+                  </p>
+                  <button
+                    onClick={enableAutoRenew}
+                    disabled={enablingAutoRenew}
+                    style={{
+                      padding: '10px 22px', borderRadius: 8, border: 'none',
+                      background: enablingAutoRenew ? 'var(--bg-hover)' : 'var(--danger)',
+                      color: '#fff', fontFamily: 'var(--font-main)', fontWeight: 600, fontSize: 13,
+                      cursor: enablingAutoRenew ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {enablingAutoRenew ? 'Processing…' : 'Update Payment Method'}
+                  </button>
+                </>
+              ) : sub.razorpay_subscription_id && !sub.cancel_at_period_end ? (
                 <>
                   <p style={{ fontSize: 13, color: 'var(--success)', fontWeight: 600, marginBottom: 6 }}>
                     ✓ Auto-renewal is on{sub.card_last4 ? ` — card ending ${sub.card_last4}` : ''}
