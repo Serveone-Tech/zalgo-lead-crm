@@ -225,10 +225,10 @@ export default function SettingsPage() {
       const rzp = new window.Razorpay({
         key: rzpSub.key_id,
         subscription_id: rzpSub.razorpay_subscription_id,
-        name: 'LeadLo',
+        name: `LeadLo — ${rzpSub.plan_name} Plan`,
         description: rzpSub.starts_after_trial
-          ? `${rzpSub.plan_name} Plan — starts when your trial ends`
-          : `${rzpSub.plan_name} Plan — ${rzpSub.billing_cycle}`,
+          ? `Base plan — starts when your trial ends`
+          : `Base plan — ${rzpSub.billing_cycle}`,
         theme: { color: '#0066cc' },
         handler: () => {
           setAddonMsg('✓ Card saved — future renewals will charge automatically.');
@@ -1173,7 +1173,7 @@ export default function SettingsPage() {
             </Card>
           ) : (
             <>
-            <Card title="Payment Method">
+            <Card title={`Base Plan — ${sub.plan_name}${sub.is_free ? '' : ` (₹${Number(sub.billing_cycle === 'yearly' ? sub.price_yearly : sub.price_monthly).toLocaleString('en-IN')}/${sub.billing_cycle === 'yearly' ? 'yr' : 'mo'})`}`}>
               {sub.status === 'past_due' ? (
                 <>
                   <p style={{ fontSize: 13, color: 'var(--danger)', fontWeight: 700, marginBottom: 6 }}>
@@ -1284,8 +1284,11 @@ export default function SettingsPage() {
 
                     {!unlimited && bundlesList.length > 0 && (
                       <div style={{ marginBottom: 20 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10, fontFamily: 'var(--font-main)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4, fontFamily: 'var(--font-main)' }}>
                           Active Seat Bundles
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                          Seat bundles are one-time purchases and don't auto-renew — renew manually before a bundle expires to keep those extra seats.
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                           {bundlesList.map((b) => {

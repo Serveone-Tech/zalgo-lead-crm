@@ -401,7 +401,8 @@ router.post("/subscribe", auth, async (req, res) => {
 router.get("/subscription", auth, async (req, res) => {
   try {
     const sub = await pool.query(
-      `SELECT s.*, p.name as plan_name, p.max_leads, p.max_customers, p.max_employees, p.features, p.is_free
+      `SELECT s.*, p.name as plan_name, p.max_leads, p.max_customers, p.max_employees, p.features, p.is_free,
+              p.price_monthly, p.price_yearly
        FROM subscriptions s JOIN plans p ON p.id=s.plan_id
        WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 1`,
       [req.userId],
