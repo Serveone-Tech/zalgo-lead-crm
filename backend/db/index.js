@@ -72,6 +72,12 @@ const initDB = async () => {
       // Same once-per-day guard as customer_orders' payment reminders, for
       // the follow_up_due automation trigger.
       `ALTER TABLE leads ADD COLUMN IF NOT EXISTS followup_reminder_sent_date DATE`,
+      // Set only when assigned_to actually changes value (see the PUT /:id
+      // and /bulk-assign routes) — powers the leads list's default sort
+      // (COALESCE(assigned_at, created_at) DESC) so a freshly-(re)assigned
+      // old lead surfaces near the top for whoever it was just given to,
+      // instead of staying wherever its creation date put it.
+      `ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP`,
     ];
 
     // Turns the flat conversation log into a real two-way chat: which side
@@ -149,6 +155,13 @@ const initDB = async () => {
     for (const q of alterLeads) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
+    // One-time backfill: an already-assigned lead that predates this column
+    // gets its creation date as a starting assigned_at — safe/idempotent,
+    // only touches rows that are assigned but have no assigned_at yet, so
+    // it never overwrites a real (re)assignment timestamp on a later run.
+    await client
+      .query(`UPDATE leads SET assigned_at = created_at WHERE assigned_to IS NOT NULL AND assigned_at IS NULL`)
+      .catch((e) => console.log("assigned_at backfill skip:", e.message));
 
     const alterCustomers = [
       `ALTER TABLE customers ADD COLUMN IF NOT EXISTS assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL`,
@@ -810,6 +823,9 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_leads_user_assigned ON leads(user_id, assigned_to)`,
       `CREATE INDEX IF NOT EXISTS idx_leads_user_followup ON leads(user_id, follow_up_date)`,
       `CREATE INDEX IF NOT EXISTS idx_leads_user_created ON leads(user_id, created_at DESC)`,
+      // Backs the leads list's default sort (ORDER BY COALESCE(assigned_at,
+      // created_at) DESC) — matches the exact expression used in the query.
+      `CREATE INDEX IF NOT EXISTS idx_leads_user_assigned_at ON leads(user_id, (COALESCE(assigned_at, created_at)) DESC)`,
       // Powers the phone-duplicate check (regexp_replace(phone,...)) used on every lead add/import.
       `CREATE INDEX IF NOT EXISTS idx_leads_phone_digits ON leads(user_id, (regexp_replace(phone, '\\D', '', 'g')))`,
       `CREATE INDEX IF NOT EXISTS idx_customers_user_id ON customers(user_id)`,

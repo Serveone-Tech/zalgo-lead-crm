@@ -86,7 +86,7 @@ router.get("/paged", auth, requireSubscription, requirePlanFeature("core"), asyn
 
     const result = await pool.query(
       `SELECT *, COUNT(*) OVER() AS total_count FROM leads
-       WHERE ${where} ORDER BY created_at DESC
+       WHERE ${where} ORDER BY COALESCE(assigned_at, created_at) DESC
        LIMIT $${nextIndex} OFFSET $${nextIndex + 1}`,
       params,
     );
@@ -107,7 +107,7 @@ router.get("/paged", auth, requireSubscription, requirePlanFeature("core"), asyn
 router.get("/filtered-all", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   try {
     const { where, params } = buildLeadFilterClause(req, req.query, 2);
-    const result = await pool.query(`SELECT * FROM leads WHERE ${where} ORDER BY created_at DESC`, params);
+    const result = await pool.query(`SELECT * FROM leads WHERE ${where} ORDER BY COALESCE(assigned_at, created_at) DESC`, params);
     res.json(result.rows);
   } catch (e) {
     console.error("leads/filtered-all failed:", e.message);
@@ -536,7 +536,7 @@ router.put("/bulk-assign", auth, requireSubscription, requirePlanFeature("core")
     return res.status(403).json({ error: "Permission denied" });
   try {
     const result = await pool.query(
-      `UPDATE leads SET assigned_to=$1, updated_at=NOW()
+      `UPDATE leads SET assigned_to=$1, updated_at=NOW(), assigned_at=NOW()
        WHERE id = ANY($2::int[]) AND user_id=$3`,
       [assigned_to || null, lead_ids, req.tenantId],
     );
@@ -709,9 +709,16 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async 
     }
 
     const oldStage = lead.stage;
+    // assigned_at only moves when assigned_to actually changes value — not
+    // on every save of this form (which touches assigned_to on every
+    // request regardless of whether the value is different) — otherwise
+    // editing a note or fixing a typo would also bump the lead to the top
+    // of the "recently assigned" sort, which isn't what that sort means.
+    const assignmentChanged = nextAssignedTo !== lead.assigned_to;
     const result = await pool.query(
       `UPDATE leads SET name=$1, phone=$2, email=$3, platform=$4, platform_link=$5,
-       stage=$6, last_message=$7, follow_up_date=$8, notes=$9, assigned_to=$10, updated_at=NOW()
+       stage=$6, last_message=$7, follow_up_date=$8, notes=$9, assigned_to=$10, updated_at=NOW(),
+       assigned_at=CASE WHEN $13 THEN NOW() ELSE assigned_at END
        WHERE id=$11 AND user_id=$12 RETURNING *`,
       [
         nextName,
@@ -726,6 +733,7 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async 
         nextAssignedTo,
         req.params.id,
         req.tenantId,
+        assignmentChanged,
       ],
     );
     const updated = result.rows[0];
