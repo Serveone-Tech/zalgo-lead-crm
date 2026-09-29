@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { PERMISSION_KEYS, hasPermission, isOwner } = require("../utils/permissions");
+const { getEffectiveEmployeeLimit } = require("../utils/seat-limit");
 
 const router = express.Router();
 
@@ -70,13 +71,13 @@ router.post("/", auth, requireSubscription, requirePlanFeature("employees"), req
   if (!name || !email || !password)
     return res.status(400).json({ error: "Name, email, password required" });
   try {
-    // -1 on the plan means unlimited; an admin-set override on the
-    // subscription (given when a tenant asks for more seats) always wins
-    // over the plan's own default. Only ACTIVE (not deactivated) employees
-    // count against the seat limit — deactivating someone frees their seat
-    // without touching their account or data, same idea as unassigning a
-    // desk instead of firing them.
-    const limit = req.subscription.employee_limit_override ?? req.subscription.max_employees;
+    // Effective limit = plan's own base + any active purchased add-on
+    // bundles + a Super Admin's manual grant, live-computed so an expired
+    // bundle naturally stops counting (see utils/seat-limit.js). Only
+    // ACTIVE (not deactivated) employees count against it — deactivating
+    // someone frees their seat without touching their account or data,
+    // same idea as unassigning a desk instead of firing them.
+    const { limit } = await getEffectiveEmployeeLimit(req.tenantId);
     if (limit !== -1 && limit !== null) {
       const { rows } = await pool.query("SELECT COUNT(*) FROM users WHERE parent_id=$1 AND is_blocked=false", [req.tenantId]);
       if (parseInt(rows[0].count) >= limit) {
@@ -198,7 +199,7 @@ router.put("/:id/status", auth, requireSubscription, requirePlanFeature("employe
     if (!owned.rows[0]) return res.status(404).json({ error: "Employee not found" });
 
     if (active && owned.rows[0].is_blocked) {
-      const limit = req.subscription.employee_limit_override ?? req.subscription.max_employees;
+      const { limit } = await getEffectiveEmployeeLimit(req.tenantId);
       if (limit !== -1 && limit !== null) {
         const { rows } = await pool.query("SELECT COUNT(*) FROM users WHERE parent_id=$1 AND is_blocked=false", [req.tenantId]);
         if (parseInt(rows[0].count) >= limit) {

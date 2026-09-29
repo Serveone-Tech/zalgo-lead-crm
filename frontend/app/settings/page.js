@@ -152,22 +152,31 @@ export default function SettingsPage() {
     setBillingLoaded(true);
     Promise.all([
       api.get('/auth/subscription').catch(() => ({ data: null })),
-      api.get('/employees').catch(() => ({ data: [] })),
+      api.get('/employees').catch(() => ({ data: { active_count: 0 } })),
       api.get('/payments/addon/price').catch(() => ({ data: { price: 499 } })),
     ]).then(([subRes, empRes, priceRes]) => {
       setSub(subRes.data);
-      setEmployeeCount(empRes.data.length);
+      // /employees returns { rows, total, active_count } since it was
+      // paginated — .length here used to silently be undefined.
+      setEmployeeCount(empRes.data.active_count || 0);
       setAddonPrice(priceRes.data.price || 499);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, user]);
 
-  const buyAddon = async () => {
+  // Powers both "Buy More Seats" (bundleCount from the input) and each
+  // expired/expiring bundle's own "Renew" button (bundleCount fixed to
+  // that specific bundle's original size) — a renewal is just a new
+  // purchase of the same size, not a special endpoint, since bundles are
+  // independent time-boxed packs rather than something with a persistent
+  // identity to extend.
+  const buyAddon = async (bundleCount) => {
+    const count = bundleCount ?? bundles;
     setBuyingAddon(true);
     try {
       const ok = await loadRazorpayScript();
       if (!ok) throw new Error('Could not load payment gateway');
-      const { data: order } = await api.post('/payments/addon/create-order', { bundles });
+      const { data: order } = await api.post('/payments/addon/create-order', { bundles: count });
 
       const rzp = new window.Razorpay({
         key: order.key_id,
@@ -180,8 +189,9 @@ export default function SettingsPage() {
         handler: async (response) => {
           try {
             const { data } = await api.post('/payments/addon/verify', response);
-            setSub((s) => ({ ...s, employee_limit_override: data.new_limit }));
-            setAddonMsg(`✓ ${data.seats_added} seats added — you now have ${data.new_limit} total.`);
+            const fresh = await api.get('/auth/subscription').catch(() => null);
+            if (fresh) setSub(fresh.data);
+            setAddonMsg(`✓ ${data.seats_added} seats added — you now have ${data.new_limit} total, valid for 30 days.`);
             setTimeout(() => setAddonMsg(''), 6000);
           } catch {
             showToast('Payment succeeded but activation failed — contact support.', 'error');
@@ -1235,15 +1245,23 @@ export default function SettingsPage() {
             <Card title="Team Seats">
               {(() => {
                 const base = sub.max_employees;
-                const limit = sub.employee_limit_override ?? base;
+                const limit = sub.effective_employee_limit ?? base;
                 const unlimited = limit === -1;
                 const atLimit = !unlimited && employeeCount >= limit;
+                const bundlesList = sub.active_addon_bundles || [];
+                const now = Date.now();
+                const soonMs = 3 * 86400000; // 3 days, matching the base-plan reminder window
                 return (
                   <>
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
                       Your <strong>{sub.plan_name}</strong> plan includes {base === -1 ? 'unlimited' : base} employee seats.
-                      {sub.employee_limit_override != null && sub.employee_limit_override !== base && (
-                        <> Super Admin has adjusted your limit to {unlimited ? 'unlimited' : limit}.</>
+                      {!unlimited && (sub.purchased_seats > 0 || sub.superadmin_seat_override > 0) && (
+                        <>
+                          {' '}
+                          {sub.purchased_seats > 0 && <>+{sub.purchased_seats} from purchased add-ons</>}
+                          {sub.purchased_seats > 0 && sub.superadmin_seat_override > 0 && ', '}
+                          {sub.superadmin_seat_override > 0 && <>+{sub.superadmin_seat_override} granted by Super Admin</>}.
+                        </>
                       )}
                     </p>
 
@@ -1258,10 +1276,56 @@ export default function SettingsPage() {
                       </div>
                       {atLimit && (
                         <div style={{ fontSize: 12, color: 'var(--warn)', marginTop: 4 }}>
-                          You're at your limit — buy more seats below to add employees.
+                          You're at your limit — buy more seats below, renew an expiring bundle, or deactivate someone to free a seat.
+                          {employeeCount > limit && ' Everyone already active keeps working — nobody is deactivated automatically.'}
                         </div>
                       )}
                     </div>
+
+                    {!unlimited && bundlesList.length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 10, fontFamily: 'var(--font-main)' }}>
+                          Active Seat Bundles
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {bundlesList.map((b) => {
+                            const expiresAt = new Date(b.expires_at);
+                            const soon = expiresAt.getTime() - now <= soonMs;
+                            const daysLeft = Math.ceil((expiresAt.getTime() - now) / 86400000);
+                            return (
+                              <div key={b.id} style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                padding: '10px 12px', borderRadius: 8,
+                                background: soon ? 'rgba(230,168,23,0.08)' : 'var(--bg-input)',
+                                border: `1px solid ${soon ? 'rgba(230,168,23,0.3)' : 'var(--border)'}`,
+                              }}>
+                                <div>
+                                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>+{b.seats_added} seats</div>
+                                  <div style={{ fontSize: 11, color: soon ? 'var(--warn)' : 'var(--text-muted)', marginTop: 2 }}>
+                                    {soon
+                                      ? `Expires in ${daysLeft <= 0 ? 'less than a day' : `${daysLeft} day${daysLeft !== 1 ? 's' : ''}`} (${expiresAt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })})`
+                                      : `Valid until ${expiresAt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`}
+                                  </div>
+                                </div>
+                                {soon && (
+                                  <button
+                                    onClick={() => buyAddon(b.bundles)}
+                                    disabled={buyingAddon}
+                                    style={{
+                                      padding: '6px 14px', borderRadius: 7, border: '1px solid var(--warn)',
+                                      background: 'transparent', color: 'var(--warn)', fontFamily: 'var(--font-main)',
+                                      fontWeight: 600, fontSize: 11.5, cursor: buyingAddon ? 'not-allowed' : 'pointer',
+                                    }}
+                                  >
+                                    Renew
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {!unlimited && (
                       <>
@@ -1269,8 +1333,8 @@ export default function SettingsPage() {
                           Buy More Seats
                         </div>
                         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
-                          Each bundle adds 5 employee seats to your plan for ₹{addonPrice}/bundle. Seats stay on your
-                          account until you or a Super Admin change them.
+                          Each bundle adds 5 employee seats for ₹{addonPrice}/bundle, valid for 30 days — renew it
+                          before it expires to keep those seats.
                         </p>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                           <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Bundles:</label>
@@ -1284,7 +1348,7 @@ export default function SettingsPage() {
                           </span>
                         </div>
                         <button
-                          onClick={buyAddon}
+                          onClick={() => buyAddon()}
                           disabled={buyingAddon}
                           style={{
                             padding: '10px 22px', borderRadius: 8, border: 'none',
@@ -1304,7 +1368,7 @@ export default function SettingsPage() {
                     <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border)', fontSize: 11.5, color: 'var(--text-muted)' }}>
                       Prefer not to pay online? Contact Super Admin (
                       <a href="mailto:zalgoinfotec@gmail.com" style={{ color: 'var(--teal)' }}>zalgoinfotec@gmail.com</a>
-                      ) to have extra seats added to your account directly.
+                      ) to have extra seats granted to your account directly.
                     </div>
                   </>
                 );

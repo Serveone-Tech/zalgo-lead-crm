@@ -9,6 +9,12 @@ const {
   getOrCreateRazorpayCustomer,
   activateFromCharge,
 } = require("../utils/razorpay-billing");
+const { getEffectiveEmployeeLimit } = require("../utils/seat-limit");
+
+// How long a paid seat add-on bundle stays active before it needs to be
+// manually renewed — a one-time Razorpay Order has no recurring mandate of
+// its own, so this is what stops a purchase from being silently permanent.
+const ADDON_BUNDLE_DAYS = 30;
 
 const router = express.Router();
 
@@ -200,32 +206,22 @@ router.post("/addon/verify", auth, requireOwner, async (req, res) => {
       return res.status(400).json({ error: "Payment verification failed" });
     }
 
+    // expires_at, not a mutated employee_limit_override — a bundle is a
+    // time-boxed pack that has to be actively renewed, not a permanent
+    // bump (see Settings -> Billing's Team Seats card for the renew flow).
+    const expiresAt = new Date(Date.now() + ADDON_BUNDLE_DAYS * 86400000);
     await pool.query(
-      "UPDATE employee_addon_purchases SET status='paid', razorpay_payment_id=$1, paid_at=NOW() WHERE id=$2",
-      [razorpay_payment_id, purchase.id],
+      "UPDATE employee_addon_purchases SET status='paid', razorpay_payment_id=$1, paid_at=NOW(), expires_at=$2 WHERE id=$3",
+      [razorpay_payment_id, expiresAt, purchase.id],
     );
 
-    // Base seat count is the plan's own default the first time this runs;
-    // after that, every paid bundle stacks on top of whatever the tenant's
-    // effective limit already was (including any Super Admin-granted seats).
-    const subRes = await pool.query(
-      `SELECT s.id, s.employee_limit_override, p.max_employees
-       FROM subscriptions s JOIN plans p ON p.id=s.plan_id
-       WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 1`,
-      [req.userId],
-    );
-    const sub = subRes.rows[0];
-    if (!sub) return res.status(400).json({ error: "No active subscription to add seats to" });
-
-    const currentLimit = sub.employee_limit_override ?? sub.max_employees ?? 0;
-    const newLimit = currentLimit === -1 ? -1 : currentLimit + purchase.seats_added;
-    await pool.query("UPDATE subscriptions SET employee_limit_override=$1 WHERE id=$2", [newLimit, sub.id]);
+    const { limit: newLimit } = await getEffectiveEmployeeLimit(req.userId);
 
     const userRow = await pool.query("SELECT name, email FROM users WHERE id=$1", [req.userId]);
     const u = userRow.rows[0];
     if (u) mailer.sendAddonPurchased(u.email, u.name, purchase.seats_added, newLimit, purchase.amount);
 
-    res.json({ success: true, seats_added: purchase.seats_added, new_limit: newLimit });
+    res.json({ success: true, seats_added: purchase.seats_added, new_limit: newLimit, expires_at: expiresAt });
   } catch (e) {
     console.error("Razorpay addon verify failed:", e.message);
     res.status(500).json({ error: "Could not verify payment" });

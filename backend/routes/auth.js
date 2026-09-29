@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const { pool } = require("../db");
 const { auth } = require("../middleware/auth");
 const mailer = require("../utils/mailer");
+const { getEffectiveEmployeeLimit } = require("../utils/seat-limit");
 
 const router = express.Router();
 
@@ -405,7 +406,19 @@ router.get("/subscription", auth, async (req, res) => {
        WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 1`,
       [req.userId],
     );
-    res.json(sub.rows[0] || null);
+    const row = sub.rows[0];
+    if (!row) return res.json(null);
+
+    // Effective seat limit + the underlying breakdown (base/purchased
+    // bundles/admin override) so Settings -> Billing can show each bundle's
+    // own expiry instead of just one aggregate number.
+    const seatInfo = await getEffectiveEmployeeLimit(req.userId);
+    res.json({
+      ...row,
+      effective_employee_limit: seatInfo.limit,
+      purchased_seats: seatInfo.purchasedSeats,
+      active_addon_bundles: seatInfo.activeBundles,
+    });
   } catch {
     res.status(500).json({ error: "Server error" });
   }

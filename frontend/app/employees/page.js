@@ -92,7 +92,7 @@ export default function EmployeesPage() {
   // don't count against the seat limit — same rule the backend enforces.
   // activeCount comes from the server now (see load()) since `employees`
   // only holds the current page, not the whole tenant.
-  const employeeLimit = sub ? (sub.employee_limit_override ?? sub.max_employees) : null;
+  const employeeLimit = sub ? (sub.effective_employee_limit ?? sub.max_employees) : null;
   const atLimit = employeeLimit !== null && employeeLimit !== -1 && activeCount >= employeeLimit;
 
   // Only offer checkboxes for modules the owner's own plan actually

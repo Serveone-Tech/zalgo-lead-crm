@@ -8,6 +8,7 @@ const mailer = require('../utils/mailer');
 const { getRazorpay, activateFromCharge } = require('../utils/razorpay-billing');
 const { logAdminAction } = require('../utils/admin-audit');
 const { validateFeatures } = require('../utils/plan-modules');
+const { getEffectiveEmployeeLimit } = require('../utils/seat-limit');
 
 const router = express.Router();
 
@@ -53,13 +54,15 @@ router.get('/users', superadminAuth, async (req, res) => {
         o.name as org_name, o.phone as org_phone, o.logo_url,
         s.id as sub_id, s.status as sub_status, s.billing_cycle,
         s.starts_at, s.ends_at, s.trial_ends_at, s.amount_paid,
-        s.employee_limit_override,
+        s.superadmin_seat_override,
         s.razorpay_customer_id, s.razorpay_subscription_id,
         s.past_due_since, s.cancel_at_period_end,
         p.id as plan_id, p.name as plan_name, p.price_monthly, p.max_employees,
         (SELECT COUNT(*) FROM leads l WHERE l.user_id=u.id) as lead_count,
         (SELECT COUNT(*) FROM customers c WHERE c.user_id=u.id) as customer_count,
         (SELECT COUNT(*) FROM users e WHERE e.parent_id=u.id) as employee_count,
+        (SELECT COALESCE(SUM(seats_added),0) FROM employee_addon_purchases
+          WHERE user_id=u.id AND status='paid' AND (expires_at IS NULL OR expires_at > NOW())) as purchased_seats,
         COUNT(*) OVER() AS total_count
       FROM users u
       LEFT JOIN organisations o ON o.user_id=u.id
@@ -242,12 +245,7 @@ router.post('/users/:id/employees', superadminAuth, async (req, res) => {
 
     // Same seat-limit rule the tenant themselves is held to — Super Admin
     // sees the same error and can raise the limit from this same screen.
-    const subRes = await pool.query(
-      `SELECT s.employee_limit_override, p.max_employees FROM subscriptions s JOIN plans p ON p.id=s.plan_id
-       WHERE s.user_id=$1 ORDER BY s.created_at DESC LIMIT 1`,
-      [req.params.id],
-    );
-    const limit = subRes.rows[0]?.employee_limit_override ?? subRes.rows[0]?.max_employees;
+    const { limit } = await getEffectiveEmployeeLimit(req.params.id);
     if (limit != null && limit !== -1) {
       const { rows } = await pool.query('SELECT COUNT(*) FROM users WHERE parent_id=$1', [req.params.id]);
       if (parseInt(rows[0].count) >= limit) {
@@ -662,16 +660,18 @@ router.post('/users/:id/subscription', superadminAuth, async (req, res) => {
       const ends_at = new Date(now.getTime() + d * 86400000);
 
       // Changing plans replaces the subscription row — carry over any
-      // employee-limit override so switching plans doesn't silently reset
-      // a seat increase the tenant already had.
+      // Super Admin seat override so switching plans doesn't silently
+      // reset a manually-granted seat increase. Purchased addon bundles
+      // aren't affected either way, since employee_addon_purchases is
+      // keyed by tenant (user_id), not by this subscription row.
       const prevOverride = await pool.query(
-        'SELECT employee_limit_override FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]
+        'SELECT superadmin_seat_override FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]
       );
       await pool.query("UPDATE subscriptions SET status='canceled' WHERE user_id=$1", [userId]);
       await pool.query(
-        `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, ends_at, notes, created_by, employee_limit_override)
+        `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, ends_at, notes, created_by, superadmin_seat_override)
          VALUES ($1,$2,'active',$3,$4,$5,$6,$7,$8)`,
-        [userId, plan_id, billing_cycle||'monthly', now, ends_at, notes||'', req.userId, prevOverride.rows[0]?.employee_limit_override ?? null]
+        [userId, plan_id, billing_cycle||'monthly', now, ends_at, notes||'', req.userId, prevOverride.rows[0]?.superadmin_seat_override ?? null]
       );
       if (u) mailer.sendPlanActivated(u.email, u.name, plan.rows[0].name, billing_cycle||'monthly', ends_at);
 
@@ -715,13 +715,13 @@ router.post('/users/:id/subscription', superadminAuth, async (req, res) => {
       const now = new Date();
       const trial_ends_at = new Date(now.getTime() + (parseInt(days)||14) * 86400000);
       const prevOverride = await pool.query(
-        'SELECT employee_limit_override FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]
+        'SELECT superadmin_seat_override FROM subscriptions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1', [userId]
       );
       await pool.query("UPDATE subscriptions SET status='canceled' WHERE user_id=$1", [userId]);
       await pool.query(
-        `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, trial_ends_at, notes, created_by, employee_limit_override)
+        `INSERT INTO subscriptions (user_id, plan_id, status, billing_cycle, starts_at, trial_ends_at, notes, created_by, superadmin_seat_override)
          VALUES ($1,$2,'trialing','trial',$3,$4,$5,$6,$7)`,
-        [userId, plan.rows[0]?.id || 1, now, trial_ends_at, notes||'Trial extended by admin', req.userId, prevOverride.rows[0]?.employee_limit_override ?? null]
+        [userId, plan.rows[0]?.id || 1, now, trial_ends_at, notes||'Trial extended by admin', req.userId, prevOverride.rows[0]?.superadmin_seat_override ?? null]
       );
       if (u) mailer.sendTrialStarted(u.email, u.name, plan.rows[0]?.name || 'Trial', trial_ends_at);
     }
@@ -733,6 +733,10 @@ router.post('/users/:id/subscription', superadminAuth, async (req, res) => {
 // ── PUT set a per-tenant employee-seat override — used when a tenant on
 // Basic/Pro (10 seats) or Pro Max (15) asks for more than their plan allows.
 // A null/empty limit clears the override back to the plan's own default.
+// Extra seats granted by hand, ADDITIVE on top of the plan's own
+// max_employees and any active purchased addon bundles — not a total
+// replacement the way the old employee_limit_override worked (that field
+// is kept, unused going forward, for the one-time migration in db/index.js).
 router.put('/users/:id/employee-limit', superadminAuth, async (req, res) => {
   const { limit } = req.body;
   const userId = req.params.id;
@@ -742,13 +746,13 @@ router.put('/users/:id/employee-limit', superadminAuth, async (req, res) => {
       return res.status(400).json({ error: 'Limit must be a non-negative number' });
     }
     const result = await pool.query(
-      `UPDATE subscriptions SET employee_limit_override=$1, updated_at=NOW()
+      `UPDATE subscriptions SET superadmin_seat_override=$1, updated_at=NOW()
        WHERE id = (SELECT id FROM subscriptions WHERE user_id=$2 ORDER BY created_at DESC LIMIT 1)
        RETURNING id`,
       [value, userId],
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'No subscription found' });
-    res.json({ success: true, employee_limit_override: value });
+    res.json({ success: true, superadmin_seat_override: value });
   } catch (e) { console.error(e); res.status(500).json({ error: 'Server error' }); }
 });
 

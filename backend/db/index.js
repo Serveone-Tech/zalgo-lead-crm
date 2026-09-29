@@ -610,9 +610,12 @@ const initDB = async () => {
         paid_at TIMESTAMP
       );
 
-      -- A tenant's self-purchased extra employee seats (5 per bundle) — each
-      -- paid bundle bumps their subscription's employee_limit_override, on
-      -- top of whatever a Super Admin has separately granted them by hand.
+      -- A tenant's self-purchased extra employee seats (5 per bundle). Each
+      -- paid, non-expired bundle counts toward the tenant's effective seat
+      -- limit (see utils/seat-limit.js) — expires_at (added below) is what
+      -- makes this a real time-boxed pack rather than a silently-permanent
+      -- bump, since a one-time Razorpay Order has no ongoing mandate to
+      -- revisit it otherwise.
       CREATE TABLE IF NOT EXISTS employee_addon_purchases (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -939,10 +942,47 @@ const initDB = async () => {
       // Checkout flow (no saved mandate) to either add a card for
       // auto-renewal or keep renewing manually — sent once per row.
       `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS migration_notice_sent BOOLEAN DEFAULT false`,
+      // Extra seats a Super Admin grants by hand, ADDITIVE on top of the
+      // plan's own max_employees and any active purchased add-on bundles
+      // (see utils/seat-limit.js) — replaces employee_limit_override's old
+      // total-replacement semantic (that column is kept, unused, for the
+      // one-time migration below, not dropped).
+      `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS superadmin_seat_override INTEGER`,
     ];
     for (const q of alterSubscriptionsBilling) {
       await client.query(q).catch((e) => console.log("alter skip:", e.message));
     }
+    await client
+      .query(`ALTER TABLE employee_addon_purchases ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`)
+      .catch((e) => console.log("alter skip:", e.message));
+    // One-time backfill: a purchase made before expires_at existed gets the
+    // same 30-day window as every purchase going forward, counted from its
+    // actual paid_at — not treated as permanently exempt from the rule
+    // this migration exists to introduce.
+    await client
+      .query(`UPDATE employee_addon_purchases SET expires_at = paid_at + INTERVAL '30 days' WHERE status='paid' AND expires_at IS NULL AND paid_at IS NOT NULL`)
+      .catch((e) => console.log("addon expires_at backfill skip:", e.message));
+
+    // One-time migration: the old employee_limit_override was a single
+    // mutated integer that REPLACED the effective limit outright (set once
+    // by Super Admin, or bumped by every addon purchase) — it can't be
+    // moved wholesale into the new additive superadmin_seat_override
+    // column without double-counting whatever a tenant already paid for.
+    // The residual left after subtracting the plan's own max_employees and
+    // every paid addon bundle's seats is what was actually attributable to
+    // a real Super Admin grant; that residual (floored at 0) is what
+    // migrates. Guarded by superadmin_seat_override IS NULL so this only
+    // ever runs once per row, even though it's on every boot.
+    await client
+      .query(`
+        UPDATE subscriptions s
+        SET superadmin_seat_override = GREATEST(0, s.employee_limit_override - p.max_employees - COALESCE((
+          SELECT SUM(a.seats_added) FROM employee_addon_purchases a WHERE a.user_id = s.user_id AND a.status = 'paid'
+        ), 0))
+        FROM plans p
+        WHERE p.id = s.plan_id AND s.employee_limit_override IS NOT NULL AND s.superadmin_seat_override IS NULL
+      `)
+      .catch((e) => console.log("superadmin_seat_override migration skip:", e.message));
 
     // Dedupe table for Razorpay webhook retries — a webhook delivery can be
     // retried by Razorpay itself, so the event id (not the subscription/

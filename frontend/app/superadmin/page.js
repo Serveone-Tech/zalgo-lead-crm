@@ -292,13 +292,18 @@ export default function SuperAdminDashboard() {
                           onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal)"}
                           onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}
                         >
-                          {u.employee_count||0} / {u.max_employees == null ? "—" : (u.employee_limit_override ?? u.max_employees) === -1 ? "∞" : (u.employee_limit_override ?? u.max_employees)}
-                          {u.employee_limit_override != null && <span title="Custom limit set by Super Admin" style={{ color:"var(--teal)" }}> ★</span>}
+                          {(() => {
+                            const purchased = u.purchased_seats || 0;
+                            const adminOverride = u.superadmin_seat_override || 0;
+                            const effective = u.max_employees === -1 ? -1 : (u.max_employees || 0) + purchased + adminOverride;
+                            return <>{u.employee_count||0} / {u.max_employees == null ? "—" : effective === -1 ? "∞" : effective}</>;
+                          })()}
+                          {(u.purchased_seats > 0 || u.superadmin_seat_override > 0) && <span title={`+${u.purchased_seats||0} purchased, +${u.superadmin_seat_override||0} admin-granted`} style={{ color:"var(--teal)" }}> ★</span>}
                         </button>
                       </td>
                       <td style={{ padding:"12px 14px" }}>
                         <div style={{ display:"flex", gap:6 }}>
-                          <button onClick={()=>{ setActionUser(u); setReconcileResult(null); setActionData(d=>({...d, plan_id: u.plan_id||plans[0]?.id||""})); setEmpLimitInput(u.employee_limit_override ?? ""); }} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--teal)", fontSize:11, cursor:"pointer", fontWeight:600 }}
+                          <button onClick={()=>{ setActionUser(u); setReconcileResult(null); setActionData(d=>({...d, plan_id: u.plan_id||plans[0]?.id||""})); setEmpLimitInput(u.superadmin_seat_override ?? ""); }} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--teal)", fontSize:11, cursor:"pointer", fontWeight:600 }}
                             onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal)"}
                             onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>Manage</button>
                           <button
@@ -451,13 +456,13 @@ export default function SuperAdminDashboard() {
             </div>
 
             <div style={{ marginTop:20, padding:14, border:"1px solid var(--border)", borderRadius:10 }}>
-              <Lbl>Employee Seat Limit — plan default is {actionUser.max_employees === -1 ? "unlimited" : (actionUser.max_employees ?? "—")}</Lbl>
+              <Lbl>Extra Admin-Granted Seats — plan default is {actionUser.max_employees === -1 ? "unlimited" : (actionUser.max_employees ?? "—")}</Lbl>
               <div style={{ display:"flex", gap:8 }}>
                 <input
                   type="number" min="0"
                   value={empLimitInput}
                   onChange={e=>setEmpLimitInput(e.target.value)}
-                  placeholder="Leave blank to use plan default"
+                  placeholder="Leave blank for none"
                   style={{ ...inp, flex:1 }}
                 />
                 <button
@@ -466,19 +471,22 @@ export default function SuperAdminDashboard() {
                     setSavingLimit(true);
                     try {
                       await api.put(`/superadmin/users/${actionUser.id}/employee-limit`, { limit: empLimitInput === "" ? null : parseInt(empLimitInput) });
-                      showToast("Employee seat limit updated!");
+                      showToast("Seat override updated!");
                       loadAll();
                       setActionUser(null); setReconcileResult(null);
-                    } catch { showToast("Failed to update seat limit", "error"); }
+                    } catch { showToast("Failed to update seat override", "error"); }
                     setSavingLimit(false);
                   }}
                   style={{ padding:"9px 16px", borderRadius:8, background:"var(--teal)", border:"none", color:"#fff", fontFamily:"var(--font-main)", fontWeight:600, fontSize:12, cursor:"pointer", whiteSpace:"nowrap" }}
                 >
-                  {savingLimit ? "Saving..." : "Save Limit"}
+                  {savingLimit ? "Saving..." : "Save"}
                 </button>
               </div>
               <div style={{ fontSize:11, color:"var(--text-muted)", marginTop:6 }}>
-                Currently used: {actionUser.employee_count||0}. Set a number to override this tenant's seat count (e.g. after they request more), or leave blank to fall back to the plan's default.
+                Currently used: {actionUser.employee_count||0} of {(() => {
+                  const eff = actionUser.max_employees === -1 ? -1 : (actionUser.max_employees||0) + (actionUser.purchased_seats||0) + (actionUser.superadmin_seat_override||0);
+                  return eff === -1 ? "unlimited" : eff;
+                })()} effective ({actionUser.purchased_seats||0} from active purchased bundles + this admin grant, on top of the plan's own {actionUser.max_employees === -1 ? "unlimited" : actionUser.max_employees}). This is ADDITIVE, not a replacement — leave blank for no admin grant.
               </div>
             </div>
 
