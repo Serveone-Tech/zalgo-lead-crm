@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
-import { PERMISSION_MODULES, visiblePermissionModules } from "../../lib/permissions";
+import { PERMISSION_MODULES, PERMISSION_KEYS, visiblePermissionModules, ROLE_TEMPLATES } from "../../lib/permissions";
 import { parsePlanFeatures } from "../../lib/plan-features";
 import { Users } from "lucide-react";
 import Pagination from "../../components/Pagination";
@@ -23,9 +23,9 @@ const emptyForm = {
 // instead of being silently dropped as if nothing were granted.
 function summarizeModulePerms(permissions) {
   const perms = permissions || {};
-  const letters = { read: "R", write: "W", delete: "D" };
+  const letters = { read: "R", write: "W", delete: "D", scope: "A" };
   return PERMISSION_MODULES.map((mod) => {
-    const granted = ["read", "write", "delete"]
+    const granted = ["read", "write", "delete", "scope"]
       .filter((action) => mod[action])
       .map((action) => {
         const cell = mod[action];
@@ -52,6 +52,8 @@ export default function EmployeesPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [appliedTemplate, setAppliedTemplate] = useState(null);
+  const [historyFor, setHistoryFor] = useState(null);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -102,6 +104,7 @@ export default function EmployeesPage() {
     setEditing(null);
     setForm(emptyForm);
     setError("");
+    setAppliedTemplate(null);
     setModal(true);
   };
   const openEdit = (emp) => {
@@ -114,9 +117,19 @@ export default function EmployeesPage() {
       permissions: emp.permissions || {},
     });
     setError("");
+    setAppliedTemplate(null);
     setModal(true);
   };
   const closeModal = () => setModal(false);
+
+  const applyTemplate = (t) => {
+    setAppliedTemplate(t.key);
+    setForm((f) => ({
+      ...f,
+      role_label: t.key === "custom" ? f.role_label : t.label,
+      permissions: { ...t.permissions },
+    }));
+  };
 
   // Each Read/Write/Delete cell can back onto more than one underlying flag
   // (e.g. Leads "Write" = edit_lead_details + assign_leads + bulk_upload_leads)
@@ -144,8 +157,7 @@ export default function EmployeesPage() {
     });
   };
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const doSubmit = async () => {
     setError("");
     setSaving(true);
     try {
@@ -161,6 +173,21 @@ export default function EmployeesPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const submit = async (e) => {
+    e.preventDefault();
+    const hasAnyAccess = Object.values(form.permissions).some(Boolean);
+    if (!hasAnyAccess) {
+      await confirmDialog({
+        title: "No Module Access Granted",
+        message: "This role has no access to any module — they'll be able to log in but won't be able to do anything. Continue anyway?",
+        confirmLabel: "Save Anyway",
+        onConfirm: doSubmit,
+      });
+      return;
+    }
+    await doSubmit();
   };
 
   const removeEmployee = async (id) => {
@@ -342,6 +369,9 @@ export default function EmployeesPage() {
                         <button onClick={() => openEdit(emp)} style={editBtn}>
                           Edit
                         </button>
+                        <button onClick={() => setHistoryFor(emp)} style={editBtn}>
+                          History
+                        </button>
                         <button
                           onClick={() => toggleActive(emp)}
                           disabled={statusChanging === emp.id}
@@ -440,6 +470,43 @@ export default function EmployeesPage() {
               </div>
             )}
 
+            {!editing && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 10, color: "var(--text-secondary)", marginBottom: 8, fontWeight: 500, letterSpacing: "0.05em", textTransform: "uppercase", fontFamily: "var(--font-main)" }}>
+                  Start From a Role Template
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                  {ROLE_TEMPLATES.map((t) => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => applyTemplate(t)}
+                      title={t.description}
+                      style={{
+                        textAlign: "left",
+                        padding: "10px 12px",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        fontFamily: "var(--font-main)",
+                        border: `1.5px solid ${appliedTemplate === t.key ? "var(--teal)" : "var(--border)"}`,
+                        background: appliedTemplate === t.key ? "var(--teal-dim)" : "var(--bg-input)",
+                      }}
+                    >
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: appliedTemplate === t.key ? "var(--teal-light)" : "var(--text-primary)" }}>
+                        {t.label}
+                      </div>
+                      <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.4 }}>
+                        {t.description}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 6 }}>
+                  Pre-fills the checkboxes below — still fully editable before saving.
+                </div>
+              </div>
+            )}
+
             <form onSubmit={submit}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <Field label="Full Name *">
@@ -518,7 +585,7 @@ export default function EmployeesPage() {
                         >
                           Module
                         </th>
-                        {["Read", "Write", "Delete"].map((h) => (
+                        {["Read", "Write", "Delete", "All Records"].map((h) => (
                           <th
                             key={h}
                             style={{
@@ -552,7 +619,7 @@ export default function EmployeesPage() {
                           >
                             {mod.label}
                           </td>
-                          {["read", "write", "delete"].map((action) => {
+                          {["read", "write", "delete", "scope"].map((action) => {
                             const cell = mod[action];
                             return (
                               <td key={action} style={{ textAlign: "center", padding: "10px 12px" }}>
@@ -607,6 +674,85 @@ export default function EmployeesPage() {
           </div>
         </div>
       )}
+
+      {historyFor && (
+        <HistoryModal employee={historyFor} onClose={() => setHistoryFor(null)} />
+      )}
+    </div>
+  );
+}
+
+function HistoryModal({ employee, onClose }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api
+      .get(`/employees/${employee.id}/permission-history`)
+      .then((r) => setRows(r.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [employee.id]);
+
+  const diffPermissions = (before, after) => {
+    const b = before || {};
+    const a = after || {};
+    const keys = new Set([...Object.keys(b), ...Object.keys(a)]);
+    const label = (k) => PERMISSION_KEYS.find((p) => p.key === k)?.label || k;
+    const added = [...keys].filter((k) => a[k] && !b[k]).map(label);
+    const removed = [...keys].filter((k) => b[k] && !a[k]).map(label);
+    return { added, removed };
+  };
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 300, padding: 20 }}
+    >
+      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-strong)", borderRadius: 14, padding: "24px 22px", width: "100%", maxWidth: 560, maxHeight: "80vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div>
+            <h2 style={{ fontFamily: "var(--font-main)", fontSize: 16, fontWeight: 700, color: "var(--text-primary)" }}>Permission History</h2>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{employee.name}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: 20, cursor: "pointer" }}>✕</button>
+        </div>
+
+        {loading ? (
+          <div style={{ padding: 30, textAlign: "center", color: "var(--text-muted)", fontSize: 12 }}>Loading...</div>
+        ) : rows.length === 0 ? (
+          <div style={{ padding: 30, textAlign: "center", color: "var(--text-muted)", fontSize: 12 }}>No changes recorded yet.</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {rows.map((r) => {
+              const { added, removed } = diffPermissions(r.old_permissions, r.new_permissions);
+              const roleChanged = r.old_role_label !== r.new_role_label;
+              return (
+                <div key={r.id} style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "10px 12px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>
+                    <span>{r.changed_by_name ? `Changed by ${r.changed_by_name}` : "Changed"}</span>
+                    <span>{new Date(r.created_at).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                  </div>
+                  {roleChanged && (
+                    <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 4 }}>
+                      Role: <strong>{r.old_role_label || "(none)"}</strong> → <strong>{r.new_role_label || "(none)"}</strong>
+                    </div>
+                  )}
+                  {added.length > 0 && (
+                    <div style={{ fontSize: 11.5, color: "var(--success)", marginBottom: 2 }}>+ {added.join(", ")}</div>
+                  )}
+                  {removed.length > 0 && (
+                    <div style={{ fontSize: 11.5, color: "var(--danger)" }}>− {removed.join(", ")}</div>
+                  )}
+                  {!roleChanged && added.length === 0 && removed.length === 0 && (
+                    <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>No effective change</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

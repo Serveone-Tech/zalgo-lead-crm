@@ -1023,6 +1023,27 @@ const initDB = async () => {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_follow_up_ignores_user_id ON follow_up_ignores(user_id)`).catch(() => {});
     await client.query(`CREATE INDEX IF NOT EXISTS idx_follow_up_ignores_lead_id ON follow_up_ignores(lead_id)`).catch(() => {});
 
+    // Tenant-level equivalent of admin_audit_log — every time an owner
+    // changes an employee's role_label or permissions, one row here with
+    // the full before/after so there's a real history to look back on
+    // (surfaced as a "History" view on the Employees page), not just the
+    // current state.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS employee_permission_audit (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        employee_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        old_role_label VARCHAR(50),
+        new_role_label VARCHAR(50),
+        old_permissions JSONB,
+        new_permissions JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `).catch((e) => console.log("employee_permission_audit create skip:", e.message));
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_employee_permission_audit_user_id ON employee_permission_audit(user_id)`).catch(() => {});
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_employee_permission_audit_employee_id ON employee_permission_audit(employee_id)`).catch(() => {});
+
     // One-time rename: 'trial'->'trialing', 'cancelled'->'canceled' so the
     // whole app (backend + frontend) reads one consistent 5-state
     // vocabulary (trialing/active/past_due/canceled/expired). 'active' and

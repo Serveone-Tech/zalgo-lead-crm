@@ -8,6 +8,7 @@ export const PERMISSION_KEYS = [
   { key: "manage_customers", label: "Manage customers & payments" },
   { key: "delete_customers", label: "Delete customers" },
   { key: "view_customers", label: "View customers" },
+  { key: "view_all_customers", label: "View all customers/orders (not just assigned)" },
   { key: "view_inventory", label: "View inventory" },
   { key: "manage_inventory", label: "Add/edit inventory items" },
   { key: "delete_inventory", label: "Delete inventory items" },
@@ -48,6 +49,7 @@ export const PERMISSION_MODULES = [
     read: { keys: ["view_customers"], hint: "View the Customers section at all" },
     write: { keys: ["manage_customers"], hint: "Add/edit customers, orders, delivery & payment info" },
     delete: { keys: ["delete_customers"], hint: "Delete customers" },
+    scope: { keys: ["view_all_customers"], hint: "See every customer/order — including dispatch, shipment and invoice actions — not just ones assigned to you" },
   },
   {
     key: "inventory",
@@ -89,6 +91,59 @@ export function visiblePermissionModules(planFeatures) {
   if (!planFeatures) return PERMISSION_MODULES; // not loaded yet — don't hide anything prematurely
   return PERMISSION_MODULES.filter((m) => !m.planFeature || planFeatures.includes(m.planFeature));
 }
+
+// Starting points for a new employee's permission grid — pre-fills the
+// checkboxes for common job functions in this product's own domain
+// instead of a blank grid every time; still fully hand-editable before
+// saving. "Custom" intentionally maps to an empty object (today's exact
+// starting behavior) so nothing is lost for an owner who wants to build
+// from scratch.
+export const ROLE_TEMPLATES = [
+  {
+    key: "custom",
+    label: "Custom",
+    description: "Start blank and tick exactly what this role needs.",
+    permissions: {},
+  },
+  {
+    key: "telecaller",
+    label: "Telecaller / Sales Rep",
+    description: "Works their own assigned leads and the WhatsApp inbox. No customer, inventory, or settings access.",
+    permissions: {
+      edit_lead_details: true,
+      assign_leads: true,
+      bulk_upload_leads: true,
+      view_whatsapp: true,
+    },
+  },
+  {
+    key: "dispatch",
+    label: "Dispatch / Ops",
+    description: "Ships and invoices every order, manages stock. Sees all customers/orders regardless of assignment — no lead access.",
+    permissions: {
+      view_customers: true,
+      manage_customers: true,
+      view_all_customers: true,
+      view_inventory: true,
+      manage_inventory: true,
+    },
+  },
+  {
+    key: "support",
+    label: "Support",
+    description: "Read access to every customer/order to answer questions — can't edit, delete, or touch leads.",
+    permissions: {
+      view_customers: true,
+      view_all_customers: true,
+    },
+  },
+  {
+    key: "manager",
+    label: "Manager",
+    description: "Full access across every module, all records — equivalent to an owner for day-to-day operations.",
+    permissions: Object.fromEntries(PERMISSION_KEYS.map((p) => [p.key, true])),
+  },
+];
 
 export function isOwnerUser(user) {
   return !!user && (user.role === "user" || user.role === "superadmin");

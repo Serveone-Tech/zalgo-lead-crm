@@ -12,11 +12,14 @@ const upload = require("../middleware/upload");
 
 const router = express.Router();
 
-// Employees only see customers assigned to them; owners/superadmins see all.
-// Unlike leads there's no "view all" override permission for this — the
-// ask was a strict admin-sees-all / employee-sees-own-assigned split.
+// Employees only see customers assigned to them, unless granted
+// view_all_customers — same override pattern as Leads' view_all_leads.
+// (Previously this was a strict admin-sees-all / employee-sees-own split
+// with no override at all, which blocked roles like a dispatch/ops
+// employee who needs every order to ship/invoice but has none personally
+// assigned to them.)
 const visibilityClause = (req, paramIndex) => {
-  if (isOwner(req)) return { clause: "", params: [] };
+  if (isOwner(req) || hasPermission(req, "view_all_customers")) return { clause: "", params: [] };
   return { clause: ` AND c.assigned_to=$${paramIndex}`, params: [req.user.id] };
 };
 

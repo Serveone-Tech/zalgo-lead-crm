@@ -91,12 +91,20 @@ router.post("/", auth, requireSubscription, requirePlanFeature("employees"), req
       return res.status(400).json({ error: "Email already in use" });
 
     const hashed = await bcrypt.hash(password, 10);
+    const nextRoleLabel = role_label || "";
+    const nextPermissions = sanitizePermissions(permissions);
     const result = await pool.query(
       `INSERT INTO users (name, email, password, role, onboarded, parent_id, role_label, permissions)
        VALUES ($1,$2,$3,'employee',true,$4,$5,$6)
        RETURNING id, name, email, role_label, permissions, created_at`,
-      [name, email, hashed, req.tenantId, role_label || "", sanitizePermissions(permissions)],
+      [name, email, hashed, req.tenantId, nextRoleLabel, nextPermissions],
     );
+    await pool.query(
+      `INSERT INTO employee_permission_audit
+       (user_id, changed_by, employee_id, old_role_label, new_role_label, old_permissions, new_permissions)
+       VALUES ($1,$2,$3,NULL,$4,NULL,$5)`,
+      [req.tenantId, req.user.id, result.rows[0].id, nextRoleLabel, nextPermissions],
+    ).catch((e) => console.error("employee_permission_audit insert failed:", e.message));
     res.json(result.rows[0]);
   } catch (e) {
     console.error(e.message);
@@ -109,10 +117,11 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("employees"), r
   const { name, role_label, permissions, password } = req.body;
   try {
     const owned = await pool.query(
-      "SELECT id FROM users WHERE id=$1 AND parent_id=$2",
+      "SELECT id, role_label, permissions FROM users WHERE id=$1 AND parent_id=$2",
       [req.params.id, req.tenantId],
     );
-    if (owned.rows.length === 0)
+    const before = owned.rows[0];
+    if (!before)
       return res.status(404).json({ error: "Employee not found" });
 
     if (password) {
@@ -123,13 +132,51 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("employees"), r
       ]);
     }
 
+    const nextRoleLabel = role_label || "";
+    const nextPermissions = sanitizePermissions(permissions);
     const result = await pool.query(
       `UPDATE users SET name=$1, role_label=$2, permissions=$3
        WHERE id=$4 AND parent_id=$5
        RETURNING id, name, email, role_label, permissions, created_at`,
-      [name, role_label || "", sanitizePermissions(permissions), req.params.id, req.tenantId],
+      [name, nextRoleLabel, nextPermissions, req.params.id, req.tenantId],
     );
+
+    // Only log when something about the role/permissions actually changed
+    // — not every save (e.g. a password reset with identical role fields
+    // shouldn't add a no-op audit row).
+    const roleChanged = before.role_label !== nextRoleLabel;
+    const permsChanged = JSON.stringify(before.permissions || {}) !== JSON.stringify(nextPermissions);
+    if (roleChanged || permsChanged) {
+      await pool.query(
+        `INSERT INTO employee_permission_audit
+         (user_id, changed_by, employee_id, old_role_label, new_role_label, old_permissions, new_permissions)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [req.tenantId, req.user.id, req.params.id, before.role_label, nextRoleLabel, before.permissions, nextPermissions],
+      ).catch((e) => console.error("employee_permission_audit insert failed:", e.message));
+    }
+
     res.json(result.rows[0]);
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET the permission-change history for one employee — owner only, same
+// as every other owner-level reporting view.
+router.get("/:id/permission-history", auth, requireSubscription, requirePlanFeature("employees"), async (req, res) => {
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const result = await pool.query(
+      `SELECT a.id, a.old_role_label, a.new_role_label, a.old_permissions, a.new_permissions, a.created_at,
+              u.name AS changed_by_name
+       FROM employee_permission_audit a
+       LEFT JOIN users u ON u.id = a.changed_by
+       WHERE a.user_id=$1 AND a.employee_id=$2
+       ORDER BY a.created_at DESC`,
+      [req.tenantId, req.params.id],
+    );
+    res.json(result.rows);
   } catch (e) {
     console.error(e.message);
     res.status(500).json({ error: "Server error" });

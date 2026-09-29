@@ -9,6 +9,7 @@ const PERMISSION_KEYS = [
   "manage_customers",
   "delete_customers",
   "view_customers",
+  "view_all_customers",
   "view_inventory",
   "manage_inventory",
   "delete_inventory",

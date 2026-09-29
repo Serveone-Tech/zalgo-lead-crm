@@ -1,7 +1,7 @@
 const express = require("express");
 const { pool } = require("../db");
 const { auth, requirePermission, requireSubscription, requirePlanFeature } = require("../middleware/auth");
-const { isOwner } = require("../utils/permissions");
+const { isOwner, hasPermission } = require("../utils/permissions");
 const { PROVIDERS } = require("../utils/delivery-providers");
 const { createCourierShipmentForOrder } = require("../utils/courier-shipment");
 
@@ -126,7 +126,7 @@ router.get("/track/:orderId", auth, requireSubscription, requirePlanFeature("cus
   try {
     // Employees can only track orders for customers assigned to them —
     // same boundary as the customer list/detail endpoints.
-    const vis = isOwner(req) ? { clause: "", params: [] } : { clause: " AND c.assigned_to=$3", params: [req.user.id] };
+    const vis = isOwner(req) || hasPermission(req, "view_all_customers") ? { clause: "", params: [] } : { clause: " AND c.assigned_to=$3", params: [req.user.id] };
     const orderRes = await pool.query(
       `SELECT co.tracking_id, co.provider FROM customer_orders co
        JOIN customers c ON c.id=co.customer_id
@@ -177,7 +177,7 @@ router.get("/track/:orderId", auth, requireSubscription, requirePlanFeature("cus
 // an admin can fix the config and retry without touching the order again.
 router.post("/ship/:orderId", auth, requireSubscription, requirePlanFeature("customers"), requirePermission("manage_customers"), async (req, res) => {
   try {
-    const vis = isOwner(req) ? { clause: "", params: [] } : { clause: " AND c.assigned_to=$3", params: [req.user.id] };
+    const vis = isOwner(req) || hasPermission(req, "view_all_customers") ? { clause: "", params: [] } : { clause: " AND c.assigned_to=$3", params: [req.user.id] };
     const orderRes = await pool.query(
       `SELECT co.id FROM customer_orders co JOIN customers c ON c.id=co.customer_id
        WHERE co.id=$1 AND co.user_id=$2${vis.clause}`,
