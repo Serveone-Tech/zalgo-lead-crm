@@ -23,6 +23,22 @@ const pool = new Pool({
   max: 20,
 });
 
+// The DB session's own timezone defaulted to GMT, while every
+// follow_up_date/datetime value the app ever writes is a naive IST
+// wall-clock string (the browser's <input type="datetime-local"> sends
+// local time with no offset, and it's stored as-is in a TIMESTAMP WITHOUT
+// TIME ZONE column) — every tenant is India-based. Any query comparing
+// that column against NOW()/CURRENT_DATE was silently comparing IST
+// wall-clock values against a UTC clock, a stray 5.5h offset that made a
+// 6:30pm follow-up not register as "due" until midnight. Setting the
+// session timezone here means NOW()/CURRENT_DATE are themselves expressed
+// in IST on every connection this pool ever hands out, matching what's
+// actually stored — fixes every follow_up_date/CURRENT_DATE comparison in
+// the app at the root, not just the one route that surfaced it.
+pool.on("connect", (client) => {
+  client.query("SET TIME ZONE 'Asia/Kolkata'").catch((e) => console.error("Failed to set session timezone:", e.message));
+});
+
 const initDB = async () => {
   const client = await pool.connect();
   try {
