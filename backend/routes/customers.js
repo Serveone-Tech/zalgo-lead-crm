@@ -250,6 +250,40 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
 
     const vis = visibilityClause(req, params.length + 1);
 
+    // Auto-assign an invoice number to every DELIVERED order in this
+    // report that doesn't have one yet, instead of only showing numbers
+    // for orders someone happened to already download an invoice for —
+    // same per-tenant sequential claim (user_settings.invoice_seq_next)
+    // the single-order invoice route uses, just run here for every
+    // qualifying order at once. Only orders whose current stage is both
+    // is_delivered-flagged and enables_invoice (an owner can disable
+    // invoicing for a specific stage) are eligible — claimed oldest-first
+    // by the same date basis the report itself sorts by, so numbering
+    // stays chronological instead of assigned in arbitrary scan order.
+    const missingInvoiceRes = await pool.query(
+      `SELECT co.id FROM customer_orders co
+       JOIN customers c ON c.id = co.customer_id
+       ${stageJoin}
+       WHERE co.user_id=$1 AND ${conditions.join(" AND ")}${vis.clause}
+         AND COALESCE(os.is_delivered, false) = true
+         AND COALESCE(os.enables_invoice, true) = true
+         AND (co.invoice_number IS NULL OR co.invoice_number = '')
+       ORDER BY ${dateBasisExpr} ASC, co.id ASC`,
+      [...params, ...vis.params],
+    );
+    if (missingInvoiceRes.rows.length > 0) {
+      await pool.query("INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING", [req.tenantId]);
+      for (const { id: orderId } of missingInvoiceRes.rows) {
+        const claim = await pool.query(
+          `UPDATE user_settings SET invoice_seq_next = invoice_seq_next + 1
+           WHERE user_id=$1 RETURNING invoice_seq_next - 1 AS assigned_seq, invoice_seq_pattern`,
+          [req.tenantId],
+        );
+        const invoiceNo = formatInvoiceNumber(claim.rows[0].invoice_seq_pattern, claim.rows[0].assigned_seq);
+        await pool.query("UPDATE customer_orders SET invoice_number=$1 WHERE id=$2", [invoiceNo, orderId]);
+      }
+    }
+
     // One row per ORDER, not per item — items/HSN/quantity are aggregated
     // into comma-separated lists (still positionally aligned with each
     // other) so a 3-item order doesn't repeat its full total 3 times.
