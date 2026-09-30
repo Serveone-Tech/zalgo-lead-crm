@@ -7,16 +7,25 @@ import ImpersonationBanner from '../components/ImpersonationBanner';
 import { ToastProvider } from '../components/ToastProvider';
 import { ConfirmDialogProvider } from '../components/ConfirmDialogProvider';
 
+// Public marketing site — no auth, no in-app sidebar. Kept separate from
+// NO_SIDEBAR below: login/register/onboarding/plans/superadmin also hide
+// the sidebar but are CRM operations, not marketing pages — tracking
+// (Clarity/GA) must only load for the pages in THIS list, not every
+// sidebar-free page.
+const MARKETING_PAGES = [
+  '/', '/features', '/solutions', '/automation-suite', '/pricing', '/contact',
+  '/docs', '/terms', '/privacy', '/refund-policy', '/help-center', '/about',
+];
+
 const NO_SIDEBAR = [
   '/', '/login', '/register', '/onboarding', '/plans', '/superadmin',
-  // Public marketing site — no auth, no in-app sidebar.
-  '/features', '/solutions', '/automation-suite', '/pricing', '/contact',
-  '/docs', '/terms', '/privacy', '/refund-policy', '/help-center', '/about',
+  ...MARKETING_PAGES,
 ];
 
 export default function RootLayout({ children }) {
   const pathname = usePathname();
   const hideSidebar = NO_SIDEBAR.some(p => pathname === p || pathname.startsWith('/superadmin'));
+  const isMarketingPage = MARKETING_PAGES.includes(pathname);
 
   return (
     <html lang="en">
@@ -29,24 +38,28 @@ export default function RootLayout({ children }) {
             __html: `try{document.documentElement.dataset.theme=localStorage.getItem('crm_theme')||'dark';document.documentElement.style.setProperty('--sidebar-w',localStorage.getItem('crm_sidebar_collapsed')==='1'?'68px':'232px');}catch(e){}`,
           }}
         />
-        <Script id="ms-clarity" strategy="afterInteractive">
-          {`(function(c,l,a,r,i,t,y){
-              c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-              t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-              y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-          })(window, document, "clarity", "script", "ymtpm0f0oq");`}
-        </Script>
-        <Script
-          id="ga-gtag-src"
-          strategy="afterInteractive"
-          src="https://www.googletagmanager.com/gtag/js?id=G-1SMBDYMK3W"
-        />
-        <Script id="ga-gtag-init" strategy="afterInteractive">
-          {`window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', 'G-1SMBDYMK3W');`}
-        </Script>
+        {isMarketingPage && (
+          <>
+            <Script id="ms-clarity" strategy="afterInteractive">
+              {`(function(c,l,a,r,i,t,y){
+                  c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+                  t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+                  y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+              })(window, document, "clarity", "script", "ymtpm0f0oq");`}
+            </Script>
+            <Script
+              id="ga-gtag-src"
+              strategy="afterInteractive"
+              src="https://www.googletagmanager.com/gtag/js?id=G-1SMBDYMK3W"
+            />
+            <Script id="ga-gtag-init" strategy="afterInteractive">
+              {`window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', 'G-1SMBDYMK3W');`}
+            </Script>
+          </>
+        )}
       </head>
       <body>
         <ToastProvider>
