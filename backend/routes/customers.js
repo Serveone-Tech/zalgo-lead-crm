@@ -268,6 +268,7 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
          co.amount AS total_amount,
          emp.name AS employee_name,
          co.order_type,
+         co.invoice_number,
          co.tracking_id,
          co.provider
        FROM customer_orders co
@@ -304,6 +305,7 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
       { header: "Total Amount", key: "total_amount", width: 14 },
       { header: "Employee", key: "employee_name", width: 20 },
       { header: "Order Type", key: "order_type", width: 12 },
+      { header: "Invoice Number", key: "invoice_number", width: 20 },
       { header: "Tracking ID", key: "tracking_id", width: 20 },
       { header: "Courier", key: "courier", width: 16 },
     ];
@@ -324,6 +326,7 @@ router.get("/reports/sales-excel", auth, requireSubscription, requirePlanFeature
         total_amount: parseFloat(row.total_amount) || 0,
         employee_name: row.employee_name || "",
         order_type: row.order_type || "FRESH",
+        invoice_number: row.invoice_number || "",
         tracking_id: row.tracking_id || "",
         courier: PROVIDERS[row.provider]?.label || row.provider || "",
       });
