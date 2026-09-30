@@ -324,6 +324,12 @@ router.get("/stats", auth, requireSubscription, requirePlanFeature("core"), asyn
   try {
     const vis = visibilityClause(req, 2);
     const visToday = visibilityClause(req, 2);
+    // Customers/orders visibility is its own permission (view_all_customers),
+    // independent of view_all_leads — an employee without it must only see
+    // their own converted customers here, not the whole tenant's count.
+    const customersVis = isOwner(req) || hasPermission(req, "view_all_customers")
+      ? { clause: "", params: [] }
+      : { clause: " AND assigned_to=$2", params: [req.user.id] };
     const [total, active, booked, lost, overdue, followup, customers] =
       await Promise.all([
         pool.query(`SELECT COUNT(*) FROM leads WHERE user_id=$1${vis.clause}`, [
@@ -358,7 +364,7 @@ router.get("/stats", auth, requireSubscription, requirePlanFeature("core"), asyn
           `SELECT COUNT(*) FROM leads WHERE user_id=$1 AND follow_up_date::date=CURRENT_DATE AND follow_up_date>=NOW()${visToday.clause}`,
           [req.tenantId, ...visToday.params],
         ),
-        pool.query(`SELECT COUNT(*) FROM customers WHERE user_id=$1`, [req.tenantId]),
+        pool.query(`SELECT COUNT(*) FROM customers WHERE user_id=$1${customersVis.clause}`, [req.tenantId, ...customersVis.params]),
       ]);
     res.json({
       total: parseInt(total.rows[0].count),
