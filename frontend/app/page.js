@@ -671,7 +671,7 @@ export default function HomePage() {
               <Reveal
                 key={c.title}
                 delay={i * 0.08}
-                className="hover-lift"
+                className="hover-lift mk-icon-card"
                 style={{
                   ...cardStyle,
                   padding: "38px 22px 32px",
@@ -679,6 +679,7 @@ export default function HomePage() {
                 }}
               >
                 <div
+                  className="mk-icon-card-icon"
                   style={{
                     display: "flex",
                     justifyContent: "center",
@@ -691,6 +692,7 @@ export default function HomePage() {
                   {c.icon}
                 </div>
                 <div
+                  className="mk-icon-card-title"
                   style={{
                     display: "flex",
                     justifyContent: "center",
@@ -718,7 +720,7 @@ export default function HomePage() {
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: 15, color: sub, lineHeight: 1.45 }}>
+                <div className="mk-icon-card-desc" style={{ fontSize: 15, color: sub, lineHeight: 1.45 }}>
                   {c.desc}
                 </div>
               </Reveal>
@@ -811,6 +813,7 @@ export default function HomePage() {
             ].map((t) => (
               <div
                 key={t}
+                className="mk-bullet-card"
                 style={{
                   ...cardStyle,
                   borderRadius: 12,
@@ -820,8 +823,8 @@ export default function HomePage() {
                   padding: "18px 26px",
                 }}
               >
-                <CheckBadge size={34} />
-                <span style={{ fontSize: 18, fontWeight: 700 }}>{t}</span>
+                <span className="mk-bullet-icon"><CheckBadge size={34} /></span>
+                <span className="mk-bullet-text" style={{ fontSize: 18, fontWeight: 700 }}>{t}</span>
               </div>
             ))}
           </div>
@@ -933,7 +936,7 @@ export default function HomePage() {
               <Reveal
                 key={s.title}
                 delay={i * 0.1}
-                className="hover-lift"
+                className="hover-lift mk-icon-card"
                 style={{
                   ...cardStyle,
                   padding: "30px 24px 28px",
@@ -941,6 +944,7 @@ export default function HomePage() {
                 }}
               >
                 <div
+                  className="mk-icon-card-icon mk-icon-card-icon-lg"
                   style={{
                     width: 104,
                     height: 104,
@@ -955,11 +959,13 @@ export default function HomePage() {
                   {s.icon}
                 </div>
                 <div
+                  className="mk-icon-card-title"
                   style={{ fontSize: 26, fontWeight: 700, marginBottom: 10 }}
                 >
                   {s.title}
                 </div>
                 <div
+                  className="mk-icon-card-desc"
                   style={{
                     fontSize: 16,
                     color: sub,
@@ -971,6 +977,7 @@ export default function HomePage() {
                   {s.desc}
                 </div>
                 <div
+                  className="mk-icon-card-tag"
                   style={{
                     fontSize: 14,
                     color: teal,
@@ -2082,7 +2089,7 @@ export default function HomePage() {
                   Courier connected through delivery API.
                 </div>
 
-                <div style={{ display: "flex", alignItems: "flex-start" }}>
+                <div className="mk-track-row" style={{ display: "flex", alignItems: "flex-start" }}>
                   {["Confirmed", "Shipped", "In transit", "Delivered"].map(
                     (l, i) => (
                       <div
@@ -2093,8 +2100,9 @@ export default function HomePage() {
                           flex: i < 3 ? 1 : 0,
                         }}
                       >
-                        <div style={{ textAlign: "center", width: 90 }}>
+                        <div className="mk-track-col" style={{ textAlign: "center", width: 90 }}>
                           <div
+                            className="mk-track-dot"
                             style={{
                               width: 60,
                               height: 60,
@@ -2117,6 +2125,7 @@ export default function HomePage() {
                             )}
                           </div>
                           <div
+                            className="mk-track-label"
                             style={{
                               fontSize: 15,
                               fontWeight: 700,
@@ -2436,7 +2445,7 @@ export default function HomePage() {
             </div>
 
             {/* Leads → Follow-ups → Orders, dotted animated */}
-            <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+            <div className="mk-leads-flow" style={{ display: "flex", alignItems: "center", gap: 0 }}>
               {[
                 { l: "Leads", icon: <Users2 size={26} color={teal} /> },
                 { l: "Follow-ups", icon: <WhatsAppGlyph size={30} /> },
@@ -2789,6 +2798,7 @@ export default function HomePage() {
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
           .mk-bulk-visual { display: none !important; }
+          .mk-leads-flow { display: none !important; }
           .mk-h1 { font-size: 42px !important; }
           .mk-h2 { font-size: 34px !important; }
           .mk-bulk { justify-content: center !important; }
@@ -2801,6 +2811,31 @@ export default function HomePage() {
           .mk-industry-card { flex-direction: column !important; text-align: center !important; gap: 10px !important; padding: 18px 14px !important; }
           .mk-industry-icon { width: 64px !important; height: 64px !important; }
           .mk-industry-icon svg { width: 26px !important; height: 26px !important; }
+
+          /* Icon-top cards (Capture/Assign/..., Every enquiry in one
+             place/...) — desktop-sized icon boxes and headings left very
+             little room once these went 2-up, causing the text to wrap
+             onto many lines and the card to balloon in height. */
+          .mk-icon-card { padding: 18px 14px !important; }
+          .mk-icon-card-icon { width: 44px !important; height: 44px !important; margin-bottom: 10px !important; }
+          .mk-icon-card-icon svg { width: 20px !important; height: 20px !important; }
+          .mk-icon-card-icon-lg { width: 56px !important; height: 56px !important; }
+          .mk-icon-card-title { font-size: 15px !important; margin-bottom: 4px !important; }
+          .mk-icon-card-desc { font-size: 12px !important; min-height: 0 !important; margin-bottom: 10px !important; }
+          .mk-icon-card-tag { font-size: 11px !important; padding: 6px 8px !important; }
+
+          /* "Assign to the right agent" / etc bullet cards */
+          .mk-bullet-card { padding: 12px 14px !important; gap: 10px !important; }
+          .mk-bullet-icon span { width: 24px !important; height: 24px !important; }
+          .mk-bullet-icon svg { width: 13px !important; height: 13px !important; }
+          .mk-bullet-text { font-size: 13px !important; }
+
+          /* Track the delivery status row — 4 fixed-width columns were
+             just barely wider than the smallest phone viewports. */
+          .mk-track-col { width: 62px !important; }
+          .mk-track-dot { width: 40px !important; height: 40px !important; }
+          .mk-track-dot svg { width: 17px !important; height: 17px !important; }
+          .mk-track-label { font-size: 11px !important; }
         }
         @media (prefers-reduced-motion: reduce) {
           .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c, .crm-pulse { animation: none !important; }

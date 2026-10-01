@@ -121,6 +121,7 @@ export default function MarketingFooter() {
             />
           </div>
           <div
+            className="mk-footer-heading"
             style={{
               fontSize: 26,
               fontWeight: 800,
@@ -134,6 +135,7 @@ export default function MarketingFooter() {
             Orders.
           </div>
           <div
+            className="mk-footer-text"
             style={{
               fontSize: 17,
               color: textSoft,
@@ -147,7 +149,7 @@ export default function MarketingFooter() {
           <div style={{ fontSize: 15, color: textSoft, marginBottom: 4 }}>
             A product of
           </div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>
+          <div className="mk-footer-text" style={{ fontSize: 20, fontWeight: 700 }}>
             Zalgo Infotech Pvt. Ltd.
           </div>
         </div>
@@ -159,7 +161,7 @@ export default function MarketingFooter() {
             className="mk-footer-col"
             style={{ padding: "0 40px", borderRight: `1px solid ${line}` }}
           >
-            <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 26 }}>
+            <div className="mk-footer-heading" style={{ fontSize: 26, fontWeight: 800, marginBottom: 26 }}>
               {col.heading}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -167,7 +169,7 @@ export default function MarketingFooter() {
                 <a
                   key={l.label}
                   href={l.href}
-                  className="mk-footer-link"
+                  className="mk-footer-link mk-footer-text"
                   style={{
                     fontSize: 18,
                     color: textSoft,
@@ -183,7 +185,7 @@ export default function MarketingFooter() {
 
         {/* Contact column */}
         <div className="mk-footer-col" style={{ paddingLeft: 40 }}>
-          <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 26 }}>
+          <div className="mk-footer-heading" style={{ fontSize: 26, fontWeight: 800, marginBottom: 26 }}>
             Contact
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -191,6 +193,7 @@ export default function MarketingFooter() {
               const inner = (
                 <>
                   <span
+                    className="mk-footer-icon"
                     style={{
                       width: 50,
                       height: 50,
@@ -204,7 +207,7 @@ export default function MarketingFooter() {
                   >
                     <Icon size={20} />
                   </span>
-                  <span style={{ fontSize: 18 }}>{text}</span>
+                  <span className="mk-footer-text" style={{ fontSize: 18 }}>{text}</span>
                 </>
               );
               return href ? (
@@ -241,6 +244,7 @@ export default function MarketingFooter() {
             href="https://zalgoinfotech.com"
             target="_blank"
             rel="noopener noreferrer"
+            className="mk-footer-text"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -289,12 +293,13 @@ export default function MarketingFooter() {
             gap: 12,
           }}
         >
-          <div style={{ fontSize: 16, color: textSoft }}>
+          <div className="mk-footer-text" style={{ fontSize: 16, color: textSoft }}>
             © {new Date().getFullYear()} Zalgo Infotech Pvt. Ltd. All rights
             reserved.
           </div>
           <a
             href="https://lead-management.zalgostore.com/login"
+            className="mk-footer-text"
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -319,6 +324,10 @@ export default function MarketingFooter() {
         }
         @media (max-width: 640px) {
           .mk-footer-grid { grid-template-columns: 1fr !important; padding-left: 24px !important; padding-right: 24px !important; }
+          .mk-footer-heading { font-size: 18px !important; margin-bottom: 14px !important; }
+          .mk-footer-text { font-size: 14px !important; }
+          .mk-footer-icon { width: 36px !important; height: 36px !important; }
+          .mk-footer-icon svg { width: 15px !important; height: 15px !important; }
         }
       `}</style>
     </footer>

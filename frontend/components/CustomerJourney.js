@@ -118,11 +118,12 @@ export default function CustomerJourney() {
   const tab = TABS[active];
 
   return (
-    <div style={{ maxWidth: 1400, margin: "0 auto", padding: "0 48px 56px" }}>
+    <div className="cj-outer" style={{ maxWidth: 1400, margin: "0 auto", padding: "0 48px 56px" }}>
       {/* Tab bar — a sliding capsule glides behind whichever tab is active
           instead of the fill just appearing/disappearing, and the panel
           below fades+slides in fresh on every switch. */}
       <div
+        className="cj-tabbar"
         style={{
           position: "relative",
           display: "grid",
@@ -136,6 +137,7 @@ export default function CustomerJourney() {
       >
         <div
           aria-hidden
+          className="cj-tab-pill"
           style={{
             position: "absolute",
             top: 0,
@@ -172,9 +174,10 @@ export default function CustomerJourney() {
                 zIndex: 1,
                 transition: "color 0.25s ease",
               }}
+              data-active={isActive}
             >
-              <span style={{ fontSize: 11, opacity: 0.7 }}>0{i + 1}</span>
-              {t.icon} {t.label}
+              <span className="cj-tab-num" style={{ fontSize: 11, opacity: 0.7 }}>0{i + 1}</span>
+              {t.icon} <span className="cj-tab-label">{t.label}</span>
               {isActive && (
                 <span
                   style={{
@@ -200,10 +203,36 @@ export default function CustomerJourney() {
           to { opacity: 1; transform: translateY(0); }
         }
         .journey-panel { animation: journeyPanelIn 0.45s cubic-bezier(0.16,1,0.3,1); }
+
+        /* This component has no .mk-wrap/.mk-2col ancestry, so none of the
+           marketing site's shared responsive rules reach it — it needs its
+           own, same min-width:0 + stacking treatment the rest of the site
+           already gets. */
+        .cj-outer, .cj-panel, .cj-row { min-width: 0; }
+        .cj-panel > *, .cj-row > * { min-width: 0; }
+        @media (max-width: 860px) {
+          .cj-outer { padding-left: 24px !important; padding-right: 24px !important; }
+          .cj-panel-wrap { padding: 24px 20px !important; }
+          .cj-panel { grid-template-columns: 1fr !important; gap: 28px !important; }
+          .cj-row { flex-direction: column !important; align-items: stretch !important; }
+          .cj-row > svg { display: none; }
+        }
+        @media (max-width: 560px) {
+          /* The sliding highlight pill's position math (left: N*25%) only
+             works for the 4-across desktop grid — at 2x2 it would land in
+             the wrong spot, so it's hidden here in favor of each button
+             coloring its own background directly when active. */
+          .cj-tabbar { grid-template-columns: repeat(2,1fr) !important; }
+          .cj-tab-pill { display: none !important; }
+          .journey-tab-btn[data-active="true"] { background: ${teal} !important; }
+          .cj-tab-label { display: none; }
+          .cj-tab-num { display: none; }
+        }
       `}</style>
 
       {/* Panel */}
       <div
+        className="cj-panel-wrap"
         style={{
           background: "#eef8f7",
           borderRadius: 16,
@@ -212,7 +241,7 @@ export default function CustomerJourney() {
           overflow: "hidden",
         }}
       >
-        <div key={tab.key} className="journey-panel" style={{ display: "grid", gridTemplateColumns: "0.95fr 1.15fr", gap: 48, alignItems: "start" }}>
+        <div key={tab.key} className="journey-panel cj-panel" style={{ display: "grid", gridTemplateColumns: "0.95fr 1.15fr", gap: 48, alignItems: "start" }}>
           <Reveal>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: teal, letterSpacing: "0.12em", marginBottom: 14 }}>{tab.step}</div>
             <h3 style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.22, marginBottom: 16, color: ink }}>{tab.headline}</h3>
@@ -249,7 +278,7 @@ export default function CustomerJourney() {
           <Reveal delay={0.1}>
             {/* Capture tab: source cards -> result card */}
             {tab.sources && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div className="cj-row" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
                   {tab.sources.map((s) => (
                     <div key={s.title} style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", border: `1px solid ${border}`, borderRadius: 12, padding: "12px 16px" }}>
@@ -268,7 +297,7 @@ export default function CustomerJourney() {
 
             {/* Follow up / Confirm order tabs: lead/order card -> 2 cards */}
             {tab.cards && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div className="cj-row" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 {tab.lead && <LeadCard {...tab.lead} />}
                 {tab.order && <OrderCard {...tab.order} />}
                 <ArrowConnector />
@@ -282,7 +311,7 @@ export default function CustomerJourney() {
 
             {/* Deliver & track tab: order card -> Delivery API -> tracking stepper */}
             {tab.tracking && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div className="cj-row" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <OrderCard {...tab.order} />
                 <div
                   style={{
