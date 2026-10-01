@@ -37,7 +37,6 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [selectingAll, setSelectingAll] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -273,22 +272,16 @@ export default function CustomersPage() {
     });
   };
 
-  // With server-side pagination, "select all" means every customer matching
-  // the current filters, not just the current page — the browser only holds
-  // one page of rows, so this asks the server for the full matching id list.
-  const toggleSelectAll = async () => {
-    if (selectedIds.size > 0) {
+  // Selects only the rows on the CURRENT page, matching what's actually
+  // visible/checked-able on screen — not every customer matching the
+  // filters across all pages.
+  const toggleSelectAll = () => {
+    const pageIds = rows.map((r) => r.id);
+    const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selectedIds.has(id));
+    if (allPageSelected) {
       setSelectedIds(new Set());
-      return;
-    }
-    setSelectingAll(true);
-    try {
-      const { data: ids } = await api.get("/customers/matching-ids", { params: filterParams });
-      setSelectedIds(new Set(ids));
-    } catch {
-      // no-op — selection stays empty so the user can retry
-    } finally {
-      setSelectingAll(false);
+    } else {
+      setSelectedIds(new Set(pageIds));
     }
   };
 
@@ -722,10 +715,9 @@ export default function CustomersPage() {
                     >
                       <input
                         type="checkbox"
-                        checked={total > 0 && selectedIds.size === total}
+                        checked={rows.length > 0 && rows.every((r) => selectedIds.has(r.id))}
                         onChange={toggleSelectAll}
-                        disabled={selectingAll}
-                        style={{ cursor: selectingAll ? "not-allowed" : "pointer" }}
+                        style={{ cursor: "pointer" }}
                       />
                     </th>
                   )}

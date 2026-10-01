@@ -93,7 +93,6 @@ function LeadsContent() {
   const [sub, setSub] = useState(null);
   const [kanbanLeads, setKanbanLeads] = useState([]);
   const [kanbanLoading, setKanbanLoading] = useState(false);
-  const [selectingAll, setSelectingAll] = useState(false);
 
   // Bulk action state
   const [selected, setSelected] = useState(new Set());
@@ -312,23 +311,18 @@ function LeadsContent() {
     });
   };
 
-  // "Select all" now means "every lead matching the current filters", not
-  // just the current page — the browser only holds one page of rows, so
-  // this asks the server for the full matching id list instead of deriving
-  // it from an array that no longer exists client-side.
-  const toggleSelectAll = async () => {
-    if (selected.size > 0) {
+  // Selects only the rows on the CURRENT page, matching what's actually
+  // visible/checked-able on screen — not every lead matching the filters
+  // across all pages, which was surprising when a filter matched
+  // thousands of rows (the header checkbox selecting all 2147 leads at
+  // once instead of the 25 on screen).
+  const toggleSelectAll = () => {
+    const pageIds = rows.map((r) => r.id);
+    const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+    if (allPageSelected) {
       setSelected(new Set());
-      return;
-    }
-    setSelectingAll(true);
-    try {
-      const { data: ids } = await api.get("/leads/matching-ids", { params: filterParams });
-      setSelected(new Set(ids));
-    } catch {
-      showToast("Could not select all matching leads", "error");
-    } finally {
-      setSelectingAll(false);
+    } else {
+      setSelected(new Set(pageIds));
     }
   };
 
@@ -904,8 +898,8 @@ function LeadsContent() {
                         <input
                           type="checkbox"
                           checked={
-                            selected.size === total &&
-                            total > 0
+                            rows.length > 0 &&
+                            rows.every((r) => selected.has(r.id))
                           }
                           onChange={toggleSelectAll}
                           style={{
