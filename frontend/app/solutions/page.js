@@ -1308,7 +1308,6 @@ export default function SolutionsPage() {
           .mk-hero-visual { display: none; }
           .mk-h1 { font-size: 40px !important; } .mk-h2 { font-size: 34px !important; }
         }
-        @media (max-width: 560px) { .mk-4col { grid-template-columns: 1fr !important; } }
         @media (prefers-reduced-motion: reduce) { .flow-dots, .float-mockup, .float-card-b, .float-card-c { animation: none !important; } }
       `,
         }}

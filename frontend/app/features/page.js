@@ -1774,7 +1774,7 @@ export default function FeaturesPage() {
           .mk-order-2 { order: 2; }
           .mk-h1 { font-size: 40px !important; } .mk-h2 { font-size: 34px !important; }
         }
-        @media (max-width: 560px) { .mk-4col, .mk-2col-keep { grid-template-columns: 1fr !important; } }
+        @media (max-width: 560px) { .mk-2col-keep { grid-template-columns: 1fr !important; } }
         @media (prefers-reduced-motion: reduce) { .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c { animation: none !important; } }
       `,
         }}

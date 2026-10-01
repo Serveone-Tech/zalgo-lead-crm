@@ -11,8 +11,16 @@ import { teal } from "../lib/marketing-theme";
 export default function MarketingStyles() {
   return (
     <style>{`
-      .mk-page { -webkit-font-smoothing: antialiased; }
-      .mk-wrap { max-width: 1400px; margin: 0 auto; }
+      html, body { overflow-x: hidden; max-width: 100%; }
+      .mk-page { -webkit-font-smoothing: antialiased; overflow-x: hidden; max-width: 100vw; }
+      .mk-wrap { max-width: 1400px; margin: 0 auto; min-width: 0; }
+      /* Grid/flex children default to min-width:auto, which refuses to
+         shrink below the content's natural width — a single long line or
+         a fixed-size icon inside one card was enough to force the whole
+         grid track (and the page) wider than the viewport at mobile
+         widths, instead of wrapping/shrinking. */
+      .mk-2col, .mk-3col, .mk-4col, .mk-2col-keep { min-width: 0; }
+      .mk-2col > *, .mk-3col > *, .mk-4col > *, .mk-2col-keep > * { min-width: 0; }
 
       /* Animated dotted connector lines */
       .flow-dots { animation: flowDots 0.9s linear infinite; }
@@ -62,7 +70,8 @@ export default function MarketingStyles() {
         .mk-bulk { justify-content: center !important; }
       }
       @media (max-width: 560px) {
-        .mk-4col { grid-template-columns: 1fr !important; }
+        .mk-4col { grid-template-columns: repeat(2,1fr) !important; }
+        .mk-3col { grid-template-columns: repeat(2,1fr) !important; gap: 14px !important; }
         .mk-2col-keep { grid-template-columns: 1fr !important; }
         .mk-h1 { font-size: 36px !important; }
       }

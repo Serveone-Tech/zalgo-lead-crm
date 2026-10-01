@@ -23,7 +23,6 @@ import {
   Store,
   Mail,
   MessageCircle,
-  Target,
   FileText,
   MapPin,
 } from "lucide-react";
@@ -542,7 +541,7 @@ export default function HomePage() {
           >
             {[
               {
-                icon: <Target size={26} color={teal} />,
+                icon: <MetaGlyph size={26} />,
                 label: "Meta lead capture",
               },
               {
@@ -1320,7 +1319,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+              <div className="mk-bulk-visual" style={{ display: "flex", alignItems: "center", gap: 0 }}>
                 <div
                   style={{
                     ...cardStyle,
@@ -2216,7 +2215,7 @@ export default function HomePage() {
               <Reveal
                 key={ind.title}
                 delay={(i % 3) * 0.08}
-                className="hover-lift"
+                className="hover-lift mk-industry-card"
                 style={{
                   ...cardStyle,
                   padding: "28px 26px",
@@ -2227,6 +2226,7 @@ export default function HomePage() {
                 }}
               >
                 <div
+                  className="mk-industry-icon"
                   style={{
                     width: 116,
                     height: 116,
@@ -2730,8 +2730,17 @@ export default function HomePage() {
       <style
         dangerouslySetInnerHTML={{
           __html: `
-        .mk-page { -webkit-font-smoothing: antialiased; }
-        .mk-wrap { max-width: 1400px; margin: 0 auto; }
+        html, body { overflow-x: hidden; max-width: 100%; }
+        .mk-page { -webkit-font-smoothing: antialiased; overflow-x: hidden; max-width: 100vw; }
+        .mk-wrap { max-width: 1400px; margin: 0 auto; min-width: 0; }
+        /* Grid/flex children default to min-width:auto, which refuses to
+           shrink below the content's natural width — a single long line of
+           text or a fixed-size icon inside one card was enough to force the
+           whole grid track, and with it the page, wider than the viewport.
+           This is why sections visibly overflowed to the right at mobile
+           widths instead of wrapping/shrinking. */
+        .mk-2col, .mk-3col, .mk-4col, .mk-2col-keep { min-width: 0; }
+        .mk-2col > *, .mk-3col > *, .mk-4col > *, .mk-2col-keep > * { min-width: 0; }
 
         /* Animated dotted connector lines — used everywhere on the page */
         .flow-dots { animation: flowDots 0.9s linear infinite; }
@@ -2779,14 +2788,19 @@ export default function HomePage() {
           .mk-2col { grid-template-columns: 1fr !important; gap: 36px !important; }
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
+          .mk-bulk-visual { display: none !important; }
           .mk-h1 { font-size: 42px !important; }
           .mk-h2 { font-size: 34px !important; }
           .mk-bulk { justify-content: center !important; }
         }
         @media (max-width: 560px) {
-          .mk-4col { grid-template-columns: 1fr !important; }
+          .mk-4col { grid-template-columns: repeat(2,1fr) !important; }
+          .mk-3col { grid-template-columns: repeat(2,1fr) !important; gap: 14px !important; }
           .mk-2col-keep { grid-template-columns: 1fr !important; }
           .mk-h1 { font-size: 36px !important; }
+          .mk-industry-card { flex-direction: column !important; text-align: center !important; gap: 10px !important; padding: 18px 14px !important; }
+          .mk-industry-icon { width: 64px !important; height: 64px !important; }
+          .mk-industry-icon svg { width: 26px !important; height: 26px !important; }
         }
         @media (prefers-reduced-motion: reduce) {
           .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c, .crm-pulse { animation: none !important; }
