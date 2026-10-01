@@ -374,7 +374,8 @@ export default function InventoryPage() {
             </div>
           </div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760 }}>
             <thead>
               <tr style={{ background: "var(--bg-surface)" }}>
                 {["Name", "Price", "Stock", "Weight", "HSN Code", "Actions"].map((h) => (
@@ -471,6 +472,7 @@ export default function InventoryPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

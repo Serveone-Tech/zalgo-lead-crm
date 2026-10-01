@@ -11,8 +11,8 @@ import { teal } from "../lib/marketing-theme";
 export default function MarketingStyles() {
   return (
     <style>{`
-      html, body { overflow-x: hidden; max-width: 100%; }
-      .mk-page { -webkit-font-smoothing: antialiased; overflow-x: hidden; max-width: 100vw; }
+      html, body { max-width: 100%; }
+      .mk-page { -webkit-font-smoothing: antialiased; max-width: 100vw; }
       .mk-wrap { max-width: 1400px; margin: 0 auto; min-width: 0; }
       /* Grid/flex children default to min-width:auto, which refuses to
          shrink below the content's natural width — a single long line or
