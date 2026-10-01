@@ -9,6 +9,12 @@
 // the symptom. Walking every element's clipped bounding box catches the
 // actual bug regardless of whether something upstream is masking it.
 //
+// Setup (one-time, not part of `npm install` — Playwright is deliberately
+// NOT a package.json dependency so it doesn't get pulled onto the VPS on
+// every production deploy):
+//   npm install --no-save playwright
+//   npx playwright install chromium
+//
 // Usage: node scripts/check-overflow.js [--base=http://localhost:3000] [--shots]
 // CRM pages: set LOGIN_EMAIL / LOGIN_PASSWORD env vars to include them.
 const { chromium } = require("playwright");
