@@ -1536,7 +1536,7 @@ export default function FeaturesPage() {
               <div style={{ fontSize: 14, color: sub, marginBottom: 20 }}>
                 Courier connected through delivery API.
               </div>
-              <div style={{ display: "flex", alignItems: "flex-start" }}>
+              <div className="mk-track-row" style={{ display: "flex", alignItems: "flex-start" }}>
                 {["Confirmed", "Shipped", "In transit", "Delivered"].map(
                   (l, i) => (
                     <div
@@ -1545,10 +1545,12 @@ export default function FeaturesPage() {
                         display: "flex",
                         alignItems: "flex-start",
                         flex: i < 3 ? 1 : 0,
+                        minWidth: 0,
                       }}
                     >
-                      <div style={{ textAlign: "center", width: 84 }}>
+                      <div className="mk-track-col" style={{ textAlign: "center", width: 84 }}>
                         <div
+                          className="mk-track-dot"
                           style={{
                             width: 52,
                             height: 52,
@@ -1570,15 +1572,16 @@ export default function FeaturesPage() {
                             <Package size={20} />
                           )}
                         </div>
-                        <div style={{ fontSize: 13.5, fontWeight: 700 }}>
+                        <div className="mk-track-label" style={{ fontSize: 13.5, fontWeight: 700 }}>
                           {l}
                         </div>
                       </div>
                       {i < 3 && (
                         <svg
+                          className="mk-track-connector"
                           height="52"
                           width="100%"
-                          style={{ flex: 1 }}
+                          style={{ flex: 1, minWidth: 10 }}
                           preserveAspectRatio="none"
                           viewBox="0 0 100 52"
                           aria-hidden
@@ -1774,7 +1777,15 @@ export default function FeaturesPage() {
           .mk-order-2 { order: 2; }
           .mk-h1 { font-size: 40px !important; } .mk-h2 { font-size: 34px !important; }
         }
-        @media (max-width: 560px) { .mk-2col-keep { grid-template-columns: 1fr !important; } }
+        @media (max-width: 560px) {
+          .mk-2col-keep { grid-template-columns: 1fr !important; }
+          .mk-track-row { min-width: 0 !important; }
+          .mk-track-col { width: 62px !important; }
+          .mk-track-dot { width: 40px !important; height: 40px !important; }
+          .mk-track-dot svg { width: 17px !important; height: 17px !important; }
+          .mk-track-label { font-size: 11px !important; }
+          .mk-track-connector { min-width: 6px !important; }
+        }
         @media (prefers-reduced-motion: reduce) { .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c { animation: none !important; } }
       `,
         }}

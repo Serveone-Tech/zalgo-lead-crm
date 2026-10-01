@@ -1703,6 +1703,7 @@ export default function PricingPage() {
                       </div>
                     </div>
                     <div
+                      className="mk-workflow-grid"
                       style={{
                         display: "grid",
                         gridTemplateColumns: "repeat(4,1fr)",
@@ -1711,6 +1712,7 @@ export default function PricingPage() {
                       }}
                     >
                       <svg
+                        className="mk-workflow-svg"
                         viewBox="0 0 800 70"
                         width="100%"
                         style={{
@@ -1765,6 +1767,7 @@ export default function PricingPage() {
                       ].map((s) => (
                         <div
                           key={s.t}
+                          className="mk-workflow-step"
                           style={{
                             textAlign: "center",
                             position: "relative",
@@ -1772,6 +1775,7 @@ export default function PricingPage() {
                           }}
                         >
                           <div
+                            className="mk-workflow-icon"
                             style={{
                               position: "relative",
                               display: "inline-block",
@@ -1802,10 +1806,11 @@ export default function PricingPage() {
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: 15, fontWeight: 700 }}>
+                          <div className="mk-workflow-title" style={{ fontSize: 15, fontWeight: 700 }}>
                             {s.t}
                           </div>
                           <div
+                            className="mk-workflow-desc"
                             style={{
                               fontSize: 11.5,
                               color: sub,
@@ -1818,6 +1823,7 @@ export default function PricingPage() {
                       ))}
                     </div>
                     <div
+                      className="mk-workflow-mock"
                       style={{
                         display: "grid",
                         gridTemplateColumns: "120px 1fr",
@@ -1867,10 +1873,12 @@ export default function PricingPage() {
                         ].map(([dot, pill], i) => (
                           <div
                             key={i}
+                            className="mk-workflow-mock-row"
                             style={{
                               display: "flex",
                               alignItems: "center",
                               gap: 10,
+                              minWidth: 0,
                             }}
                           >
                             <span
@@ -1879,30 +1887,36 @@ export default function PricingPage() {
                                 height: 14,
                                 borderRadius: 7,
                                 background: dot,
+                                flexShrink: 0,
                               }}
                             />
                             <span
                               style={{
                                 flex: 1,
+                                minWidth: 0,
                                 height: 7,
                                 borderRadius: 4,
                                 background: "#e6ecf7",
                               }}
                             />
                             <span
+                              className="mk-workflow-mock-bar"
                               style={{
                                 width: 60,
                                 height: 7,
                                 borderRadius: 4,
                                 background: "#e6ecf7",
+                                flexShrink: 0,
                               }}
                             />
                             <span
+                              className="mk-workflow-mock-pill"
                               style={{
                                 width: 44,
                                 height: 12,
                                 borderRadius: 6,
                                 background: pill,
+                                flexShrink: 0,
                               }}
                             />
                           </div>
@@ -2023,6 +2037,18 @@ export default function PricingPage() {
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
           .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 34px !important; }
+        }
+        @media (max-width: 560px) {
+          .mk-workflow-grid { grid-template-columns: repeat(2,1fr) !important; row-gap: 20px !important; }
+          .mk-workflow-svg { display: none !important; }
+          .mk-workflow-step { min-width: 0; }
+          .mk-workflow-icon > span { width: 44px !important; height: 44px !important; }
+          .mk-workflow-icon svg { width: 18px !important; height: 18px !important; }
+          .mk-workflow-title { font-size: 12.5px !important; }
+          .mk-workflow-desc { font-size: 10px !important; }
+          .mk-workflow-mock { grid-template-columns: 70px 1fr !important; }
+          .mk-workflow-mock-bar { width: 36px !important; }
+          .mk-workflow-mock-pill { width: 30px !important; }
         }
       `,
         }}

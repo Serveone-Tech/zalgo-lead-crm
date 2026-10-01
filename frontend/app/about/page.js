@@ -1521,7 +1521,7 @@ export default function AboutPage() {
               <Reveal
                 key={i}
                 delay={i * 0.06}
-                className="hover-lift"
+                className="hover-lift mk-journey-card"
                 style={{
                   ...card,
                   background: "#f8faff",
@@ -1538,6 +1538,7 @@ export default function AboutPage() {
                   />
                 )}
                 <div
+                  className="mk-journey-visual"
                   style={{
                     width: 260,
                     display: "flex",
@@ -1547,7 +1548,7 @@ export default function AboutPage() {
                 >
                   {c.v}
                 </div>
-                <div>
+                <div className="mk-journey-text">
                   <div
                     style={{
                       fontSize: 30,
@@ -1623,7 +1624,7 @@ export default function AboutPage() {
                 <Reveal
                   key={ind.title}
                   delay={(i % 3) * 0.06}
-                  className="hover-lift"
+                  className="hover-lift mk-industries-row"
                   style={{
                     ...card,
                     padding: "26px 24px",
@@ -1633,7 +1634,7 @@ export default function AboutPage() {
                     position: "relative",
                   }}
                 >
-                  <div style={{ position: "relative", flexShrink: 0 }}>
+                  <div className="mk-industries-icon" style={{ position: "relative", flexShrink: 0 }}>
                     <Tile
                       size={110}
                       radius={55}
@@ -1650,7 +1651,7 @@ export default function AboutPage() {
                       </span>
                     )}
                   </div>
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div
                       style={{
                         fontSize: 23,
@@ -2223,6 +2224,12 @@ export default function AboutPage() {
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
           .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 36px !important; }
+        }
+        @media (max-width: 560px) {
+          .mk-journey-card { flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 18px !important; }
+          .mk-journey-visual { width: auto !important; max-width: 100% !important; }
+          .mk-industries-row { flex-direction: column !important; text-align: center !important; gap: 12px !important; }
+          .mk-industries-icon { margin: 0 auto; }
         }
       `}</style>
     </div>

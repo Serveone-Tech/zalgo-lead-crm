@@ -493,6 +493,7 @@ export default function AutomationSuitePage() {
                 <Toggle />
               </div>
               <div
+                className="mk-trigger-flow"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 64px 1fr",
@@ -546,7 +547,7 @@ export default function AutomationSuitePage() {
                     New lead · 10:30 AM
                   </span>
                 </div>
-                <svg viewBox="0 0 64 220" width="64" height="220" aria-hidden>
+                <svg className="mk-trigger-svg" viewBox="0 0 64 220" width="64" height="220" aria-hidden>
                   <defs>
                     <marker
                       id="asArrow"
@@ -1082,6 +1083,7 @@ export default function AutomationSuitePage() {
               <Toggle />
             </div>
             <div
+              className="mk-trigger-flow"
               style={{
                 display: "grid",
                 gridTemplateColumns: "1fr 80px 1fr",
@@ -1103,7 +1105,7 @@ export default function AutomationSuitePage() {
                   Hi {"{name}"}, we're running a festival offer just for you…
                 </div>
               </div>
-              <svg viewBox="0 0 80 150" width="80" height="150" aria-hidden>
+              <svg className="mk-trigger-svg" viewBox="0 0 80 150" width="80" height="150" aria-hidden>
                 {[20, 75, 130].map((y, i) => (
                   <path
                     key={y}
@@ -1483,6 +1485,10 @@ export default function AutomationSuitePage() {
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
           .mk-h1 { font-size: 40px !important; } .mk-h2 { font-size: 34px !important; }
+        }
+        @media (max-width: 560px) {
+          .mk-trigger-flow { grid-template-columns: 1fr !important; }
+          .mk-trigger-svg { display: none !important; }
         }
         @media (prefers-reduced-motion: reduce) { .flow-dots, .float-mockup, .float-card-c { animation: none !important; } }
       `,
