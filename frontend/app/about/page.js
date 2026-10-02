@@ -932,6 +932,7 @@ export default function AboutPage() {
                   }}
                 >
                   <div
+                    className="mk-story-visual"
                     style={{
                       width: 200,
                       display: "flex",
@@ -1540,7 +1541,7 @@ export default function AboutPage() {
                 <div
                   className="mk-journey-visual"
                   style={{
-                    width: 260,
+                    width: 300,
                     display: "flex",
                     justifyContent: "center",
                     flexShrink: 0,
@@ -1938,6 +1939,7 @@ export default function AboutPage() {
       <section style={{ position: "relative", overflow: "hidden" }}>
         <div className="mk-wrap" style={{ padding: "0 48px 40px" }}>
           <div
+            className="mk-trial-card"
             style={{
               background: "#f0f5ff",
               borderRadius: 28,
@@ -2051,6 +2053,7 @@ export default function AboutPage() {
                 <div
                   style={{
                     display: "flex",
+                    flexWrap: "wrap",
                     justifyContent: "center",
                     gap: 18,
                     marginBottom: 20,
@@ -2121,7 +2124,7 @@ export default function AboutPage() {
                       >
                         {r.i}
                         <span
-                          style={{ flex: 1, fontSize: 17, fontWeight: 700 }}
+                          style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 700 }}
                         >
                           {r.l}
                         </span>
@@ -2177,7 +2180,7 @@ export default function AboutPage() {
             <Tile size={64} radius={32}>
               <Mail size={28} />
             </Tile>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
                   fontSize: 24,
@@ -2191,7 +2194,10 @@ export default function AboutPage() {
                 Tell us about your team and workflow.
               </div>
             </div>
-            <a href={`mailto:${EMAIL}`} style={cta}>
+            <a
+              href={`mailto:${EMAIL}`}
+              style={{ ...cta, whiteSpace: "normal", overflowWrap: "anywhere" }}
+            >
               {EMAIL} <ArrowRight size={18} />
             </a>
           </div>
@@ -2224,10 +2230,13 @@ export default function AboutPage() {
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
           .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 36px !important; }
+          .mk-trial-card { padding: 32px !important; }
         }
         @media (max-width: 560px) {
           .mk-journey-card { flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 18px !important; }
-          .mk-journey-visual { width: auto !important; max-width: 100% !important; }
+          .mk-journey-visual { display: none !important; }
+          .mk-story-visual { display: none !important; }
+          .mk-trial-card { padding: 22px !important; }
           .mk-industries-row { flex-direction: column !important; text-align: center !important; gap: 12px !important; }
           .mk-industries-icon { margin: 0 auto; }
         }

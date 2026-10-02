@@ -40,10 +40,32 @@ const CRM_PAGES = [
   "/unverified-leads", "/ignored-followups",
 ];
 
-// Runs inside the page. Returns only elements whose EFFECTIVE visible rect
-// (after intersecting with every ancestor's overflow-clip box) still pokes
-// past the viewport — i.e. a real, visible bug, not a decorative element
-// that's already fully hidden by a parent's `overflow: hidden`.
+// Runs inside the page. Returns offenders in TWO categories:
+//
+// 1. "viewport" — an element whose EFFECTIVE visible rect (after
+//    intersecting with every ancestor's overflow-clip box) pokes past the
+//    actual browser viewport. The original check.
+//
+// 2. "container" — a flex/grid child that pokes past its OWN immediate
+//    parent's box, even though the whole page still fits the viewport.
+//    This is the blind spot that let a real bug through on 2026-10-01: a
+//    4-column flex row whose fixed-width children didn't shrink enough to
+//    fit their *card*, so the last column overflowed the card by 54px —
+//    but since the card itself was narrower than the viewport, nothing
+//    ever touched the viewport edge and the viewport-only check reported
+//    zero offenders. A card/row visually losing content at its own border
+//    is just as real a bug as the page scrolling horizontally; it just
+//    doesn't happen to reach the window edge.
+//
+// NOT caught by either check, and not catchable by any bounding-box
+// metric: a decorative element (e.g. a connector SVG with arrowheads
+// hand-drawn for a specific layout) that renders in a geometrically valid,
+// non-overflowing box but points at the wrong thing after a responsive
+// layout change moved its target elsewhere. That class of bug requires an
+// actual look at a screenshot, not a smarter metric — see Bug 1 in the
+// 2026-10-01 fix for a worked example. Re-screenshot any section that gets
+// a new mobile breakpoint rule and eyeball it once; the automated check
+// stays useful for everything else.
 function findOffenders() {
   const vw = window.innerWidth;
 
@@ -76,6 +98,7 @@ function findOffenders() {
     if (!r) continue; // fully clipped away by an ancestor — invisible, not a real bug
     if (r.right > vw + 1 || r.left < -1) {
       offenders.push({
+        kind: "viewport",
         tag: el.tagName,
         cls: typeof el.className === "string" ? el.className.slice(0, 80) : "",
         left: Math.round(r.left),
@@ -85,12 +108,46 @@ function findOffenders() {
       });
     }
   }
+
+  // Category 2: flex/grid children that overflow their own container.
+  const containers = document.querySelectorAll("body *");
+  for (const el of containers) {
+    const cs = getComputedStyle(el);
+    if (cs.display !== "flex" && cs.display !== "grid" && cs.display !== "inline-flex" && cs.display !== "inline-grid") continue;
+    if (cs.overflowX === "auto" || cs.overflowX === "scroll") continue; // intentional scroll container
+    const parentRect = el.getBoundingClientRect();
+    if (parentRect.width === 0) continue;
+    let minLeft = Infinity;
+    let maxRight = -Infinity;
+    for (const child of el.children) {
+      const ccs = getComputedStyle(child);
+      if (ccs.position === "absolute" || ccs.position === "fixed") continue; // intentionally taken out of flow (badges, Spark, etc.)
+      const cr = child.getBoundingClientRect();
+      if (cr.width === 0 && cr.height === 0) continue;
+      minLeft = Math.min(minLeft, cr.left);
+      maxRight = Math.max(maxRight, cr.right);
+    }
+    if (minLeft === Infinity) continue;
+    const overshoot = Math.round(Math.max(maxRight - parentRect.right, parentRect.left - minLeft));
+    if (overshoot > 3) {
+      offenders.push({
+        kind: "container",
+        tag: el.tagName,
+        cls: typeof el.className === "string" ? el.className.slice(0, 80) : "",
+        left: Math.round(parentRect.left),
+        right: Math.round(parentRect.right),
+        width: Math.round(parentRect.width),
+        overshoot,
+      });
+    }
+  }
+
   offenders.sort((a, b) => b.overshoot - a.overshoot);
   return {
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,
     offenderCount: offenders.length,
-    topOffenders: offenders.slice(0, 6),
+    topOffenders: offenders.slice(0, 10),
   };
 }
 
@@ -193,7 +250,7 @@ async function login(browser) {
       console.log(`${tag}   ${r.url}  @${r.width}px  scrollWidth=${r.metrics.scrollWidth} clientWidth=${r.metrics.clientWidth} offenders=${r.metrics.offenderCount || 0}${r.shotPath ? "  [screenshot: " + r.shotPath + "]" : ""}`);
       if (r.metrics.topOffenders && r.metrics.topOffenders.length) {
         for (const o of r.metrics.topOffenders) {
-          console.log(`         +${o.overshoot}px  <${o.tag.toLowerCase()} class="${o.cls}">  left=${o.left} right=${o.right} width=${o.width}`);
+          console.log(`         [${o.kind}] +${o.overshoot}px  <${o.tag.toLowerCase()} class="${o.cls}">  left=${o.left} right=${o.right} width=${o.width}`);
         }
       }
     }

@@ -1169,7 +1169,7 @@ export default function AutomationSuitePage() {
                 ))}
               </div>
             </div>
-            <div style={{ display: "flex", gap: 12, marginTop: 18 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 18 }}>
               {[
                 ["128", "recipients"],
                 ["126", "delivered"],

@@ -307,7 +307,7 @@ const AUDIENCES = [
       "Automated nudges on stale leads",
     ],
     visual: (
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
         {[
           ["New", mintDeep, blue],
           ["Follow-up", orangeSoft, "#b86a00"],

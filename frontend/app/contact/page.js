@@ -355,9 +355,16 @@ export default function ContactPage() {
                 <Tile size={64} radius={14} bg={blue} color="#fff">
                   <Mail size={30} />
                 </Tile>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 20, fontWeight: 700 }}>Email us</div>
-                  <div style={{ fontSize: 19, fontWeight: 700, color: blue }}>
+                  <div
+                    style={{
+                      fontSize: 19,
+                      fontWeight: 700,
+                      color: blue,
+                      overflowWrap: "anywhere",
+                    }}
+                  >
                     {EMAIL}
                   </div>
                 </div>
@@ -390,11 +397,11 @@ export default function ContactPage() {
                     <Phone size={20} />
                   </Tile>
                 </span>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 20, fontWeight: 700 }}>
                     Call or WhatsApp
                   </div>
-                  <div style={{ fontSize: 19, fontWeight: 700, color: blue }}>
+                  <div style={{ fontSize: 19, fontWeight: 700, color: blue, overflowWrap: "anywhere" }}>
                     {PHONE_DISPLAY}
                   </div>
                 </div>
@@ -750,7 +757,7 @@ export default function ContactPage() {
                   <Tile size={64} radius={32} bg={r.bg || mintDeep}>
                     {r.icon}
                   </Tile>
-                  <div>
+                  <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 20, fontWeight: 700 }}>{r.t}</div>
                     {r.href ? (
                       <a
@@ -768,12 +775,13 @@ export default function ContactPage() {
                           fontWeight: 700,
                           color: blue,
                           textDecoration: "none",
+                          overflowWrap: "anywhere",
                         }}
                       >
                         {r.v}
                       </a>
                     ) : (
-                      <div style={{ fontSize: 18, color: sub }}>{r.v}</div>
+                      <div style={{ fontSize: 18, color: sub, overflowWrap: "anywhere" }}>{r.v}</div>
                     )}
                   </div>
                 </div>
@@ -803,11 +811,11 @@ export default function ContactPage() {
                     <Phone size={20} />
                   </Tile>
                 </span>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 20, fontWeight: 700 }}>
                     Call or WhatsApp
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: blue }}>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: blue, overflowWrap: "anywhere" }}>
                     {PHONE_DISPLAY}
                   </div>
                 </div>
@@ -830,6 +838,7 @@ export default function ContactPage() {
                   src={MAP_EMBED}
                   style={{
                     flex: 1,
+                    minWidth: 0,
                     border: 0,
                     borderRadius: 16,
                     minHeight: 420,
@@ -1012,7 +1021,7 @@ export default function ContactPage() {
               <Tile size={84} radius={42} bg="#fff">
                 <MessageCircle size={40} />
               </Tile>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 24, fontWeight: 800 }}>
                   Still have a question?
                 </div>
@@ -1026,6 +1035,8 @@ export default function ContactPage() {
                     fontWeight: 700,
                     fontSize: 18,
                     textDecoration: "none",
+                    overflowWrap: "anywhere",
+                    display: "inline-block",
                   }}
                 >
                   {EMAIL}
@@ -1173,6 +1184,7 @@ export default function ContactPage() {
 
       {/* ═══════════ 4. CTA BAR ═══════════ */}
       <section
+        className="mk-ctabar-section"
         style={{
           position: "relative",
           overflow: "hidden",
@@ -1237,6 +1249,7 @@ export default function ContactPage() {
           </div>
           <a
             href="#top"
+            className="mk-ctabar-btn"
             onClick={(e) => {
               e.preventDefault();
               window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1268,8 +1281,12 @@ export default function ContactPage() {
           .mk-wrap { padding-left: 24px !important; padding-right: 24px !important; }
           .mk-2col { grid-template-columns: 1fr !important; gap: 32px !important; }
           .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 36px !important; }
+          .mk-ctabar-section { padding-left: 24px !important; padding-right: 24px !important; }
         }
-        @media (max-width: 560px) { .mk-2col-keep { grid-template-columns: 1fr !important; } }
+        @media (max-width: 560px) {
+          .mk-2col-keep { grid-template-columns: 1fr !important; }
+          .mk-ctabar-btn { padding: 14px 22px !important; font-size: 15px !important; white-space: normal !important; text-align: center !important; }
+        }
       `,
         }}
       />

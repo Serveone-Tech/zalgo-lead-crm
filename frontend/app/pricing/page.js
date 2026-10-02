@@ -1268,7 +1268,7 @@ export default function PricingPage() {
                 <Tile size={110} radius={22} bg={c.bg}>
                   {c.icon}
                 </Tile>
-                <div>
+                <div style={{ minWidth: 0 }}>
                   <div
                     style={{ fontSize: 28, fontWeight: 700, marginBottom: 8 }}
                   >
@@ -1494,11 +1494,11 @@ export default function PricingPage() {
               flexWrap: "wrap",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 22 }}>
               <Tile size={72} radius={16} bg="#fff" color={blue}>
                 <Rocket size={34} />
               </Tile>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 24, fontWeight: 700 }}>
                   Ready to explore LeadLo with your team?
                 </div>
@@ -1507,7 +1507,7 @@ export default function PricingPage() {
                 </div>
               </div>
             </div>
-            <button onClick={go} style={cta}>
+            <button className="mk-ctabar-btn" onClick={go} style={cta}>
               Start Your 15-Day Free Trial <ArrowRight size={18} />
             </button>
           </div>
@@ -1518,6 +1518,7 @@ export default function PricingPage() {
       <section style={{ position: "relative", overflow: "hidden" }}>
         <div className="mk-wrap" style={{ padding: "0 48px 48px" }}>
           <div
+            className="mk-trial-card"
             style={{
               background: "#f0f5ff",
               borderRadius: 28,
@@ -1970,7 +1971,7 @@ export default function PricingPage() {
       </section>
 
       {/* ═══════════ 7. FIND THE RIGHT FIT ═══════════ */}
-      <section style={{ background: "#f8faff", padding: "40px 48px" }}>
+      <section className="mk-ctabar-section" style={{ background: "#f8faff", padding: "40px 48px" }}>
         <div
           className="mk-wrap"
           style={{
@@ -1988,8 +1989,8 @@ export default function PricingPage() {
           <Tile size={90} radius={45} bg={mintDeep}>
             <Mail size={38} />
           </Tile>
-          <span style={{ width: 1, height: 70, background: "#c9d8ff" }} />
-          <div style={{ flex: 1 }}>
+          <span className="mk-fit-divider" style={{ width: 1, height: 70, background: "#c9d8ff" }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div
               style={{
                 fontSize: 32,
@@ -2005,6 +2006,7 @@ export default function PricingPage() {
           </div>
           <a
             href="/contact"
+            className="mk-ctabar-btn"
             style={{ ...cta, padding: "20px 34px", fontSize: 19 }}
           >
             Talk to Our Team <ArrowRight size={20} />
@@ -2037,6 +2039,9 @@ export default function PricingPage() {
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
           .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 34px !important; }
+          .mk-trial-card { padding: 32px !important; }
+          .mk-ctabar-section { padding-left: 24px !important; padding-right: 24px !important; }
+          .mk-fit-divider { display: none !important; }
         }
         @media (max-width: 560px) {
           .mk-workflow-grid { grid-template-columns: repeat(2,1fr) !important; row-gap: 20px !important; }
@@ -2046,9 +2051,9 @@ export default function PricingPage() {
           .mk-workflow-icon svg { width: 18px !important; height: 18px !important; }
           .mk-workflow-title { font-size: 12.5px !important; }
           .mk-workflow-desc { font-size: 10px !important; }
-          .mk-workflow-mock { grid-template-columns: 70px 1fr !important; }
-          .mk-workflow-mock-bar { width: 36px !important; }
-          .mk-workflow-mock-pill { width: 30px !important; }
+          .mk-workflow-mock { display: none !important; }
+          .mk-trial-card { padding: 22px !important; }
+          .mk-ctabar-btn { padding: 14px 22px !important; font-size: 15px !important; white-space: normal !important; text-align: center !important; }
         }
       `,
         }}

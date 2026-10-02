@@ -912,7 +912,7 @@ export default function FeaturesPage() {
                   <span style={{ fontWeight: 700 }}>Anjali Singh</span>
                 </div>
               </div>
-              <svg viewBox="0 0 60 200" width="60" height="200" aria-hidden>
+              <svg className="mk-ft-connector" viewBox="0 0 60 200" width="60" height="200" aria-hidden>
                 <path
                   className="flow-dots"
                   d="M0 100 H 20 Q 30 100 30 90 V 40 H 58 M30 100 Q 30 110 30 120 V 160 H 58"
@@ -1014,6 +1014,7 @@ export default function FeaturesPage() {
             <div
               style={{
                 display: "flex",
+                flexWrap: "wrap",
                 justifyContent: "center",
                 gap: 10,
                 marginTop: 20,
@@ -1541,6 +1542,7 @@ export default function FeaturesPage() {
                   (l, i) => (
                     <div
                       key={l}
+                      className="mk-track-item"
                       style={{
                         display: "flex",
                         alignItems: "flex-start",
@@ -1776,15 +1778,17 @@ export default function FeaturesPage() {
           .mk-hero-visual { display: none; }
           .mk-order-2 { order: 2; }
           .mk-h1 { font-size: 40px !important; } .mk-h2 { font-size: 34px !important; }
+          .mk-ft-connector { display: none !important; }
         }
         @media (max-width: 560px) {
           .mk-2col-keep { grid-template-columns: 1fr !important; }
-          .mk-track-row { min-width: 0 !important; }
-          .mk-track-col { width: 62px !important; }
-          .mk-track-dot { width: 40px !important; height: 40px !important; }
-          .mk-track-dot svg { width: 17px !important; height: 17px !important; }
-          .mk-track-label { font-size: 11px !important; }
-          .mk-track-connector { min-width: 6px !important; }
+          .mk-track-row { min-width: 0 !important; justify-content: space-between !important; }
+          .mk-track-item { flex: 0 0 auto !important; }
+          .mk-track-col { width: 50px !important; }
+          .mk-track-dot { width: 38px !important; height: 38px !important; }
+          .mk-track-dot svg { width: 16px !important; height: 16px !important; }
+          .mk-track-label { font-size: 9.5px !important; }
+          .mk-track-connector { display: none !important; }
         }
         @media (prefers-reduced-motion: reduce) { .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c { animation: none !important; } }
       `,

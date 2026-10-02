@@ -784,14 +784,15 @@ export default function HomePage() {
                 display: "flex",
                 alignItems: "center",
                 gap: 22,
+                maxWidth: "100%",
               }}
             >
-              <Inbox size={48} strokeWidth={1.8} />
-              <div>
-                <div style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.1 }}>
+              <Inbox className="mk-pulse-icon" size={48} strokeWidth={1.8} />
+              <div style={{ minWidth: 0 }}>
+                <div className="mk-pulse-title" style={{ fontSize: 40, fontWeight: 800, lineHeight: 1.1 }}>
                   LeadLo CRM
                 </div>
-                <div style={{ fontSize: 17, opacity: 0.9, marginTop: 6 }}>
+                <div className="mk-pulse-sub" style={{ fontSize: 17, opacity: 0.9, marginTop: 6 }}>
                   One <b>inbox</b>. Clear ownership. Timely follow-ups.
                 </div>
               </div>
@@ -1245,15 +1246,15 @@ export default function HomePage() {
                         >
                           {a.chatInitials}
                         </span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {a.chatName}
                           </div>
-                          <div style={{ fontSize: 12, color: muted }}>
+                          <div style={{ fontSize: 12, color: muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {a.chatMsg}
                           </div>
                         </div>
-                        <div style={{ fontSize: 11, color: muted }}>
+                        <div style={{ fontSize: 11, color: muted, flexShrink: 0 }}>
                           {a.time}
                         </div>
                       </div>
@@ -2094,6 +2095,7 @@ export default function HomePage() {
                     (l, i) => (
                       <div
                         key={l}
+                        className="mk-track-item"
                         style={{
                           display: "flex",
                           alignItems: "flex-start",
@@ -2142,6 +2144,7 @@ export default function HomePage() {
                         </div>
                         {i < 3 && (
                           <svg
+                            className="mk-track-connector"
                             height="60"
                             width="100%"
                             style={{ flex: 1, marginTop: 0 }}
@@ -2626,7 +2629,7 @@ export default function HomePage() {
               >
                 <MessageCircle size={30} />
               </span>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>
                   Still have a question?
                 </div>
@@ -2654,7 +2657,8 @@ export default function HomePage() {
                     color: sub,
                   }}
                 >
-                  <Mail size={18} color={teal} /> leadlozalgo@gmail.com
+                  <Mail size={18} color={teal} />
+                  <span style={{ overflowWrap: "anywhere" }}>leadlozalgo@gmail.com</span>
                 </div>
               </div>
             </div>
@@ -2723,6 +2727,7 @@ export default function HomePage() {
             </div>
           </div>
           <button
+            className="mk-final-cta-btn"
             onClick={() =>
               router.push("https://lead-management.zalgostore.com/register")
             }
@@ -2802,6 +2807,11 @@ export default function HomePage() {
           .mk-h1 { font-size: 42px !important; }
           .mk-h2 { font-size: 34px !important; }
           .mk-bulk { justify-content: center !important; }
+          .crm-pulse { padding: 20px 26px !important; }
+          .mk-pulse-title { font-size: 28px !important; }
+          .mk-pulse-sub { font-size: 14px !important; }
+          .mk-pulse-icon { width: 36px !important; height: 36px !important; }
+          .mk-final-cta-btn { padding: 14px 22px !important; font-size: 16px !important; }
         }
         @media (max-width: 560px) {
           .mk-4col { grid-template-columns: repeat(2,1fr) !important; }
@@ -2818,7 +2828,8 @@ export default function HomePage() {
              onto many lines and the card to balloon in height. */
           .mk-icon-card { padding: 18px 14px !important; }
           .mk-icon-card-icon { width: 44px !important; height: 44px !important; margin-bottom: 10px !important; }
-          .mk-icon-card-icon svg { width: 20px !important; height: 20px !important; }
+          .mk-icon-card-icon svg, .mk-icon-card-icon > span { width: 20px !important; height: 20px !important; }
+          .mk-icon-card-icon > span svg { width: 12px !important; height: 12px !important; }
           .mk-icon-card-icon-lg { width: 56px !important; height: 56px !important; }
           .mk-icon-card-title { font-size: 15px !important; margin-bottom: 4px !important; }
           .mk-icon-card-desc { font-size: 12px !important; min-height: 0 !important; margin-bottom: 10px !important; }
@@ -2832,10 +2843,13 @@ export default function HomePage() {
 
           /* Track the delivery status row — 4 fixed-width columns were
              just barely wider than the smallest phone viewports. */
-          .mk-track-col { width: 62px !important; }
-          .mk-track-dot { width: 40px !important; height: 40px !important; }
-          .mk-track-dot svg { width: 17px !important; height: 17px !important; }
-          .mk-track-label { font-size: 11px !important; }
+          .mk-track-row { justify-content: space-between !important; }
+          .mk-track-item { flex: 0 0 auto !important; }
+          .mk-track-col { width: 50px !important; }
+          .mk-track-dot { width: 38px !important; height: 38px !important; }
+          .mk-track-dot svg { width: 16px !important; height: 16px !important; }
+          .mk-track-label { font-size: 9.5px !important; }
+          .mk-track-connector { display: none !important; }
         }
         @media (prefers-reduced-motion: reduce) {
           .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c, .crm-pulse { animation: none !important; }
