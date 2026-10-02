@@ -1770,14 +1770,13 @@ export default function FeaturesPage() {
         .mk-page a[href="${REGISTER_URL}"], .mk-page a[href="/contact"], .mk-page a[href="/automation-suite"] { transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
         .mk-page a[href="${REGISTER_URL}"]:hover, .mk-page a[href="/automation-suite"]:hover { transform: translateY(-2px); filter: brightness(1.04); }
         html { scroll-behavior: smooth; }
-        @media (max-width: 1100px) { .mk-h1 { font-size: 50px !important; } .mk-h2 { font-size: 40px !important; } .mk-4col { grid-template-columns: repeat(2,1fr) !important; } .mk-strip-item { border-left: none !important; padding: 8px 18px !important; } }
+        @media (max-width: 1100px) { .mk-4col { grid-template-columns: repeat(2,1fr) !important; } .mk-strip-item { border-left: none !important; padding: 8px 18px !important; } }
         @media (max-width: 860px) {
           .mk-wrap { padding-left: 24px !important; padding-right: 24px !important; }
           .mk-2col { grid-template-columns: 1fr !important; gap: 32px !important; }
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
           .mk-order-2 { order: 2; }
-          .mk-h1 { font-size: 40px !important; } .mk-h2 { font-size: 34px !important; }
           .mk-ft-connector { display: none !important; }
         }
         @media (max-width: 560px) {

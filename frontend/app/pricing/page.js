@@ -2033,12 +2033,10 @@ export default function PricingPage() {
         .mk-page a[href="/contact"]:hover, .mk-page button:hover { transform: translateY(-2px); filter: brightness(1.04); }
         .hover-lift:hover { border-color: ${blue} !important; box-shadow: 0 22px 44px rgba(26,92,255,0.12); }
         html { scroll-behavior: smooth; }
-        @media (max-width: 1100px) { .mk-h1 { font-size: 52px !important; } .mk-h2 { font-size: 40px !important; } }
         @media (max-width: 860px) {
           .mk-2col { grid-template-columns: 1fr !important; }
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
-          .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 34px !important; }
           .mk-trial-card { padding: 32px !important; }
           .mk-ctabar-section { padding-left: 24px !important; padding-right: 24px !important; }
           .mk-fit-divider { display: none !important; }

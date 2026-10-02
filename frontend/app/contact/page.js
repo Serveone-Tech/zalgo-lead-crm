@@ -1276,11 +1276,9 @@ export default function ContactPage() {
           linear-gradient(rgba(26,92,255,0.08) 2px, transparent 2px), linear-gradient(90deg, rgba(26,92,255,0.08) 2px, transparent 2px);
           background-size: 84px 84px; transform: rotate(-12deg) scale(1.4); }
         html { scroll-behavior: smooth; }
-        @media (max-width: 1100px) { .mk-h1 { font-size: 52px !important; } .mk-h2 { font-size: 44px !important; } }
         @media (max-width: 860px) {
           .mk-wrap { padding-left: 24px !important; padding-right: 24px !important; }
           .mk-2col { grid-template-columns: 1fr !important; gap: 32px !important; }
-          .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 36px !important; }
           .mk-ctabar-section { padding-left: 24px !important; padding-right: 24px !important; }
         }
         @media (max-width: 560px) {

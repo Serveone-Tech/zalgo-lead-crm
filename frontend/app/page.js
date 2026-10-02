@@ -2791,7 +2791,7 @@ export default function HomePage() {
 
         /* Responsive */
         @media (max-width: 1100px) {
-          .mk-h1 { font-size: 52px !important; }
+          .mk-h1 { font-size: 50px !important; }
           .mk-h2 { font-size: 40px !important; }
           .mk-4col { grid-template-columns: repeat(2,1fr) !important; }
           .mk-flow, .mk-steps-line { display: none !important; }
@@ -2804,7 +2804,7 @@ export default function HomePage() {
           .mk-hero-visual { display: none; }
           .mk-bulk-visual { display: none !important; }
           .mk-leads-flow { display: none !important; }
-          .mk-h1 { font-size: 42px !important; }
+          .mk-h1 { font-size: 40px !important; }
           .mk-h2 { font-size: 34px !important; }
           .mk-bulk { justify-content: center !important; }
           .crm-pulse { padding: 20px 26px !important; }
@@ -2818,6 +2818,7 @@ export default function HomePage() {
           .mk-3col { grid-template-columns: repeat(2,1fr) !important; gap: 14px !important; }
           .mk-2col-keep { grid-template-columns: 1fr !important; }
           .mk-h1 { font-size: 36px !important; }
+          .mk-h2 { font-size: 30px !important; }
           .mk-industry-card { flex-direction: column !important; text-align: center !important; gap: 10px !important; padding: 18px 14px !important; }
           .mk-industry-icon { width: 64px !important; height: 64px !important; }
           .mk-industry-icon svg { width: 26px !important; height: 26px !important; }

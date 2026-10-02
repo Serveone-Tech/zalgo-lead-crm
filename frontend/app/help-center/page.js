@@ -1622,10 +1622,9 @@ export default function HelpCenterPage() {
         .hc-result:hover { border-color: ${blue} !important; transform: translateY(-2px); box-shadow: 0 14px 30px rgba(26,92,255,0.10); }
         .hover-lift:hover { border-color: ${blue} !important; box-shadow: 0 22px 44px rgba(26,92,255,0.12); }
         html { scroll-behavior: smooth; }
-        @media (max-width: 1100px) { .mk-h1 { font-size: 46px !important; } .hc-layout { grid-template-columns: 260px 1fr !important; gap: 32px !important; } }
+        @media (max-width: 1100px) { .hc-layout { grid-template-columns: 260px 1fr !important; gap: 32px !important; } }
         @media (max-width: 860px) {
           .mk-wrap { padding-left: 24px !important; padding-right: 24px !important; }
-          .mk-h1 { font-size: 38px !important; } .mk-h2 { font-size: 30px !important; }
           .hc-card-grid { grid-template-columns: 1fr !important; }
           .mk-2col { grid-template-columns: 1fr !important; }
           .hc-layout { grid-template-columns: 1fr !important; }

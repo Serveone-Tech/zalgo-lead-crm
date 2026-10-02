@@ -10,7 +10,15 @@ import { teal } from "../lib/marketing-theme";
 // mk-wrap/mk-2col/mk-3col/mk-4col/mk-h1/mk-h2 as needed.
 export default function MarketingStyles() {
   return (
-    <style>{`
+    <style
+      // dangerouslySetInnerHTML instead of a JSX text child — the apostrophe
+      // in "content's" and the `>` in `.mk-2col > *` get HTML-entity-escaped
+      // differently by the server's SSR serializer than by the client's
+      // hydration text comparison, which React logs as a (harmless, but
+      // noisy) "Text content did not match" warning on every marketing page
+      // that renders this component. Raw HTML sidesteps it entirely.
+      dangerouslySetInnerHTML={{
+        __html: `
       html, body { max-width: 100%; }
       .mk-page { -webkit-font-smoothing: antialiased; max-width: 100vw; }
       .mk-wrap { max-width: 1400px; margin: 0 auto; min-width: 0; }
@@ -53,8 +61,14 @@ export default function MarketingStyles() {
       .mk-page a:focus-visible, .mk-page button:focus-visible { outline: 3px solid ${teal}; outline-offset: 3px; }
 
       /* Responsive */
+      /* Shared type scale — the ONE place every marketing page's h1/h2
+         mobile sizing comes from, so a heading on one page is always the
+         same size as a heading of the same level on any other page at a
+         given width. Per-page style blocks must not redeclare .mk-h1/.mk-h2
+         font-size; if a page needs its own extra ≤560px step it should add
+         a differently-named class instead of overriding these. */
       @media (max-width: 1100px) {
-        .mk-h1 { font-size: 52px !important; }
+        .mk-h1 { font-size: 50px !important; }
         .mk-h2 { font-size: 40px !important; }
         .mk-4col { grid-template-columns: repeat(2,1fr) !important; }
         .mk-flow, .mk-steps-line { display: none !important; }
@@ -65,7 +79,7 @@ export default function MarketingStyles() {
         .mk-2col { grid-template-columns: 1fr !important; gap: 36px !important; }
         .mk-3col { grid-template-columns: 1fr !important; }
         .mk-hero-visual { display: none; }
-        .mk-h1 { font-size: 42px !important; }
+        .mk-h1 { font-size: 40px !important; }
         .mk-h2 { font-size: 34px !important; }
         .mk-bulk { justify-content: center !important; }
       }
@@ -74,11 +88,14 @@ export default function MarketingStyles() {
         .mk-3col { grid-template-columns: repeat(2,1fr) !important; gap: 14px !important; }
         .mk-2col-keep { grid-template-columns: 1fr !important; }
         .mk-h1 { font-size: 36px !important; }
+        .mk-h2 { font-size: 30px !important; }
       }
       @media (prefers-reduced-motion: reduce) {
         .flow-dots, .float-mockup, .float-card-a, .float-card-b, .float-card-c, .crm-pulse { animation: none !important; }
         .hover-lift { transition: none; }
       }
-    `}</style>
+    `,
+      }}
+    />
   );
 }

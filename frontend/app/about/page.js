@@ -2223,13 +2223,12 @@ export default function AboutPage() {
         .mk-page a[href^="/register"], .mk-page a[href^="/contact"], .mk-page a[href^="/features"], .mk-page a[href^="http"], .mk-page a[href^="mailto"] { transition: transform .2s ease, box-shadow .2s ease, filter .2s ease; }
         .mk-page a[href^="/register"]:hover, .mk-page a[href^="/features"]:hover { transform: translateY(-2px); filter: brightness(1.04); }
         html { scroll-behavior: smooth; }
-        @media (max-width: 1100px) { .mk-h1 { font-size: 52px !important; } .mk-h2 { font-size: 44px !important; } .mk-strip-item { border-left: none !important; padding: 8px 18px !important; } }
+        @media (max-width: 1100px) { .mk-strip-item { border-left: none !important; padding: 8px 18px !important; } }
         @media (max-width: 860px) {
           .mk-wrap { padding-left: 24px !important; padding-right: 24px !important; }
           .mk-2col { grid-template-columns: 1fr !important; gap: 32px !important; }
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
-          .mk-h1 { font-size: 42px !important; } .mk-h2 { font-size: 36px !important; }
           .mk-trial-card { padding: 32px !important; }
         }
         @media (max-width: 560px) {
