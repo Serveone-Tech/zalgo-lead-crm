@@ -358,10 +358,12 @@ export default function ContactPage() {
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 20, fontWeight: 700 }}>Email us</div>
                   <div
+                    className="mk-contact-value"
                     style={{
                       fontSize: 19,
                       fontWeight: 700,
                       color: blue,
+                      whiteSpace: "nowrap",
                       overflowWrap: "anywhere",
                     }}
                   >
@@ -401,7 +403,7 @@ export default function ContactPage() {
                   <div style={{ fontSize: 20, fontWeight: 700 }}>
                     Call or WhatsApp
                   </div>
-                  <div style={{ fontSize: 19, fontWeight: 700, color: blue, overflowWrap: "anywhere" }}>
+                  <div className="mk-contact-value" style={{ fontSize: 19, fontWeight: 700, color: blue, whiteSpace: "nowrap", overflowWrap: "anywhere" }}>
                     {PHONE_DISPLAY}
                   </div>
                 </div>
@@ -770,11 +772,13 @@ export default function ContactPage() {
                             ? "noopener noreferrer"
                             : undefined
                         }
+                        className={r.href.startsWith("mailto:") ? "mk-contact-value" : undefined}
                         style={{
                           fontSize: 18,
                           fontWeight: 700,
                           color: blue,
                           textDecoration: "none",
+                          whiteSpace: r.href.startsWith("mailto:") ? "nowrap" : "normal",
                           overflowWrap: "anywhere",
                         }}
                       >
@@ -815,7 +819,7 @@ export default function ContactPage() {
                   <div style={{ fontSize: 20, fontWeight: 700 }}>
                     Call or WhatsApp
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: blue, overflowWrap: "anywhere" }}>
+                  <div className="mk-contact-value" style={{ fontSize: 18, fontWeight: 700, color: blue, whiteSpace: "nowrap", overflowWrap: "anywhere" }}>
                     {PHONE_DISPLAY}
                   </div>
                 </div>
@@ -1030,11 +1034,13 @@ export default function ContactPage() {
                 </div>
                 <a
                   href={`mailto:${EMAIL}`}
+                  className="mk-contact-value"
                   style={{
                     color: blue,
                     fontWeight: 700,
                     fontSize: 18,
                     textDecoration: "none",
+                    whiteSpace: "nowrap",
                     overflowWrap: "anywhere",
                     display: "inline-block",
                   }}
@@ -1284,6 +1290,7 @@ export default function ContactPage() {
         @media (max-width: 560px) {
           .mk-2col-keep { grid-template-columns: 1fr !important; }
           .mk-ctabar-btn { padding: 14px 22px !important; font-size: 15px !important; white-space: normal !important; text-align: center !important; }
+          .mk-contact-value { font-size: 13px !important; }
         }
       `,
         }}

@@ -1058,6 +1058,7 @@ export default function AboutPage() {
                 ONE CONNECTED WORKSPACE
               </div>
               <div
+                className="mk-workspace-grid"
                 style={{
                   display: "grid",
                   gridTemplateColumns: "1fr 60px 1.3fr 60px 1fr",
@@ -1066,6 +1067,7 @@ export default function AboutPage() {
                 }}
               >
                 <div
+                  className="mk-workspace-col"
                   style={{ display: "flex", flexDirection: "column", gap: 20 }}
                 >
                   {[
@@ -1099,7 +1101,7 @@ export default function AboutPage() {
                     </div>
                   ))}
                 </div>
-                <svg viewBox="0 0 60 220" width="60" height="220" aria-hidden>
+                <svg className="mk-workspace-connector" viewBox="0 0 60 220" width="60" height="220" aria-hidden>
                   <path
                     className="flow-dots"
                     d="M4 60 H 30 Q 40 60 40 70 V 100 M4 160 H 30 Q 40 160 40 150 V 120 M40 100 V 120 H 58"
@@ -1126,7 +1128,7 @@ export default function AboutPage() {
                     Your team's shared workspace
                   </div>
                 </div>
-                <svg viewBox="0 0 60 220" width="60" height="220" aria-hidden>
+                <svg className="mk-workspace-connector" viewBox="0 0 60 220" width="60" height="220" aria-hidden>
                   <path
                     className="flow-dots"
                     d="M56 60 H 30 Q 20 60 20 70 V 100 M56 160 H 30 Q 20 160 20 150 V 120 M20 100 V 120 H 2"
@@ -1136,6 +1138,7 @@ export default function AboutPage() {
                   <circle cx="56" cy="160" r="5" fill={blue} />
                 </svg>
                 <div
+                  className="mk-workspace-col"
                   style={{ display: "flex", flexDirection: "column", gap: 20 }}
                 >
                   {[
@@ -2230,6 +2233,11 @@ export default function AboutPage() {
           .mk-3col { grid-template-columns: 1fr !important; }
           .mk-hero-visual { display: none; }
           .mk-trial-card { padding: 32px !important; }
+          .mk-workspace-grid { grid-template-columns: 1fr !important; gap: 14px !important; }
+          .mk-workspace-connector { display: none !important; }
+          .mk-workspace-col { flex-direction: row !important; gap: 14px !important; }
+          .mk-workspace-col { gap: 8px !important; }
+          .mk-workspace-col > div { flex: 1; min-width: 0; padding: 14px 8px !important; }
         }
         @media (max-width: 560px) {
           .mk-journey-card { flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 18px !important; }
