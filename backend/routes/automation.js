@@ -154,9 +154,12 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
     if (channel === "whatsapp" && cols.whatsapp_enabled && cols.wa_from) {
       try {
         await subscribeAppToWaba(cols.wa_from);
+        console.log(`✅ Subscribed app to WABA webhook events (manual entry): ${cols.wa_from}`);
       } catch (e) {
-        console.error("WABA webhook subscription failed (manual entry):", e.message);
+        console.error(`❌ WABA webhook subscription failed (manual entry, waba=${cols.wa_from}):`, e.message);
       }
+    } else if (channel === "whatsapp") {
+      console.log(`WhatsApp credentials saved but webhook subscription skipped — enabled=${!!cols.whatsapp_enabled} wa_from=${cols.wa_from ? "present" : "EMPTY"}`);
     }
 
     res.json({ success: true });
