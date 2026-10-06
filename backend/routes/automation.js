@@ -143,6 +143,22 @@ router.put("/credentials", auth, requireSubscription, requirePlanFeature("automa
        ON CONFLICT (user_id) DO UPDATE SET ${keys.map((k, i) => `${k}=$${i + 2}`).join(",")}, updated_at=NOW()`,
       [req.tenantId, ...Object.values(cols)],
     );
+
+    // Manually-entered WhatsApp credentials skip the one thing Embedded
+    // Signup does automatically: telling Meta this app wants this WABA's
+    // webhook events. Without it, messages still send/deliver fine (that's
+    // a direct API call) but nothing ever arrives back in the inbox — the
+    // exact "double tick on WhatsApp, nothing in the CRM" symptom. Safe to
+    // retry on every save: idempotent, and non-fatal if this token/WABA
+    // combination doesn't have permission to subscribe.
+    if (channel === "whatsapp" && cols.whatsapp_enabled && cols.wa_from) {
+      try {
+        await subscribeAppToWaba(cols.wa_from);
+      } catch (e) {
+        console.error("WABA webhook subscription failed (manual entry):", e.message);
+      }
+    }
+
     res.json({ success: true });
   } catch (e) {
     console.error(e);
