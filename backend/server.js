@@ -24,6 +24,7 @@ const deliveryRoutes   = require('./routes/delivery');
 const contactRoutes    = require('./routes/contact');
 const paymentsRoutes   = require('./routes/payments');
 const whatsappTemplatesRoutes = require('./routes/whatsapp-templates');
+const metaAdsRoutes    = require('./routes/meta-ads');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -79,6 +80,7 @@ app.use('/api/delivery',   deliveryRoutes);
 app.use('/api/contact',    contactRoutes);
 app.use('/api/payments',   paymentsRoutes);
 app.use('/api/whatsapp-templates', whatsappTemplatesRoutes);
+app.use('/api/meta-ads',   metaAdsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

@@ -6,6 +6,7 @@ const { savePendingLead } = require("../utils/pending-leads");
 const { downloadWhatsAppMedia } = require("../utils/whatsapp-media");
 const mailer = require("../utils/mailer");
 const { findSubscriptionByRazorpayId, activateFromCharge } = require("../utils/razorpay-billing");
+const { fetchLeadData } = require("../utils/meta-leadgen");
 
 let fireTrigger = async () => {}; // safe default
 try {
@@ -168,6 +169,129 @@ router.post("/google-leads/:token", express.json(), async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// ── GET /api/webhooks/facebook/leadgen ───────────────────────────
+// Verification handshake for Meta Lead Ads' webhook callback — same
+// pattern as the WhatsApp one below (one shared app-level URL, checked
+// against the same META_APP_VERIFY_TOKEN; Meta disambiguates WhatsApp vs
+// Page events by the "object" field in the POST body, not by URL, but
+// each product still gets configured with — and verifies against — its
+// own Callback URL in the App Dashboard).
+router.get("/facebook/leadgen", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const verifyToken = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+  if (mode === "subscribe" && verifyToken && process.env.META_APP_VERIFY_TOKEN && verifyToken === process.env.META_APP_VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
+  }
+  res.sendStatus(403);
+});
+
+// ── POST /api/webhooks/facebook/leadgen ──────────────────────────
+// Meta Lead Ads webhook. Each entry is keyed by Page id (entry.id), and
+// unlike Google's lead-form webhook the payload only carries IDs
+// (leadgen_id/form_id/ad_id) — the actual name/phone/email has to be
+// fetched separately per lead via fetchLeadData(), using that tenant's
+// stored Page access token.
+router.post("/facebook/leadgen", express.json(), async (req, res) => {
+  res.sendStatus(200); // fast ack, same reason as the WhatsApp dispatcher
+  try {
+    const entries = Array.isArray(req.body?.entry) ? req.body.entry : [];
+    for (const entry of entries) {
+      const pageId = entry?.id;
+      if (!pageId) continue;
+
+      const cred = await pool.query(
+        "SELECT user_id, page_access_token FROM meta_ads_credentials WHERE page_id=$1 AND enabled=true",
+        [pageId],
+      );
+      const row = cred.rows[0];
+      if (!row) {
+        console.log(`Facebook leadgen webhook: no connected tenant for Page ${pageId} — dropped`);
+        continue;
+      }
+      const tenantId = row.user_id;
+
+      for (const change of entry.changes || []) {
+        if (change.field !== "leadgen") continue;
+        const leadgenId = change.value?.leadgen_id;
+        if (!leadgenId) continue;
+
+        try {
+          await processMetaLead(tenantId, leadgenId, row.page_access_token);
+        } catch (e) {
+          console.error(`Meta lead ${leadgenId} processing failed for tenant ${tenantId}:`, e.message);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Facebook leadgen webhook error:", e.message);
+  }
+});
+
+// Mirrors the Google Ads lead-form handler above (same dedup/lock/limit
+// pattern) — field_data's "name" keys come straight from the advertiser's
+// form field labels, so this matches loosely (lowercased, substring) rather
+// than against Google's small fixed vocabulary.
+async function processMetaLead(tenantId, leadgenId, pageAccessToken) {
+  const lead = await fetchLeadData(leadgenId, pageAccessToken);
+  const fields = {};
+  for (const f of lead.field_data || []) {
+    fields[(f.name || "").toLowerCase()] = f.values?.[0] || "";
+  }
+  const findField = (...keys) => {
+    for (const [k, v] of Object.entries(fields)) {
+      if (keys.some((needle) => k.includes(needle))) return v;
+    }
+    return "";
+  };
+
+  const name =
+    findField("full_name", "name") ||
+    [findField("first_name"), findField("last_name")].filter(Boolean).join(" ") ||
+    "Meta Ads Lead";
+  const rawPhone = findField("phone");
+  const phone = isValidPhone(rawPhone) ? cleanPhoneValue(rawPhone) : "";
+  const email = findField("email");
+
+  if (!phone && !email) {
+    console.log(`Meta lead ${leadgenId} has no phone or email — skipped`);
+    return;
+  }
+  if (!phone) {
+    await savePendingLead(tenantId, {
+      name,
+      email,
+      platform: "Meta Ads",
+      notes: "Auto-captured from Meta Lead Ads (no phone)",
+    });
+    return;
+  }
+
+  let isNew = false;
+  try {
+    await withPhoneLock(tenantId, phone, async (client) => {
+      const dup = await findDuplicateLeadByPhone(tenantId, phone, null, client);
+      if (dup) return;
+
+      if (!(await withinLeadLimit(tenantId))) {
+        console.log(`Meta Ads lead skipped — plan limit reached for tenant ${tenantId}`);
+        return;
+      }
+      await client.query(
+        `INSERT INTO leads (user_id, name, phone, email, platform, last_message, notes)
+         VALUES ($1,$2,$3,$4,'Meta Ads','','Auto-captured from Meta Lead Ads')`,
+        [tenantId, name, phone, email],
+      );
+      isNew = true;
+    });
+  } catch (e) {
+    console.error("Meta lead insert failed:", e.message);
+    return;
+  }
+
+  if (isNew) fireTrigger("new_lead", tenantId, { name, phone, email }).catch(() => {});
+}
 
 // ── GET /api/webhooks/whatsapp/meta ──────────────────────────────
 // Verification handshake for the ONE shared, app-level callback URL —

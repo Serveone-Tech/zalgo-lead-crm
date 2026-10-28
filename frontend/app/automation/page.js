@@ -3,8 +3,9 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import api from "../../lib/api";
 import { parsePlanFeatures, makeHasPlanFeature } from "../../lib/plan-features";
-import { WhatsAppGlyph, GoogleAdsGlyph } from "../../components/BrandIcons";
+import { WhatsAppGlyph, GoogleAdsGlyph, MetaGlyph } from "../../components/BrandIcons";
 import WhatsAppEmbeddedSignup from "../../components/WhatsAppEmbeddedSignup";
+import FacebookLeadAdsConnect from "../../components/FacebookLeadAdsConnect";
 import { useToast } from "../../components/ToastProvider";
 import { useConfirmDialog } from "../../components/ConfirmDialogProvider";
 
@@ -215,6 +216,7 @@ export default function AutomationPage() {
     meta_app_id: "",
   });
   const [triggers, setTriggers] = useState({});
+  const [metaAdsStatus, setMetaAdsStatus] = useState(null);
   const [deliveryProviders, setDeliveryProviders] = useState([]);
   const [deliveryConfigs, setDeliveryConfigs] = useState([]);
   const [deliveryForm, setDeliveryForm] = useState(null); // { provider, enabled, credentials } while adding/editing one panel
@@ -383,17 +385,19 @@ export default function AutomationPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [cr, tr, wh, dp, dc] = await Promise.all([
+      const [cr, tr, wh, dp, dc, ma] = await Promise.all([
         api.get("/automation/credentials"),
         api.get("/automation/triggers"),
         api.get("/automation/webhook-urls").catch(() => ({ data: null })),
         api.get("/delivery/providers").catch(() => ({ data: [] })),
         api.get("/delivery/credentials").catch(() => ({ data: [] })),
+        api.get("/meta-ads/status").catch(() => ({ data: null })),
       ]);
       setCreds((c) => ({ ...c, ...cr.data }));
       setWebhooks(wh.data);
       setDeliveryProviders(dp.data);
       setDeliveryConfigs(dc.data);
+      setMetaAdsStatus(ma.data);
       const map = {};
       tr.data.forEach((t) => {
         const def = TRIGGER_DEFS.find((d) => d.id === t.trigger_id);
@@ -1813,7 +1817,7 @@ export default function AutomationPage() {
               color: "var(--teal-light)",
             }}
           >
-            💡 Connect Google Ads Lead Forms and WhatsApp so new leads land in
+            💡 Connect Google Ads Lead Forms, Meta Ads, and WhatsApp so new leads land in
             this CRM automatically — no manual entry needed.
           </div>
 
@@ -1845,6 +1849,27 @@ export default function AutomationPage() {
                   <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
                     <strong style={{ color: "var(--text-secondary)" }}>Setup:</strong> Google Ads → your Lead Form asset → Lead delivery →
                     Webhook → paste the URL above in "Webhook URL" and the Key above in "Webhook key" → Save.
+                  </div>
+                </div>
+              </div>
+
+              {/* Meta Ads (Facebook/Instagram Lead Forms) card */}
+              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <MetaGlyph size={18} />
+                  <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                    Meta Ads (Facebook & Instagram Lead Forms)
+                  </span>
+                </div>
+                <div style={{ padding: "18px 20px" }}>
+                  <FacebookLeadAdsConnect
+                    status={metaAdsStatus}
+                    onConnected={() => load()}
+                    onDisconnected={() => load()}
+                  />
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
+                    Connect the Facebook Page that runs your lead-generation ads — every form submission
+                    (name, phone, email) arrives here as a new Lead automatically, no manual export needed.
                   </div>
                 </div>
               </div>

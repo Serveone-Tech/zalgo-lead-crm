@@ -594,6 +594,23 @@ const initDB = async () => {
         updated_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- One connected Facebook Page per tenant, used to pull Meta Lead Ads
+      -- form submissions straight into Leads. page_access_token is the
+      -- Page-scoped token from /me/accounts at connect time (long-lived —
+      -- Pages don't expire these the way user tokens do), used both to
+      -- subscribe this app to the page's "leadgen" webhook field and later
+      -- to fetch each lead's actual field_data from its leadgen_id.
+      CREATE TABLE IF NOT EXISTS meta_ads_credentials (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        page_id VARCHAR(50) NOT NULL,
+        page_name VARCHAR(255) DEFAULT '',
+        page_access_token TEXT NOT NULL,
+        enabled BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_meta_ads_page_id ON meta_ads_credentials(page_id);
+
       CREATE TABLE IF NOT EXISTS automation_triggers (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
