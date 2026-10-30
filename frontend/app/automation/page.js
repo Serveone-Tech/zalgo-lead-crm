@@ -1853,26 +1853,32 @@ export default function AutomationPage() {
                 </div>
               </div>
 
-              {/* Meta Ads (Facebook/Instagram Lead Forms) card */}
-              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
-                  <MetaGlyph size={18} />
-                  <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
-                    Meta Ads (Facebook & Instagram Lead Forms)
-                  </span>
-                </div>
-                <div style={{ padding: "18px 20px" }}>
-                  <FacebookLeadAdsConnect
-                    status={metaAdsStatus}
-                    onConnected={() => load()}
-                    onDisconnected={() => load()}
-                  />
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
-                    Connect the Facebook Page that runs your lead-generation ads — every form submission
-                    (name, phone, email) arrives here as a new Lead automatically, no manual export needed.
+              {/* Meta Ads (Facebook/Instagram Lead Forms) card — same plan
+                  tier as WhatsApp ("automation"), not just "lead_sources"
+                  like the Google Ads/Sheets cards below, so a Pro (non-Pro
+                  Max) tenant doesn't see a connect button for a feature
+                  their plan doesn't include. */}
+              {hasPlanFeature("automation") && (
+                <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                  <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                    <MetaGlyph size={18} />
+                    <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                      Meta Ads (Facebook & Instagram Lead Forms)
+                    </span>
+                  </div>
+                  <div style={{ padding: "18px 20px" }}>
+                    <FacebookLeadAdsConnect
+                      status={metaAdsStatus}
+                      onConnected={() => load()}
+                      onDisconnected={() => load()}
+                    />
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
+                      Connect the Facebook Page that runs your lead-generation ads — every form submission
+                      (name, phone, email) arrives here as a new Lead automatically, no manual export needed.
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* WhatsApp card */}
               <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
