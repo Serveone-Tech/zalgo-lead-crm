@@ -52,6 +52,8 @@ router.get('/users', superadminAuth, async (req, res) => {
       SELECT
         u.id, u.name, u.email, u.role, u.onboarded, u.created_at, u.suspended_by_admin,
         o.name as org_name, o.phone as org_phone, o.logo_url,
+        o.email as org_email, o.address as org_address, o.city as org_city,
+        o.state as org_state, o.website as org_website,
         s.id as sub_id, s.status as sub_status, s.billing_cycle,
         s.starts_at, s.ends_at, s.trial_ends_at, s.amount_paid,
         s.superadmin_seat_override,

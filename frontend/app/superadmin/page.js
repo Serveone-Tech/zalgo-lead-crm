@@ -46,6 +46,7 @@ export default function SuperAdminDashboard() {
   const [reconcileResult, setReconcileResult] = useState(null);
   const [suspending, setSuspending] = useState(null);
   const [impersonating, setImpersonating] = useState(false);
+  const [detailsUser, setDetailsUser] = useState(null);
   const [deleteConfirmUser, setDeleteConfirmUser] = useState(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -303,6 +304,9 @@ export default function SuperAdminDashboard() {
                       </td>
                       <td style={{ padding:"12px 14px" }}>
                         <div style={{ display:"flex", gap:6 }}>
+                          <button onClick={()=>setDetailsUser(u)} title="View everything this tenant filled in during onboarding" style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--text-secondary)", fontSize:11, cursor:"pointer", fontWeight:600 }}
+                            onMouseEnter={e=>e.currentTarget.style.borderColor="var(--text-secondary)"}
+                            onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>Details</button>
                           <button onClick={()=>{ setActionUser(u); setReconcileResult(null); setActionData(d=>({...d, plan_id: u.plan_id||plans[0]?.id||""})); setEmpLimitInput(u.superadmin_seat_override ?? ""); }} style={{ padding:"5px 10px", borderRadius:6, background:"transparent", border:"1px solid var(--border)", color:"var(--teal)", fontSize:11, cursor:"pointer", fontWeight:600 }}
                             onMouseEnter={e=>e.currentTarget.style.borderColor="var(--teal)"}
                             onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}>Manage</button>
@@ -506,6 +510,54 @@ export default function SuperAdminDashboard() {
           onClose={()=>setEmployeesModalUser(null)}
           onChanged={loadAll}
         />
+      )}
+
+      {/* Details modal — everything the tenant filled in during /onboarding
+          (organisations table), separate from the billing-focused Manage
+          modal since none of this is subscription data. */}
+      {detailsUser && (
+        <div onClick={e=>{if(e.target===e.currentTarget)setDetailsUser(null);}} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:20 }}>
+          <div style={{ background:"var(--bg-card)", border:"1px solid var(--border-strong)", borderRadius:14, padding:"26px 24px", width:"100%", maxWidth:460 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+              <div>
+                <h2 style={{ fontFamily:"var(--font-main)", fontSize:16, fontWeight:700, color:"var(--text-primary)" }}>Tenant Details</h2>
+                <div style={{ fontSize:12, color:"var(--text-muted)", marginTop:2 }}>{detailsUser.name} — {detailsUser.email}</div>
+              </div>
+              <button onClick={()=>setDetailsUser(null)} style={{ background:"none", border:"none", color:"var(--text-muted)", fontSize:20, cursor:"pointer" }}>✕</button>
+            </div>
+
+            {detailsUser.logo_url && (
+              <div style={{ display:"flex", justifyContent:"center", marginBottom:16 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={detailsUser.logo_url} alt="" style={{ maxHeight:56, maxWidth:160, objectFit:"contain", borderRadius:8 }} onError={e=>e.target.style.display="none"} />
+              </div>
+            )}
+
+            {!detailsUser.org_name && !detailsUser.org_email && !detailsUser.org_address ? (
+              <div style={{ fontSize:12.5, color:"var(--text-muted)", textAlign:"center", padding:"16px 0" }}>
+                This tenant hasn't completed onboarding yet — no organisation details on file.
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+                {[
+                  ["Organisation name", detailsUser.org_name],
+                  ["Organisation email", detailsUser.org_email],
+                  ["Phone", detailsUser.org_phone],
+                  ["Address", detailsUser.org_address],
+                  ["City", detailsUser.org_city],
+                  ["State", detailsUser.org_state],
+                  ["Website", detailsUser.org_website],
+                  ["Account created", fmtDate(detailsUser.created_at)],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ display:"grid", gridTemplateColumns:"140px 1fr", gap:10, fontSize:12.5 }}>
+                    <div style={{ color:"var(--text-muted)", fontWeight:600 }}>{label}</div>
+                    <div style={{ color:"var(--text-primary)" }}>{value || "—"}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {deleteConfirmUser && (
