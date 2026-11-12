@@ -831,6 +831,15 @@ const initDB = async () => {
       .query(`ALTER TABLE automation_credentials ADD COLUMN IF NOT EXISTS meta_app_id VARCHAR(50) DEFAULT ''`)
       .catch((e) => console.log("alter skip:", e.message));
 
+    // The 6-digit PIN used to register a connected number with WhatsApp
+    // itself (see utils/meta-embedded-signup.js registerPhoneNumber) — not
+    // a secret in the usual sense (it only re-proves ownership of a number
+    // we already control the access token for), but kept server-side only
+    // since it's never needed by the frontend.
+    await client
+      .query(`ALTER TABLE automation_credentials ADD COLUMN IF NOT EXISTS wa_pin VARCHAR(6) DEFAULT ''`)
+      .catch((e) => console.log("alter skip:", e.message));
+
     const templateBuilderCols = [
       `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS header_format VARCHAR(20) DEFAULT 'NONE'`,
       `ALTER TABLE whatsapp_templates ADD COLUMN IF NOT EXISTS components JSONB DEFAULT '{}'`,

@@ -68,4 +68,32 @@ async function getPhoneNumberDisplay(phoneNumberId) {
   }
 }
 
-module.exports = { exchangeSignupCode, subscribeAppToWaba, getPhoneNumberDisplay };
+// Finalizes the phone number's registration on the WhatsApp network itself.
+// Embedded Signup's popup only gets the number *connected* to this app/WABA
+// (visible via the phone_number_id, usable for Graph API calls) — it does
+// NOT, by itself, register the number as live on WhatsApp. Skipping this
+// call is exactly why a newly-connected number can show "Connected" in our
+// own UI while still showing up as "Invite to WhatsApp" (i.e. not on
+// WhatsApp at all, from the network's point of view) to anyone trying to
+// message it from an ordinary WhatsApp app. `pin` is a 6-digit PIN *we*
+// choose — Meta just wants the same one supplied again on any future
+// re-registration (e.g. if Meta ever logs the number out), so it's
+// generated once and stored alongside the rest of this tenant's WhatsApp
+// credentials rather than re-randomized per call.
+async function registerPhoneNumber(phoneNumberId, pin) {
+  const systemUserToken = process.env.META_SYSTEM_USER_TOKEN;
+  if (!systemUserToken) throw new Error("META_SYSTEM_USER_TOKEN not configured on the server");
+
+  const res = await fetch(`${GRAPH_BASE}/${phoneNumberId}/register`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${systemUserToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || data?.error) {
+    throw new Error(data?.error?.message || "Could not register this phone number with WhatsApp");
+  }
+  return data;
+}
+
+module.exports = { exchangeSignupCode, subscribeAppToWaba, getPhoneNumberDisplay, registerPhoneNumber };

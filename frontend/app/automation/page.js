@@ -223,6 +223,7 @@ export default function AutomationPage() {
   const [savingDelivery, setSavingDelivery] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingChan, setSavingChan] = useState(null);
+  const [registeringWa, setRegisteringWa] = useState(false);
   const [savingTrig, setSavingTrig] = useState(null);
   const [sending, setSending] = useState(false);
   const showToast = useToast();
@@ -431,6 +432,17 @@ export default function AutomationPage() {
       showToast("Save failed", "error");
     }
     setSavingChan(null);
+  };
+
+  const registerWaNumber = async () => {
+    setRegisteringWa(true);
+    try {
+      await api.post("/automation/whatsapp/register-number");
+      showToast("WhatsApp number registered — it should now be reachable from any WhatsApp app.");
+    } catch (e) {
+      showToast(e?.response?.data?.error || "Could not register this number", "error");
+    }
+    setRegisteringWa(false);
   };
 
   const saveDelivery = async () => {
@@ -759,6 +771,21 @@ export default function AutomationPage() {
                     </div>
                   )}
                   {key === "whatsapp" && <WhatsAppEmbeddedSignup onConnected={() => load()} />}
+                  {key === "whatsapp" && creds.whatsapp_enabled && creds.wa_account_sid && (
+                    <div style={{ marginBottom: 16, padding: "10px 12px", background: "var(--bg-surface)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                      <div style={{ fontSize: 11.5, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                        If this number shows "Invite to WhatsApp" when someone tries to message it from
+                        an ordinary WhatsApp app, it's connected here but not yet registered with WhatsApp itself.
+                      </div>
+                      <button
+                        onClick={registerWaNumber}
+                        disabled={registeringWa}
+                        style={{ flexShrink: 0, padding: "6px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--teal)", fontFamily: "var(--font-main)", fontWeight: 600, fontSize: 11.5, cursor: registeringWa ? "not-allowed" : "pointer" }}
+                      >
+                        {registeringWa ? "Registering…" : "Register number"}
+                      </button>
+                    </div>
+                  )}
                   {fields.map(({ k, l, ph, type }) => (
                     <div
                       key={k}

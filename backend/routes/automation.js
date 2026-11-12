@@ -11,7 +11,7 @@ const {
   deleteTemplate,
   sendTemplateMessage,
 } = require("../utils/whatsapp-templates");
-const { exchangeSignupCode, subscribeAppToWaba, getPhoneNumberDisplay } = require("../utils/meta-embedded-signup");
+const { exchangeSignupCode, subscribeAppToWaba, getPhoneNumberDisplay, registerPhoneNumber } = require("../utils/meta-embedded-signup");
 
 const router = express.Router();
 
@@ -207,14 +207,30 @@ router.post("/whatsapp/embedded-signup", auth, requireSubscription, requirePlanF
     console.error("WABA webhook subscription failed:", e.message);
   }
 
+  // Connecting the WABA/number to this app is NOT the same as that number
+  // being live on WhatsApp — without this call the number can sit
+  // "connected" here indefinitely while anyone trying to message it from
+  // an ordinary WhatsApp app sees "Invite to WhatsApp" instead of a chat,
+  // since Meta's network itself was never told this number is in service.
+  // Non-fatal for the same reason as the webhook subscription above: a
+  // tenant can still be talked through retrying this if it fails.
+  const pin = Math.floor(100000 + Math.random() * 900000).toString();
+  let registered = true;
+  try {
+    await registerPhoneNumber(phone_number_id.trim(), pin);
+  } catch (e) {
+    registered = false;
+    console.error("Phone number registration failed:", e.message);
+  }
+
   const phoneInfo = await getPhoneNumberDisplay(phone_number_id.trim());
 
   try {
     await pool.query(
-      `INSERT INTO automation_credentials (user_id, whatsapp_enabled, wa_account_sid, wa_auth_token, wa_from, updated_at)
-       VALUES ($1, true, $2, $3, $4, NOW())
-       ON CONFLICT (user_id) DO UPDATE SET whatsapp_enabled=true, wa_account_sid=$2, wa_auth_token=$3, wa_from=$4, updated_at=NOW()`,
-      [req.tenantId, phone_number_id.trim(), systemUserToken, waba_id.trim()],
+      `INSERT INTO automation_credentials (user_id, whatsapp_enabled, wa_account_sid, wa_auth_token, wa_from, wa_pin, updated_at)
+       VALUES ($1, true, $2, $3, $4, $5, NOW())
+       ON CONFLICT (user_id) DO UPDATE SET whatsapp_enabled=true, wa_account_sid=$2, wa_auth_token=$3, wa_from=$4, wa_pin=$5, updated_at=NOW()`,
+      [req.tenantId, phone_number_id.trim(), systemUserToken, waba_id.trim(), registered ? pin : ""],
     );
     res.json({
       success: true,
@@ -222,10 +238,34 @@ router.post("/whatsapp/embedded-signup", auth, requireSubscription, requirePlanF
       phone_number_id: phone_number_id.trim(),
       display_phone_number: phoneInfo?.display_phone_number || null,
       verified_name: phoneInfo?.verified_name || null,
+      registered,
     });
   } catch (e) {
     console.error("Saving embedded signup credentials failed:", e.message);
     res.status(500).json({ error: "Connected to Meta but could not save to your account — please try again" });
+  }
+});
+
+// ── POST retry phone-number registration ────────────────────────────
+// Finalizes WhatsApp network registration for a number that's already
+// connected (wa_account_sid set) but never completed this step — the
+// exact "shows Connected here, but shows as Invite to WhatsApp to anyone
+// else" symptom. Generates a fresh PIN each time this is called explicitly
+// (safe — Meta just wants whatever PIN is supplied this time going
+// forward, it doesn't have to match a previous one).
+router.post("/whatsapp/register-number", auth, requireSubscription, requirePlanFeature("automation"), requirePermission("manage_automation"), async (req, res) => {
+  try {
+    const cred = await pool.query("SELECT wa_account_sid FROM automation_credentials WHERE user_id=$1", [req.tenantId]);
+    const phoneNumberId = cred.rows[0]?.wa_account_sid;
+    if (!phoneNumberId) return res.status(400).json({ error: "No WhatsApp number connected yet" });
+
+    const pin = Math.floor(100000 + Math.random() * 900000).toString();
+    await registerPhoneNumber(phoneNumberId, pin);
+    await pool.query("UPDATE automation_credentials SET wa_pin=$2, updated_at=NOW() WHERE user_id=$1", [req.tenantId, pin]);
+    res.json({ success: true });
+  } catch (e) {
+    console.error("Phone number registration retry failed:", e.message);
+    res.status(400).json({ error: e.message || "Could not register this number with WhatsApp" });
   }
 });
 
