@@ -245,7 +245,7 @@ router.get("/sidebar-counts", auth, requireSubscription, requirePlanFeature("cor
             `SELECT id, name, phone, notes, last_message, follow_up_date FROM leads
              WHERE user_id=$1 AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED')
                AND follow_up_date < NOW() AND assigned_to=$2
-             ORDER BY follow_up_date DESC LIMIT 15`,
+             ORDER BY follow_up_date DESC LIMIT 50`,
             [req.tenantId, req.user.id],
           )
         : Promise.resolve({ rows: [] }),
