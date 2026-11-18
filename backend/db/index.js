@@ -453,6 +453,14 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS lead_admin_notes (
+        id SERIAL PRIMARY KEY,
+        lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        note TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS customers (
         id SERIAL PRIMARY KEY,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -882,6 +890,7 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_customer_payments_user_id ON customer_payments(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_customer_payments_customer_id ON customer_payments(customer_id)`,
       `CREATE INDEX IF NOT EXISTS idx_lead_messages_lead_id ON lead_messages(lead_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_lead_admin_notes_lead_id ON lead_admin_notes(lead_id)`,
       `CREATE INDEX IF NOT EXISTS idx_stages_user_id ON stages(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_order_stages_user_id ON order_stages(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_pending_leads_user_id ON pending_leads(user_id)`,

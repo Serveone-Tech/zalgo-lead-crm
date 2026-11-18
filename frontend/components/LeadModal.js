@@ -46,6 +46,9 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
   const [newMsg, setNewMsg] = useState("");
   const [newMsgDate, setNewMsgDate] = useState(nowLocal());
   const [msgSaving, setMsgSaving] = useState(false);
+  const [adminNotes, setAdminNotes] = useState([]);
+  const [newAdminNote, setNewAdminNote] = useState("");
+  const [adminNoteSaving, setAdminNoteSaving] = useState(false);
 
   useEffect(() => {
     const u = localStorage.getItem("crm_user");
@@ -69,6 +72,29 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
       if (lead.id) loadMessages();
     }
   }, [lead]);
+
+  useEffect(() => {
+    if (lead?.id && isOwnerUser(user)) loadAdminNotes();
+  }, [lead, user]);
+
+  const loadAdminNotes = async () => {
+    try {
+      const { data } = await api.get(`/leads/${lead.id}/admin-notes`);
+      setAdminNotes(data);
+    } catch {}
+  };
+
+  const addAdminNote = async () => {
+    if (!newAdminNote.trim()) return;
+    setAdminNoteSaving(true);
+    try {
+      await api.post(`/leads/${lead.id}/admin-notes`, { note: newAdminNote.trim() });
+      setNewAdminNote("");
+      loadAdminNotes();
+    } finally {
+      setAdminNoteSaving(false);
+    }
+  };
 
   // Deep-linked here from the Sidebar's due-follow-up modal's "Follow Up
   // Now" — jump straight to the field the employee actually needs to act
@@ -514,6 +540,91 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                     fontWeight: 600,
                     fontFamily: "var(--font-main)",
                     cursor: msgSaving ? "not-allowed" : "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Admin Notes — private to the owner, never shown or addable by
+              an employee no matter what permissions they're granted. */}
+          {lead?.id && isOwnerUser(user) && (
+            <div style={{ marginTop: 18 }}>
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "var(--text-secondary)",
+                  marginBottom: 8,
+                  fontWeight: 500,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  fontFamily: "var(--font-main)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                🔒 Admin Notes <span style={{ textTransform: "none", fontWeight: 400, color: "var(--text-muted)" }}>(only you can see this)</span>
+              </div>
+
+              <div
+                style={{
+                  maxHeight: 160,
+                  overflowY: "auto",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  marginBottom: 10,
+                }}
+              >
+                {adminNotes.length === 0 ? (
+                  <div style={{ padding: 14, fontSize: 12, color: "var(--text-muted)", textAlign: "center" }}>
+                    No admin notes yet
+                  </div>
+                ) : (
+                  adminNotes.map((n) => (
+                    <div key={n.id} style={{ padding: "9px 12px", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--teal-light)" }}>
+                          {new Date(n.created_at).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}, {new Date(n.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{n.author_name || ""}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text-primary)", whiteSpace: "pre-wrap" }}>{n.note}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  value={newAdminNote}
+                  onChange={(e) => setNewAdminNote(e.target.value)}
+                  placeholder="Add a private note..."
+                  style={inp}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addAdminNote();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={addAdminNote}
+                  disabled={adminNoteSaving || !newAdminNote.trim()}
+                  style={{
+                    padding: "9px 16px",
+                    borderRadius: "var(--radius-sm)",
+                    background: adminNoteSaving ? "var(--bg-hover)" : "var(--gradient-accent)",
+                    border: "none",
+                    color: "#fff",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    fontFamily: "var(--font-main)",
+                    cursor: adminNoteSaving ? "not-allowed" : "pointer",
                     flexShrink: 0,
                   }}
                 >

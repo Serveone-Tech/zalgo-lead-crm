@@ -954,6 +954,48 @@ router.post("/:id/messages", auth, requireSubscription, requirePlanFeature("core
   }
 });
 
+// Admin-only private notes on a lead — deliberately separate from the
+// Remarks/conversation log above, which any assigned employee can read and
+// add to. These are gated to isOwner(req) alone (not a permission flag,
+// since even an employee granted every other permission must never see or
+// add these) and never returned from any employee-facing route.
+router.get("/:id/admin-notes", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const lead = await pool.query("SELECT id FROM leads WHERE id=$1 AND user_id=$2", [req.params.id, req.tenantId]);
+    if (!lead.rows[0]) return res.status(404).json({ error: "Lead not found" });
+
+    const result = await pool.query(
+      `SELECT lan.*, u.name as author_name FROM lead_admin_notes lan
+       LEFT JOIN users u ON u.id = lan.user_id
+       WHERE lan.lead_id=$1 ORDER BY lan.created_at DESC`,
+      [req.params.id],
+    );
+    res.json(result.rows);
+  } catch {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+router.post("/:id/admin-notes", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  const note = (req.body.note || "").trim();
+  if (!note) return res.status(400).json({ error: "Note is required" });
+  try {
+    const lead = await pool.query("SELECT id FROM leads WHERE id=$1 AND user_id=$2", [req.params.id, req.tenantId]);
+    if (!lead.rows[0]) return res.status(404).json({ error: "Lead not found" });
+
+    const result = await pool.query(
+      `INSERT INTO lead_admin_notes (lead_id, user_id, note) VALUES ($1,$2,$3)
+       RETURNING *, (SELECT name FROM users WHERE id=$2) as author_name`,
+      [req.params.id, req.user.id, note],
+    );
+    res.json(result.rows[0]);
+  } catch {
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // POST send a live WhatsApp reply — unlike the note-only route above, this
 // actually calls Meta's API to deliver the message, then logs it the same
 // way an inbound message gets logged, so the two sides of the conversation
