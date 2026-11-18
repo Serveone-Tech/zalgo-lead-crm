@@ -234,12 +234,18 @@ router.get("/sidebar-counts", auth, requireSubscription, requirePlanFeature("cor
       //     assigned_to=self for an employee, and it's never shown to an
       //     owner/superadmin at all — this query returns nothing for them,
       //     the Sidebar also never renders the popup for a non-employee.
+      // ORDER BY ...DESC (not ASC): an employee who has let old overdue
+      // leads pile up (real accounts have had 200+) would otherwise never
+      // see a follow-up that's due RIGHT NOW — ASC + LIMIT 15 always
+      // returned the 15 oldest stale leads first, permanently burying
+      // anything freshly due behind that backlog. DESC surfaces the most
+      // recently-due (most actionable) leads first instead.
       req.user.role === "employee"
         ? pool.query(
             `SELECT id, name, phone, notes, last_message, follow_up_date FROM leads
              WHERE user_id=$1 AND UPPER(stage) NOT IN ('CLOSED','LOST','CONVERTED')
                AND follow_up_date < NOW() AND assigned_to=$2
-             ORDER BY follow_up_date ASC LIMIT 15`,
+             ORDER BY follow_up_date DESC LIMIT 15`,
             [req.tenantId, req.user.id],
           )
         : Promise.resolve({ rows: [] }),
