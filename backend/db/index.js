@@ -780,6 +780,18 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- Admin-defined labels for what a lead is actually about (e.g. a
+      -- tenant running separate ad campaigns for "Stone" and "Thyroid"
+      -- treatments into the same pipeline) — distinct from "stage", which
+      -- tracks where a lead is in the sales process, not what it's for.
+      CREATE TABLE IF NOT EXISTS lead_categories (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(50) NOT NULL,
+        color VARCHAR(7) DEFAULT '#00868a',
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS password_otps (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) NOT NULL,
@@ -813,6 +825,12 @@ const initDB = async () => {
     // STEP 2 alters — the FK target has to already exist.
     await client
       .query(`ALTER TABLE order_items ADD COLUMN IF NOT EXISTS inventory_item_id INTEGER REFERENCES inventory_items(id) ON DELETE SET NULL`)
+      .catch((e) => console.log("alter skip:", e.message));
+
+    // Same reason — lead_categories is created above with stages, after the
+    // early STEP 2 alters already ran.
+    await client
+      .query(`ALTER TABLE leads ADD COLUMN IF NOT EXISTS category_id INTEGER REFERENCES lead_categories(id) ON DELETE SET NULL`)
       .catch((e) => console.log("alter skip:", e.message));
 
     // Up to 3 CTA buttons (URL/PHONE_NUMBER/QUICK_REPLY) on a WhatsApp
@@ -875,6 +893,8 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_leads_user_stage ON leads(user_id, stage)`,
       `CREATE INDEX IF NOT EXISTS idx_leads_user_assigned ON leads(user_id, assigned_to)`,
       `CREATE INDEX IF NOT EXISTS idx_leads_user_followup ON leads(user_id, follow_up_date)`,
+      `CREATE INDEX IF NOT EXISTS idx_leads_category_id ON leads(category_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_lead_categories_user_id ON lead_categories(user_id)`,
       `CREATE INDEX IF NOT EXISTS idx_leads_user_created ON leads(user_id, created_at DESC)`,
       // Backs the leads list's default sort (ORDER BY COALESCE(assigned_at,
       // created_at) DESC) — matches the exact expression used in the query.

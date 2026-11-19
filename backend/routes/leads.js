@@ -31,7 +31,7 @@ const visibilityClause = (req, paramIndex) => {
 // just expressed in SQL instead of a JS .filter(). Kept as one function so
 // the two routes can never silently drift out of sync with each other.
 function buildLeadFilterClause(req, query, startIndex) {
-  const { search, stage, platform, dateFilter, assignee, dateFrom, dateTo } = query;
+  const { search, stage, platform, dateFilter, assignee, dateFrom, dateTo, category } = query;
   const vis = visibilityClause(req, startIndex);
   const conditions = [`user_id=$1${vis.clause}`];
   const params = [req.tenantId, ...vis.params];
@@ -59,6 +59,12 @@ function buildLeadFilterClause(req, query, startIndex) {
   } else if (assignee) {
     params.push(parseInt(assignee));
     conditions.push(`assigned_to=$${params.length}`);
+  }
+  if (category === "__uncategorized__") {
+    conditions.push(`category_id IS NULL`);
+  } else if (category) {
+    params.push(parseInt(category));
+    conditions.push(`category_id=$${params.length}`);
   }
   if (dateFrom) {
     params.push(dateFrom);
@@ -399,6 +405,7 @@ router.post("/", auth, requireSubscription, requirePlanFeature("core"), async (r
     follow_up_date,
     notes,
     assigned_to,
+    category_id,
   } = req.body;
   if (!name) return res.status(400).json({ error: "Name required" });
 
@@ -408,6 +415,10 @@ router.post("/", auth, requireSubscription, requirePlanFeature("core"), async (r
   // control over who a new lead lands with (including leaving it unassigned).
   const canAssign = isOwner(req) || hasPermission(req, "assign_leads");
   const finalAssignedTo = canAssign ? (assigned_to || null) : req.user.id;
+  // Category is strictly an owner action (see /lead-categories) — an
+  // employee's own POST never carries one through, no matter what's in
+  // the request body.
+  const finalCategoryId = isOwner(req) ? (category_id || null) : null;
 
   try {
     // Enforce max_leads plan limit (-1 = unlimited)
@@ -433,8 +444,8 @@ router.post("/", auth, requireSubscription, requirePlanFeature("core"), async (r
     }
 
     const result = await pool.query(
-      `INSERT INTO leads (user_id, assigned_to, name, phone, email, platform, platform_link, stage, last_message, follow_up_date, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      `INSERT INTO leads (user_id, assigned_to, name, phone, email, platform, platform_link, stage, last_message, follow_up_date, notes, category_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
         req.tenantId,
         finalAssignedTo,
@@ -447,6 +458,7 @@ router.post("/", auth, requireSubscription, requirePlanFeature("core"), async (r
         last_message || "",
         follow_up_date || null,
         notes || "",
+        finalCategoryId,
       ],
     );
     const lead = result.rows[0];
@@ -603,6 +615,27 @@ router.put("/bulk-stage", auth, requireSubscription, requirePlanFeature("core"),
   }
 });
 
+// PUT bulk assign a category to a set of leads — owner-only, same as the
+// single-lead PUT's category_id handling and /lead-categories itself.
+// category_id: null clears the category back to uncategorised.
+router.put("/bulk-category", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  const { lead_ids, category_id } = req.body;
+  if (!Array.isArray(lead_ids) || lead_ids.length === 0)
+    return res.status(400).json({ error: "No leads selected" });
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const result = await pool.query(
+      `UPDATE leads SET category_id=$1, updated_at=NOW()
+       WHERE id = ANY($2::int[]) AND user_id=$3`,
+      [category_id || null, lead_ids, req.tenantId],
+    );
+    res.json({ updated: result.rowCount });
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 // DELETE bulk delete leads (owner or delete_leads permission)
 router.delete("/bulk", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
   const { lead_ids } = req.body;
@@ -680,6 +713,7 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async 
     follow_up_date,
     notes,
     assigned_to,
+    category_id,
   } = req.body;
   try {
     const existing = await pool.query(
@@ -699,6 +733,13 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async 
     const nextAssignedTo = canAssign && assigned_to !== undefined
       ? (assigned_to || null)
       : lead.assigned_to;
+
+    // Category assignment is owner-only (see /lead-categories) — an
+    // employee saving the rest of a lead's form never changes it, even if
+    // the request body happened to carry a value.
+    const nextCategoryId = isOwner(req) && category_id !== undefined
+      ? (category_id || null)
+      : lead.category_id;
 
     // Name stays editable by whoever can already touch this lead (assignee
     // or above) — only the more sensitive contact/source fields (phone,
@@ -729,7 +770,7 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async 
     const assignmentChanged = nextAssignedTo !== lead.assigned_to;
     const result = await pool.query(
       `UPDATE leads SET name=$1, phone=$2, email=$3, platform=$4, platform_link=$5,
-       stage=$6, last_message=$7, follow_up_date=$8, notes=$9, assigned_to=$10, updated_at=NOW(),
+       stage=$6, last_message=$7, follow_up_date=$8, notes=$9, assigned_to=$10, category_id=$14, updated_at=NOW(),
        assigned_at=CASE WHEN $13 THEN NOW() ELSE assigned_at END
        WHERE id=$11 AND user_id=$12 RETURNING *`,
       [
@@ -746,6 +787,7 @@ router.put("/:id", auth, requireSubscription, requirePlanFeature("core"), async 
         req.params.id,
         req.tenantId,
         assignmentChanged,
+        nextCategoryId,
       ],
     );
     const updated = result.rows[0];

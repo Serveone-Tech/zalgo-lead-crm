@@ -24,7 +24,7 @@ function toLocalInput(d) {
   return d ? d.slice(0, 16) : "";
 }
 
-export default function LeadModal({ lead, employees = [], stages = [], onClose, onSave, focusFollowUp = false }) {
+export default function LeadModal({ lead, employees = [], stages = [], categories = [], onClose, onSave, focusFollowUp = false }) {
   const followUpRef = useRef(null);
   const stageNames = stages.length ? stages.map(s => s.name) : FALLBACK_STAGES;
   const [form, setForm] = useState({
@@ -38,6 +38,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
     follow_up_date: "",
     notes: "",
     assigned_to: "",
+    category_id: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -68,6 +69,7 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
         follow_up_date: toLocalInput(lead.follow_up_date),
         notes: lead.notes || "",
         assigned_to: lead.assigned_to || "",
+        category_id: lead.category_id || "",
       });
       if (lead.id) loadMessages();
     }
@@ -377,6 +379,34 @@ export default function LeadModal({ lead, employees = [], stages = [], onClose, 
                     <div style={{ ...inp, color: "var(--text-secondary)" }}>
                       {employees.find((e) => e.id === form.assigned_to)?.name ||
                         "Assigned to you"}
+                    </div>
+                  )}
+                </Field>
+              </div>
+            )}
+
+            {/* Category — what this lead is actually about (e.g. "Stone",
+                "Thyroid"), as opposed to Stage. Owner-only to set, same as
+                the categories themselves (see Settings); an employee just
+                sees the tag so they know what to call about. */}
+            {(isOwnerUser(user) || form.category_id) && (
+              <div style={{ gridColumn: "1/-1" }}>
+                <Field label="Category">
+                  {isOwnerUser(user) ? (
+                    <select
+                      name="category_id"
+                      value={form.category_id}
+                      onChange={handle}
+                      style={inp}
+                    >
+                      <option value="">Uncategorised</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div style={{ ...inp, color: "var(--text-secondary)" }}>
+                      {categories.find((c) => c.id === form.category_id)?.name || "Uncategorised"}
                     </div>
                   )}
                 </Field>

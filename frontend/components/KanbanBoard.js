@@ -32,7 +32,8 @@ function fmtDate(d) {
   return `${datePart}, ${timePart}`;
 }
 
-export default function KanbanBoard({ leads, stages = [], onStageChange, onEdit, employeeNames, currentUserId }) {
+export default function KanbanBoard({ leads, stages = [], categories = [], onStageChange, onEdit, employeeNames, currentUserId }) {
+  const categoryById = Object.fromEntries(categories.map((c) => [c.id, c]));
   const [dragId, setDragId] = useState(null);
   const [overStage, setOverStage] = useState(null);
   const stageList = stages.length ? stages.map(s => s.name) : FALLBACK_STAGES;
@@ -152,6 +153,23 @@ export default function KanbanBoard({ leads, stages = [], onStageChange, onEdit,
                       >
                         {lead.name}
                       </div>
+                      {lead.category_id && categoryById[lead.category_id] && (
+                        <span
+                          style={{
+                            display: "inline-block",
+                            fontSize: 10,
+                            fontWeight: 700,
+                            color: categoryById[lead.category_id].color,
+                            background: categoryById[lead.category_id].color + "22",
+                            borderRadius: 10,
+                            padding: "1px 7px",
+                            marginBottom: 6,
+                            fontFamily: "var(--font-main)",
+                          }}
+                        >
+                          {categoryById[lead.category_id].name}
+                        </span>
+                      )}
                       {lead.last_message && (
                         <div
                           style={{

@@ -86,6 +86,8 @@ function LeadsContent() {
   const [user, setUser] = useState(null);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [dynamicStages, setDynamicStages] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [categoryF, setCategoryF] = useState("");
   const [fulfillmentStage, setFulfillmentStage] = useState("");
   const [fulfillLead, setFulfillLead] = useState(null);
   const [chatLead, setChatLead] = useState(null);
@@ -97,8 +99,10 @@ function LeadsContent() {
   // Bulk action state
   const [selected, setSelected] = useState(new Set());
   const NO_ASSIGN_CHANGE = "__nochange__";
+  const NO_CATEGORY_CHANGE = "__nochange__";
   const [bulkAssignTo, setBulkAssignTo] = useState(NO_ASSIGN_CHANGE);
   const [bulkStageTo, setBulkStageTo] = useState("");
+  const [bulkCategoryTo, setBulkCategoryTo] = useState(NO_CATEGORY_CHANGE);
   const [bulkApplying, setBulkApplying] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -138,6 +142,10 @@ function LeadsContent() {
       .then((r) => setDynamicStages(r.data))
       .catch(() => {});
     api
+      .get("/lead-categories")
+      .then((r) => setCategories(r.data))
+      .catch(() => {});
+    api
       .get("/settings")
       .then((r) => setFulfillmentStage(r.data.order_fulfillment_stage || ""))
       .catch(() => {});
@@ -167,6 +175,10 @@ function LeadsContent() {
     () => Object.fromEntries(employees.map((e) => [e.id, e.name])),
     [employees],
   );
+  const categoryById = useMemo(
+    () => Object.fromEntries(categories.map((c) => [c.id, c])),
+    [categories],
+  );
 
   // The search box debounces before it actually triggers a fetch — every
   // other filter (dropdowns, dates) is instant, but re-querying the server
@@ -184,6 +196,7 @@ function LeadsContent() {
     assignee: assigneeF || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    category: categoryF || undefined,
   };
   const filterKey = JSON.stringify(filterParams);
 
@@ -330,13 +343,15 @@ function LeadsContent() {
     setSelected(new Set());
     setBulkAssignTo(NO_ASSIGN_CHANGE);
     setBulkStageTo("");
+    setBulkCategoryTo(NO_CATEGORY_CHANGE);
   };
 
   const wantsAssignChange = bulkAssignTo !== NO_ASSIGN_CHANGE;
   const wantsStageChange = !!bulkStageTo;
+  const wantsCategoryChange = bulkCategoryTo !== NO_CATEGORY_CHANGE;
 
   const bulkApply = async () => {
-    if (selected.size === 0 || (!wantsAssignChange && !wantsStageChange)) return;
+    if (selected.size === 0 || (!wantsAssignChange && !wantsStageChange && !wantsCategoryChange)) return;
     setBulkApplying(true);
     try {
       const ids = Array.from(selected);
@@ -354,6 +369,13 @@ function LeadsContent() {
           stage: bulkStageTo,
         });
         results.push(`${data.updated} moved to "${bulkStageTo}"`);
+      }
+      if (wantsCategoryChange) {
+        const { data } = await api.put("/leads/bulk-category", {
+          lead_ids: ids,
+          category_id: bulkCategoryTo || null,
+        });
+        results.push(`${data.updated} categorised`);
       }
       showToast(`✓ ${results.join(" · ")}`);
       clearSelection();
@@ -391,7 +413,7 @@ function LeadsContent() {
   const overdueCount = stats?.overdue ?? 0;
 
   const hasFilters =
-    search || stageF || platformF || dateF || assigneeF || dateFrom || dateTo;
+    search || stageF || platformF || dateF || assigneeF || dateFrom || dateTo || categoryF;
 
   return (
     <div style={{ padding: "28px 32px" }}>
@@ -637,6 +659,21 @@ function LeadsContent() {
             ))}
           </select>
         )}
+        {categories.length > 0 && (
+          <select
+            value={categoryF}
+            onChange={(e) => setCategoryF(e.target.value)}
+            style={selStyle}
+          >
+            <option value="">All Categories</option>
+            <option value="__uncategorized__">Uncategorised</option>
+            {categories.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        )}
         {hasFilters && (
           <button
             onClick={() => {
@@ -647,6 +684,7 @@ function LeadsContent() {
               setAssigneeF("");
               setDateFrom("");
               setDateTo("");
+              setCategoryF("");
             }}
             style={{
               padding: "10px 16px",
@@ -745,9 +783,35 @@ function LeadsContent() {
               </option>
             ))}
           </select>
+          {isOwnerUser(user) && categories.length > 0 && (
+            <select
+              value={bulkCategoryTo}
+              onChange={(e) => setBulkCategoryTo(e.target.value)}
+              style={{
+                padding: "7px 12px",
+                background: "var(--bg-input)",
+                border: "1px solid var(--border)",
+                borderRadius: 7,
+                color: "var(--text-primary)",
+                fontSize: 13,
+                fontFamily: "var(--font-main)",
+                outline: "none",
+                cursor: "pointer",
+                minWidth: 150,
+              }}
+            >
+              <option value={NO_CATEGORY_CHANGE}>Category: no change</option>
+              <option value="">Uncategorise</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             onClick={bulkApply}
-            disabled={bulkApplying || (!wantsAssignChange && !wantsStageChange)}
+            disabled={bulkApplying || (!wantsAssignChange && !wantsStageChange && !wantsCategoryChange)}
             style={{
               background: "var(--gradient-accent)",
               color: "#fff",
@@ -757,10 +821,10 @@ function LeadsContent() {
               fontSize: 13,
               fontWeight: 600,
               cursor:
-                bulkApplying || (!wantsAssignChange && !wantsStageChange)
+                bulkApplying || (!wantsAssignChange && !wantsStageChange && !wantsCategoryChange)
                   ? "not-allowed"
                   : "pointer",
-              opacity: bulkApplying || (!wantsAssignChange && !wantsStageChange) ? 0.7 : 1,
+              opacity: bulkApplying || (!wantsAssignChange && !wantsStageChange && !wantsCategoryChange) ? 0.7 : 1,
               fontFamily: "var(--font-main)",
             }}
           >
@@ -837,6 +901,7 @@ function LeadsContent() {
           <KanbanBoard
             leads={kanbanLeads}
             stages={dynamicStages}
+            categories={categories}
             onStageChange={(lead, stage) => changeStage(lead, stage)}
             onEdit={openEdit}
             employeeNames={employeeNames}
@@ -1001,6 +1066,23 @@ function LeadsContent() {
                           >
                             {lead.name}
                           </div>
+                          {lead.category_id && categoryById[lead.category_id] && (
+                            <span
+                              style={{
+                                display: "inline-block",
+                                fontSize: 10,
+                                fontWeight: 700,
+                                color: categoryById[lead.category_id].color,
+                                background: categoryById[lead.category_id].color + "22",
+                                borderRadius: 10,
+                                padding: "1px 7px",
+                                marginTop: 3,
+                                fontFamily: "var(--font-main)",
+                              }}
+                            >
+                              {categoryById[lead.category_id].name}
+                            </span>
+                          )}
                           {lead.platform_link ? (
                             <a
                               href={lead.platform_link}
@@ -1388,6 +1470,7 @@ function LeadsContent() {
           lead={editLead}
           employees={employees}
           stages={dynamicStages}
+          categories={categories}
           onClose={closeModal}
           onSave={saveLead}
           focusFollowUp={focusFollowUp}

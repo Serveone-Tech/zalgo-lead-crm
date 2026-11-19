@@ -77,6 +77,17 @@ export default function SettingsPage() {
   const [stageError, setStageError]       = useState('');
   const [stageSaving, setStageSaving]     = useState(false);
 
+  // Lead Categories — what a lead is actually about (e.g. "Stone",
+  // "Thyroid") as opposed to Stage, which tracks where it is in the
+  // pipeline. Same CRUD shape as Stages above, minus sort_order.
+  const [categories, setCategories]           = useState([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [editingCategory, setEditingCategory]     = useState(null);
+  const [newCategory, setNewCategory]             = useState({ name: '', color: '#0066cc' });
+  const [addingCategory, setAddingCategory]       = useState(false);
+  const [categoryError, setCategoryError]         = useState('');
+  const [categorySaving, setCategorySaving]       = useState(false);
+
   // Order stages — same shape as lead stages above, but for customer_orders
   const [orderStages, setOrderStages]            = useState([]);
   const [orderStagesLoading, setOrderStagesLoading] = useState(true);
@@ -111,6 +122,7 @@ export default function SettingsPage() {
     setUser(parsed);
     loadAll();
     loadStages();
+    loadCategories();
     loadOrderStages();
   }, []);
 
@@ -341,6 +353,56 @@ export default function SettingsPage() {
       onConfirm: async () => {
         await api.delete(`/stages/${s.id}`);
         await loadStages();
+      },
+    });
+  };
+
+  // ── Lead Category CRUD ──────────────────────────────────────────
+  const loadCategories = async () => {
+    setCategoriesLoading(true);
+    try {
+      const { data } = await api.get('/lead-categories');
+      setCategories(data);
+    } catch {}
+    setCategoriesLoading(false);
+  };
+
+  const startEditCategory = (c) => { setEditingCategory({ id: c.id, name: c.name, color: c.color }); setCategoryError(''); };
+  const cancelEditCategory = () => { setEditingCategory(null); setCategoryError(''); };
+  const cancelAddCategory  = () => { setAddingCategory(false); setNewCategory({ name: '', color: '#0066cc' }); setCategoryError(''); };
+
+  const saveEditCategory = async () => {
+    if (!editingCategory.name.trim()) { setCategoryError('Name is required'); return; }
+    setCategorySaving(true); setCategoryError('');
+    try {
+      await api.put(`/lead-categories/${editingCategory.id}`, { name: editingCategory.name.trim(), color: editingCategory.color });
+      setEditingCategory(null);
+      await loadCategories();
+    } catch (err) { setCategoryError(err.response?.data?.error || 'Failed to save'); }
+    setCategorySaving(false);
+  };
+
+  const saveNewCategory = async () => {
+    if (!newCategory.name.trim()) { setCategoryError('Name is required'); return; }
+    setCategorySaving(true); setCategoryError('');
+    try {
+      await api.post('/lead-categories', { name: newCategory.name.trim(), color: newCategory.color });
+      setAddingCategory(false);
+      setNewCategory({ name: '', color: '#0066cc' });
+      await loadCategories();
+    } catch (err) { setCategoryError(err.response?.data?.error || 'Failed to save'); }
+    setCategorySaving(false);
+  };
+
+  const deleteCategory = async (c) => {
+    await confirmDialog({
+      title: 'Delete Category',
+      message: `Leads tagged "${c.name}" will become uncategorised. This cannot be undone.`,
+      confirmLabel: 'Delete Category',
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/lead-categories/${c.id}`);
+        await loadCategories();
       },
     });
   };
@@ -690,6 +752,113 @@ export default function SettingsPage() {
                   onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                 >
                   <Plus size={14} /> Add Stage
+                </button>
+              )}
+            </div>
+          )}
+        </Card>
+
+        <Card title="Lead Categories">
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+            Tag what a lead is actually about — e.g. separate ad campaigns like "Stone" and "Thyroid" feeding the same pipeline — so your team knows what to call about. Only you can create or assign these; employees just see the tag.
+          </p>
+
+          {categoryError && <ErrorBox msg={categoryError} />}
+
+          {categoriesLoading ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '12px 0' }}>Loading categories…</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {categories.map(c => {
+                const isEditing = editingCategory?.id === c.id;
+                return (
+                  <div key={c.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                    borderRadius: 10, padding: '10px 14px',
+                  }}>
+                    <div style={{
+                      width: 14, height: 14, borderRadius: '50%',
+                      background: isEditing ? editingCategory.color : c.color,
+                      flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)',
+                    }} />
+
+                    {isEditing ? (
+                      <>
+                        <input
+                          value={editingCategory.name}
+                          onChange={e => setEditingCategory(ec => ({ ...ec, name: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') saveEditCategory(); if (e.key === 'Escape') cancelEditCategory(); }}
+                          autoFocus
+                          style={{ ...inp, flex: 1, padding: '5px 9px', fontSize: 13 }}
+                        />
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          {COLOR_PALETTE.map(cl => (
+                            <button key={cl} onClick={() => setEditingCategory(ec => ({ ...ec, color: cl }))} title={cl} style={{
+                              width: 18, height: 18, borderRadius: '50%', background: cl, border: 'none', cursor: 'pointer',
+                              outline: editingCategory.color === cl ? `2px solid ${cl}` : 'none', outlineOffset: 2, flexShrink: 0,
+                            }} />
+                          ))}
+                        </div>
+                        <button onClick={saveEditCategory} disabled={categorySaving} title="Save" style={iconBtn('var(--success)')}><Check size={14} /></button>
+                        <button onClick={cancelEditCategory} title="Cancel" style={iconBtn('var(--text-muted)')}><X size={14} /></button>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, fontFamily: 'var(--font-main)', color: 'var(--text-primary)' }}>
+                          {c.name}
+                        </span>
+                        <span style={{
+                          fontSize: 10, color: c.color, background: c.color + '22',
+                          borderRadius: 10, padding: '2px 8px', fontWeight: 700, fontFamily: 'var(--font-main)',
+                        }}>Category</span>
+                        <button onClick={() => startEditCategory(c)} title="Edit" style={iconBtn('var(--teal)')}><Pencil size={13} /></button>
+                        <button onClick={() => deleteCategory(c)} title="Delete" style={iconBtn('var(--danger)')}><Trash2 size={13} /></button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+
+              {addingCategory ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  background: 'var(--bg-surface)', border: '1px solid var(--teal)',
+                  borderRadius: 10, padding: '10px 14px',
+                }}>
+                  <Plus size={14} style={{ color: 'var(--teal)', flexShrink: 0 }} />
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', background: newCategory.color, flexShrink: 0, border: '2px solid rgba(255,255,255,0.15)' }} />
+                  <input
+                    value={newCategory.name}
+                    onChange={e => setNewCategory(nc => ({ ...nc, name: e.target.value }))}
+                    onKeyDown={e => { if (e.key === 'Enter') saveNewCategory(); if (e.key === 'Escape') cancelAddCategory(); }}
+                    placeholder="Category name…"
+                    autoFocus
+                    style={{ ...inp, flex: 1, padding: '5px 9px', fontSize: 13 }}
+                  />
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    {COLOR_PALETTE.map(cl => (
+                      <button key={cl} onClick={() => setNewCategory(nc => ({ ...nc, color: cl }))} title={cl} style={{
+                        width: 18, height: 18, borderRadius: '50%', background: cl, border: 'none', cursor: 'pointer',
+                        outline: newCategory.color === cl ? `2px solid ${cl}` : 'none', outlineOffset: 2, flexShrink: 0,
+                      }} />
+                    ))}
+                  </div>
+                  <button onClick={saveNewCategory} disabled={categorySaving} title="Add" style={iconBtn('var(--success)')}><Check size={14} /></button>
+                  <button onClick={cancelAddCategory} title="Cancel" style={iconBtn('var(--text-muted)')}><X size={14} /></button>
+                </div>
+              ) : (
+                <button onClick={() => { setAddingCategory(true); setCategoryError(''); }} style={{
+                  display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px',
+                  background: 'transparent', border: '1px dashed var(--border)',
+                  borderRadius: 10, color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer',
+                  fontFamily: 'var(--font-main)', fontWeight: 500, width: '100%',
+                  transition: 'border-color 0.15s, color 0.15s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--teal)'; e.currentTarget.style.color = 'var(--teal)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                >
+                  <Plus size={14} /> Add Category
                 </button>
               )}
             </div>
