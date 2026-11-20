@@ -236,6 +236,13 @@ export default function AutomationPage() {
   });
   const [webhooks, setWebhooks] = useState(null);
   const [regenerating, setRegenerating] = useState(false);
+  const [callSources, setCallSources] = useState([]);
+  const [leadCategories, setLeadCategories] = useState([]);
+  const [addingCallSource, setAddingCallSource] = useState(false);
+  const [newCallSource, setNewCallSource] = useState({ label: "", phone_number: "", category_id: "" });
+  const [editingCallSource, setEditingCallSource] = useState(null);
+  const [callSourceSaving, setCallSourceSaving] = useState(false);
+  const [callSourceError, setCallSourceError] = useState("");
   const [sub, setSub] = useState(null);
   const [broadcast, setBroadcast] = useState({ audience: "all", days: 30, channels: [], message: "", template_id: "", variable_mapping: [] });
   const [audienceCount, setAudienceCount] = useState(null);
@@ -386,19 +393,23 @@ export default function AutomationPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const [cr, tr, wh, dp, dc, ma] = await Promise.all([
+      const [cr, tr, wh, dp, dc, ma, cs, lc] = await Promise.all([
         api.get("/automation/credentials"),
         api.get("/automation/triggers"),
         api.get("/automation/webhook-urls").catch(() => ({ data: null })),
         api.get("/delivery/providers").catch(() => ({ data: [] })),
         api.get("/delivery/credentials").catch(() => ({ data: [] })),
         api.get("/meta-ads/status").catch(() => ({ data: null })),
+        api.get("/call-sources").catch(() => ({ data: [] })),
+        api.get("/lead-categories").catch(() => ({ data: [] })),
       ]);
       setCreds((c) => ({ ...c, ...cr.data }));
       setWebhooks(wh.data);
       setDeliveryProviders(dp.data);
       setDeliveryConfigs(dc.data);
       setMetaAdsStatus(ma.data);
+      setCallSources(cs.data);
+      setLeadCategories(lc.data);
       const map = {};
       tr.data.forEach((t) => {
         const def = TRIGGER_DEFS.find((d) => d.id === t.trigger_id);
@@ -524,6 +535,81 @@ export default function AutomationPage() {
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     showToast("Copied to clipboard!");
+  };
+
+  // ── Call Sources (multiple mobiles via MacroDroid etc.) ──────────
+  const startAddCallSource = () => {
+    setAddingCallSource(true);
+    setNewCallSource({ label: "", phone_number: "", category_id: "" });
+    setCallSourceError("");
+  };
+  const cancelAddCallSource = () => { setAddingCallSource(false); setCallSourceError(""); };
+
+  const saveNewCallSource = async () => {
+    if (!newCallSource.label.trim()) { setCallSourceError("A label is required (e.g. the number or its owner)."); return; }
+    setCallSourceSaving(true); setCallSourceError("");
+    try {
+      const { data } = await api.post("/call-sources", {
+        label: newCallSource.label.trim(),
+        phone_number: newCallSource.phone_number.trim(),
+        category_id: newCallSource.category_id || null,
+      });
+      setCallSources((cs) => [...cs, data]);
+      setAddingCallSource(false);
+    } catch (err) {
+      setCallSourceError(err.response?.data?.error || "Failed to add");
+    }
+    setCallSourceSaving(false);
+  };
+
+  const startEditCallSource = (cs) => {
+    setEditingCallSource({ id: cs.id, label: cs.label, phone_number: cs.phone_number, category_id: cs.category_id || "" });
+    setCallSourceError("");
+  };
+  const cancelEditCallSource = () => { setEditingCallSource(null); setCallSourceError(""); };
+
+  const saveEditCallSource = async () => {
+    if (!editingCallSource.label.trim()) { setCallSourceError("A label is required."); return; }
+    setCallSourceSaving(true); setCallSourceError("");
+    try {
+      const { data } = await api.put(`/call-sources/${editingCallSource.id}`, {
+        label: editingCallSource.label.trim(),
+        phone_number: editingCallSource.phone_number.trim(),
+        category_id: editingCallSource.category_id || null,
+      });
+      setCallSources((cs) => cs.map((c) => (c.id === data.id ? data : c)));
+      setEditingCallSource(null);
+    } catch (err) {
+      setCallSourceError(err.response?.data?.error || "Failed to save");
+    }
+    setCallSourceSaving(false);
+  };
+
+  const regenerateCallSource = async (cs) => {
+    await confirmDialog({
+      title: "Regenerate Webhook URL",
+      message: `This invalidates the current webhook URL for "${cs.label}". You'll need to update that number's MacroDroid config with the new URL.`,
+      confirmLabel: "Regenerate",
+      danger: true,
+      onConfirm: async () => {
+        const { data } = await api.post(`/call-sources/${cs.id}/regenerate`);
+        setCallSources((prev) => prev.map((c) => (c.id === data.id ? data : c)));
+        showToast("Webhook URL regenerated.");
+      },
+    });
+  };
+
+  const deleteCallSource = async (cs) => {
+    await confirmDialog({
+      title: "Remove Call Source",
+      message: `This stops accepting leads from "${cs.label}"'s webhook URL. This cannot be undone.`,
+      confirmLabel: "Remove",
+      danger: true,
+      onConfirm: async () => {
+        await api.delete(`/call-sources/${cs.id}`);
+        setCallSources((prev) => prev.filter((c) => c.id !== cs.id));
+      },
+    });
   };
 
   const toggleChan = (tid, ch) => {
@@ -1991,6 +2077,155 @@ export default function AutomationPage() {
                     names → Save. Then click the clock icon (Triggers) on the left → Add Trigger → function{" "}
                     <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>syncNewLeads</code>, event
                     source "Time-driven", type "Minutes timer", every 5 minutes → Save (approve the permission prompt the first time).
+                  </div>
+                </div>
+              </div>
+
+              {/* Phone Call Sources — multiple mobiles, each with its own
+                  identifiable webhook URL (so, unlike the generic shared
+                  webhook below, leads are correctly tagged by which number
+                  actually rang) and an optional auto-category. */}
+              <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 18 }}>📱</span>
+                  <span style={{ fontFamily: "var(--font-main)", fontWeight: 700, fontSize: 14, color: "var(--text-primary)" }}>
+                    Phone Call Sources (multiple mobiles)
+                  </span>
+                </div>
+                <div style={{ padding: "18px 20px" }}>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.7 }}>
+                    Running more than one mobile number through MacroDroid (or any call-tracking app)? Add each number here —
+                    every number gets its own webhook URL, so a missed/ended call is never mixed up between numbers. Optionally
+                    auto-tag every lead from a number with a Category (set up under Settings → Pipeline), so your team
+                    instantly knows what to call about.
+                  </div>
+
+                  {callSourceError && (
+                    <div style={{ marginBottom: 12, padding: "9px 13px", background: "var(--danger-dim)", border: "1px solid var(--danger)", borderRadius: 8, fontSize: 12, color: "var(--danger)" }}>
+                      ⚠ {callSourceError}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {callSources.map((cs) => {
+                      const isEditing = editingCallSource?.id === cs.id;
+                      return (
+                        <div key={cs.id} style={{ background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: 10, padding: "12px 14px" }}>
+                          {isEditing ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <input
+                                  value={editingCallSource.label}
+                                  onChange={(e) => setEditingCallSource((s) => ({ ...s, label: e.target.value }))}
+                                  placeholder="Label (e.g. Thyroid Line)"
+                                  style={{ ...inp, flex: 1 }}
+                                />
+                                <input
+                                  value={editingCallSource.phone_number}
+                                  onChange={(e) => setEditingCallSource((s) => ({ ...s, phone_number: e.target.value }))}
+                                  placeholder="Phone number (optional)"
+                                  style={{ ...inp, flex: 1 }}
+                                />
+                              </div>
+                              <select
+                                value={editingCallSource.category_id}
+                                onChange={(e) => setEditingCallSource((s) => ({ ...s, category_id: e.target.value }))}
+                                style={inp}
+                              >
+                                <option value="">No auto-category</option>
+                                {leadCategories.map((c) => (
+                                  <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                              </select>
+                              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                                <button onClick={cancelEditCallSource} style={{ ...copyBtn, background: "transparent" }}>Cancel</button>
+                                <button onClick={saveEditCallSource} disabled={callSourceSaving} style={copyBtn}>
+                                  {callSourceSaving ? "Saving…" : "Save"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
+                                <div>
+                                  <div style={{ fontWeight: 700, fontSize: 13, color: "var(--text-primary)", fontFamily: "var(--font-main)" }}>
+                                    {cs.label}
+                                    {cs.phone_number && <span style={{ color: "var(--text-muted)", fontWeight: 400 }}> — {cs.phone_number}</span>}
+                                  </div>
+                                  {cs.category_name && (
+                                    <span style={{ display: "inline-block", marginTop: 4, fontSize: 10, fontWeight: 700, color: cs.category_color, background: cs.category_color + "22", borderRadius: 10, padding: "1px 7px" }}>
+                                      Auto-tags: {cs.category_name}
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                                  <button onClick={() => startEditCallSource(cs)} style={{ ...copyBtn, background: "transparent" }}>Edit</button>
+                                  <button onClick={() => regenerateCallSource(cs)} style={{ ...copyBtn, background: "transparent" }}>⟳ New URL</button>
+                                  <button onClick={() => deleteCallSource(cs)} style={{ ...copyBtn, background: "transparent", color: "var(--danger)", borderColor: "var(--danger)" }}>Remove</button>
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <input readOnly value={cs.webhook_url} style={{ ...inp, fontSize: 11, flex: 1 }} onFocus={(e) => e.target.select()} />
+                                <button onClick={() => copyToClipboard(cs.webhook_url)} style={copyBtn}>Copy</button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {addingCallSource ? (
+                      <div style={{ background: "var(--bg-surface)", border: "1px solid var(--teal)", borderRadius: 10, padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input
+                            value={newCallSource.label}
+                            onChange={(e) => setNewCallSource((s) => ({ ...s, label: e.target.value }))}
+                            placeholder="Label (e.g. Thyroid Line)"
+                            autoFocus
+                            style={{ ...inp, flex: 1 }}
+                          />
+                          <input
+                            value={newCallSource.phone_number}
+                            onChange={(e) => setNewCallSource((s) => ({ ...s, phone_number: e.target.value }))}
+                            placeholder="Phone number (optional)"
+                            style={{ ...inp, flex: 1 }}
+                          />
+                        </div>
+                        <select
+                          value={newCallSource.category_id}
+                          onChange={(e) => setNewCallSource((s) => ({ ...s, category_id: e.target.value }))}
+                          style={inp}
+                        >
+                          <option value="">No auto-category</option>
+                          {leadCategories.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                          <button onClick={cancelAddCallSource} style={{ ...copyBtn, background: "transparent" }}>Cancel</button>
+                          <button onClick={saveNewCallSource} disabled={callSourceSaving} style={copyBtn}>
+                            {callSourceSaving ? "Adding…" : "Add Number"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={startAddCallSource} style={{
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 14px",
+                        background: "transparent", border: "1px dashed var(--border)", borderRadius: 10,
+                        color: "var(--text-muted)", fontSize: 13, cursor: "pointer", fontFamily: "var(--font-main)", fontWeight: 500,
+                      }}>
+                        + Add Mobile Number
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7, marginTop: 14 }}>
+                    <strong style={{ color: "var(--text-secondary)" }}>MacroDroid setup (per number):</strong> On that
+                    specific phone, add trigger <em>Phone → Call Ended</em> → add action <em>Connectivity → HTTP Request</em> →
+                    Method <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>POST</code>,
+                    paste that number's URL above, Content-Type <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>application/json</code>,
+                    body: <code style={{ background: "var(--bg-surface)", padding: "1px 6px", borderRadius: 4 }}>{`{"phone": "[call_number]"}`}</code> —
+                    tap the <strong>"..."</strong> button next to the field to insert the trigger's real phone number via magic text.
                   </div>
                 </div>
               </div>

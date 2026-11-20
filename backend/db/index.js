@@ -792,6 +792,23 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT NOW()
       );
 
+      -- Each row is one phone number a tenant has wired up through a
+      -- call-tracking app (MacroDroid, etc.) — its own unique webhook_token
+      -- so a missed/ended call on THAT number is identifiable, unlike the
+      -- single shared automation_credentials.webhook_token every other
+      -- source (Sheets, Google Ads, WhatsApp) uses. category_id lets a
+      -- dedicated number (e.g. a "Thyroid" line) auto-tag every lead it
+      -- creates, same as lead_categories.
+      CREATE TABLE IF NOT EXISTS call_sources (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        label VARCHAR(100) NOT NULL,
+        phone_number VARCHAR(30) DEFAULT '',
+        category_id INTEGER REFERENCES lead_categories(id) ON DELETE SET NULL,
+        webhook_token VARCHAR(64) UNIQUE NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+
       CREATE TABLE IF NOT EXISTS password_otps (
         id SERIAL PRIMARY KEY,
         email VARCHAR(255) NOT NULL,
@@ -895,6 +912,8 @@ const initDB = async () => {
       `CREATE INDEX IF NOT EXISTS idx_leads_user_followup ON leads(user_id, follow_up_date)`,
       `CREATE INDEX IF NOT EXISTS idx_leads_category_id ON leads(category_id)`,
       `CREATE INDEX IF NOT EXISTS idx_lead_categories_user_id ON lead_categories(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_call_sources_user_id ON call_sources(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_call_sources_webhook_token ON call_sources(webhook_token)`,
       `CREATE INDEX IF NOT EXISTS idx_leads_user_created ON leads(user_id, created_at DESC)`,
       // Backs the leads list's default sort (ORDER BY COALESCE(assigned_at,
       // created_at) DESC) — matches the exact expression used in the query.

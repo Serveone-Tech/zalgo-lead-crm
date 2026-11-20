@@ -698,6 +698,76 @@ router.post("/sheets/:token", express.json(), async (req, res) => {
   }
 });
 
+// ── POST /api/webhooks/call/:token ───────────────────────────────
+// One of these per phone number the tenant has wired up via a call-tracking
+// app (MacroDroid, etc.) — see routes/call-sources.js. Unlike every other
+// source here, the token identifies a specific NUMBER, not just the
+// tenant, which is what lets each registered line auto-tag its own leads
+// (platform + category_id) without the tenant having to hand-build a
+// different JSON body per device.
+router.post("/call/:token", express.json(), async (req, res) => {
+  try {
+    const src = await pool.query(
+      "SELECT user_id, label, category_id FROM call_sources WHERE webhook_token=$1",
+      [req.params.token],
+    );
+    const source = src.rows[0];
+    if (!source) return res.status(404).json({ message: "Unknown webhook" });
+    const tenantId = source.user_id;
+
+    const { name, email, created_at } = req.body || {};
+    const rawPhone = req.body?.phone;
+    const phone = isValidPhone(rawPhone) ? cleanPhoneValue(rawPhone) : "";
+    if (!phone) return res.status(400).json({ message: "No usable phone number in request" });
+
+    let createdAt = null;
+    if (
+      typeof created_at === "string" &&
+      /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?$/.test(created_at.trim())
+    ) {
+      createdAt = created_at.trim();
+    }
+
+    let isNew = false;
+    try {
+      await withPhoneLock(tenantId, phone, async (client) => {
+        const dup = await findDuplicateLeadByPhone(tenantId, phone, null, client);
+        if (dup) return;
+        if (!(await withinLeadLimit(tenantId))) {
+          throw Object.assign(new Error("Lead limit reached for this plan"), { limitReached: true });
+        }
+        await client.query(
+          `INSERT INTO leads (user_id, name, phone, email, platform, last_message, notes, category_id, created_at)
+           VALUES ($1,$2,$3,$4,$5,'',$6,$7, COALESCE($8::timestamp, NOW()))`,
+          [
+            tenantId,
+            name || phone,
+            phone,
+            email || "",
+            `Phone Call — ${source.label}`,
+            `Auto-captured from a call via "${source.label}"`,
+            source.category_id,
+            createdAt,
+          ],
+        );
+        isNew = true;
+      });
+    } catch (e) {
+      if (e.limitReached) return res.status(403).json({ message: e.message });
+      throw e;
+    }
+
+    if (!isNew) return res.json({ skipped: "duplicate" });
+
+    fireTrigger("new_lead", tenantId, { name: name || phone, phone, email }).catch(() => {});
+
+    res.json({ success: true });
+  } catch (e) {
+    console.error("Call webhook error:", e.message);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // ── POST Razorpay webhook — drives the whole recurring-billing lifecycle.
 // Verified via HMAC-SHA256 over the exact raw request bytes (req.rawBody,
 // captured by server.js's express.json({ verify }) — NOT
