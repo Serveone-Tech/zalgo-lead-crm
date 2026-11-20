@@ -1,4 +1,5 @@
 const express = require("express");
+const ExcelJS = require("exceljs");
 const { pool } = require("../db");
 const { auth, requireSubscription, requirePlanFeature } = require("../middleware/auth");
 const { hasPermission, isOwner } = require("../utils/permissions");
@@ -630,6 +631,120 @@ router.put("/bulk-category", auth, requireSubscription, requirePlanFeature("core
       [category_id || null, lead_ids, req.tenantId],
     );
     res.json({ updated: result.rowCount });
+  } catch (e) {
+    console.error(e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// GET export a set of selected leads to Excel — visibilityClause still
+// applies, so an employee without view_all_leads can only ever export
+// leads actually assigned to them, same as every other leads listing.
+router.get("/export-excel", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  const ids = (req.query.lead_ids || "")
+    .toString()
+    .split(",")
+    .map((s) => parseInt(s.trim()))
+    .filter((n) => !isNaN(n));
+  if (ids.length === 0) return res.status(400).json({ error: "No leads selected" });
+  try {
+    const vis = visibilityClause(req, 3);
+    const result = await pool.query(
+      `SELECT l.*, e.name AS assigned_name, cat.name AS category_name
+       FROM leads l
+       LEFT JOIN users e ON e.id = l.assigned_to
+       LEFT JOIN lead_categories cat ON cat.id = l.category_id
+       WHERE l.user_id=$1 AND l.id = ANY($2::int[])${vis.clause}
+       ORDER BY l.created_at DESC`,
+      [req.tenantId, ids, ...vis.params],
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Leads");
+    sheet.columns = [
+      { header: "Name", key: "name", width: 24 },
+      { header: "Phone", key: "phone", width: 16 },
+      { header: "Email", key: "email", width: 26 },
+      { header: "Platform", key: "platform", width: 14 },
+      { header: "Platform Link", key: "platform_link", width: 30 },
+      { header: "Stage", key: "stage", width: 14 },
+      { header: "Category", key: "category_name", width: 16 },
+      { header: "Assigned To", key: "assigned_name", width: 20 },
+      { header: "Follow-up Date", key: "follow_up_date", width: 20 },
+      { header: "Notes", key: "notes", width: 32 },
+      { header: "Last Message", key: "last_message", width: 32 },
+      { header: "Created At", key: "created_at", width: 20 },
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    for (const row of result.rows) {
+      sheet.addRow({
+        name: row.name,
+        phone: row.phone || "",
+        email: row.email || "",
+        platform: row.platform || "",
+        platform_link: row.platform_link || "",
+        stage: row.stage || "",
+        category_name: row.category_name || "",
+        assigned_name: row.assigned_name || "",
+        follow_up_date: row.follow_up_date ? row.follow_up_date.toISOString().slice(0, 16).replace("T", " ") : "",
+        notes: row.notes || "",
+        last_message: row.last_message || "",
+        created_at: row.created_at ? row.created_at.toISOString().slice(0, 10) : "",
+      });
+    }
+
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="leads-export-${new Date().toISOString().split("T")[0]}.xlsx"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (e) {
+    console.error("leads/export-excel failed:", e.message);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// PUT reset a batch of leads back to "fresh" — recycles old/stuck leads
+// (assigned to someone, worked on, going nowhere) back into something that
+// looks exactly like a brand-new lead so the owner can hand it out again.
+// Owner-only, since it wipes everything accumulated on the lead: assignment,
+// follow-up, notes, remarks (lead_messages) and admin notes. Leads already
+// Converted are skipped — resetting one would desync the Customer record
+// it already created.
+router.put("/bulk-reset-fresh", auth, requireSubscription, requirePlanFeature("core"), async (req, res) => {
+  const { lead_ids } = req.body;
+  if (!Array.isArray(lead_ids) || lead_ids.length === 0)
+    return res.status(400).json({ error: "No leads selected" });
+  if (!isOwner(req)) return res.status(403).json({ error: "Permission denied" });
+  try {
+    const freshStage = await pool.query(
+      "SELECT name FROM stages WHERE user_id=$1 ORDER BY sort_order ASC, id ASC LIMIT 1",
+      [req.tenantId],
+    );
+    const stageName = freshStage.rows[0]?.name || "New";
+
+    const eligible = await pool.query(
+      `SELECT id FROM leads WHERE id = ANY($1::int[]) AND user_id=$2 AND UPPER(stage) <> 'CONVERTED'`,
+      [lead_ids, req.tenantId],
+    );
+    const eligibleIds = eligible.rows.map((r) => r.id);
+    const skipped = lead_ids.length - eligibleIds.length;
+    if (eligibleIds.length === 0) {
+      return res.json({ updated: 0, skipped });
+    }
+
+    await pool.query(
+      `UPDATE leads SET
+         assigned_to=NULL, assigned_at=NULL, stage=$1, follow_up_date=NULL,
+         followup_reminder_sent_date=NULL, notes='', last_message='',
+         category_id=NULL, updated_at=NOW()
+       WHERE id = ANY($2::int[]) AND user_id=$3`,
+      [stageName, eligibleIds, req.tenantId],
+    );
+    await pool.query("DELETE FROM lead_messages WHERE lead_id = ANY($1::int[])", [eligibleIds]);
+    await pool.query("DELETE FROM lead_admin_notes WHERE lead_id = ANY($1::int[])", [eligibleIds]);
+
+    res.json({ updated: eligibleIds.length, skipped });
   } catch (e) {
     console.error(e.message);
     res.status(500).json({ error: "Server error" });

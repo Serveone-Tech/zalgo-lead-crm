@@ -105,6 +105,8 @@ function LeadsContent() {
   const [bulkCategoryTo, setBulkCategoryTo] = useState(NO_CATEGORY_CHANGE);
   const [bulkApplying, setBulkApplying] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [resettingFresh, setResettingFresh] = useState(false);
 
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -408,6 +410,53 @@ function LeadsContent() {
       },
     });
     setBulkDeleting(false);
+  };
+
+  const exportSelected = async () => {
+    if (selected.size === 0) return;
+    setExporting(true);
+    try {
+      const res = await api.get("/leads/export-excel", {
+        params: { lead_ids: Array.from(selected).join(",") },
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `leads-export-${new Date().toISOString().split("T")[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      showToast("Failed to export leads. Please try again.", "error");
+    }
+    setExporting(false);
+  };
+
+  const resetToFresh = async () => {
+    if (selected.size === 0) return;
+    const count = selected.size;
+    await confirmDialog({
+      title: "Convert to Fresh Lead",
+      message: `This clears assignment, follow-up date, notes and call history on ${count} selected lead${count !== 1 ? "s" : ""} — they'll look exactly like brand-new leads, ready to assign again. This cannot be undone. Any already-Converted leads in the selection are skipped.`,
+      confirmLabel: `Convert ${count} Lead${count !== 1 ? "s" : ""}`,
+      danger: true,
+      onConfirm: async () => {
+        setResettingFresh(true);
+        const { data } = await api.put("/leads/bulk-reset-fresh", {
+          lead_ids: Array.from(selected),
+        });
+        const msg = data.skipped > 0
+          ? `✓ ${data.updated} lead${data.updated !== 1 ? "s" : ""} reset to fresh · ${data.skipped} already-Converted skipped`
+          : `✓ ${data.updated} lead${data.updated !== 1 ? "s" : ""} reset to fresh`;
+        showToast(msg);
+        clearSelection();
+        load();
+        loadStats();
+      },
+    });
+    setResettingFresh(false);
   };
 
   const overdueCount = stats?.overdue ?? 0;
@@ -847,6 +896,45 @@ function LeadsContent() {
               }}
             >
               📣 Message Selected
+            </button>
+          )}
+          <button
+            onClick={exportSelected}
+            disabled={exporting}
+            style={{
+              background: "transparent",
+              border: "1px solid var(--teal)",
+              borderRadius: 7,
+              padding: "8px 16px",
+              fontSize: 13,
+              fontWeight: 600,
+              color: "var(--teal)",
+              cursor: exporting ? "not-allowed" : "pointer",
+              opacity: exporting ? 0.7 : 1,
+              fontFamily: "var(--font-main)",
+            }}
+          >
+            {exporting ? "Exporting…" : "⬇ Export Selected"}
+          </button>
+          {isOwnerUser(user) && (
+            <button
+              onClick={resetToFresh}
+              disabled={resettingFresh}
+              title="Clears assignment, follow-up date, notes and call history — makes these leads look brand-new again"
+              style={{
+                background: "transparent",
+                border: "1px solid var(--warn)",
+                borderRadius: 7,
+                padding: "8px 16px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--warn)",
+                cursor: resettingFresh ? "not-allowed" : "pointer",
+                opacity: resettingFresh ? 0.7 : 1,
+                fontFamily: "var(--font-main)",
+              }}
+            >
+              {resettingFresh ? "Converting…" : "↺ Convert to Fresh Lead"}
             </button>
           )}
           <button
