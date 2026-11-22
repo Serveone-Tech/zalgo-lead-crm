@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import api, { refreshUser } from "../../lib/api";
 import WhatsAppChat from "../../components/WhatsAppChat";
+import { WhatsAppGlyph } from "../../components/BrandIcons";
 import { isOwnerUser, hasPerm } from "../../lib/permissions";
 
 function initials(name) {
@@ -153,7 +154,7 @@ export default function WhatsAppInboxPage() {
               gap: 8,
             }}
           >
-            🟢 WhatsApp
+<WhatsAppGlyph size={22} /> WhatsApp
           </h1>
           <input
             value={search}
