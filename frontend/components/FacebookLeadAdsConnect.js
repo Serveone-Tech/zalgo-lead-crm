@@ -39,7 +39,15 @@ export default function FacebookLeadAdsConnect({ status, onConnected, onDisconne
   const [pages, setPages] = useState([]);
 
   const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-  const configured = !!appId;
+  // This Meta App is a "Facebook Login for Business" type (see
+  // WhatsAppEmbeddedSignup, which uses the same pattern) — that app type
+  // doesn't support plain scope-based FB.login() at all; every permission
+  // has to come from a pre-created Login Configuration in the App
+  // Dashboard, hence a separate config_id just for the Lead Ads
+  // permissions (pages_show_list, leads_retrieval, pages_manage_ads,
+  // pages_read_engagement), distinct from the WhatsApp one.
+  const configId = process.env.NEXT_PUBLIC_META_LEADS_CONFIG_ID;
+  const configured = !!(appId && configId);
 
   const finishConnection = async (code) => {
     setState("connecting");
@@ -86,7 +94,7 @@ export default function FacebookLeadAdsConnect({ status, onConnected, onDisconne
           }
         },
         {
-          scope: "pages_show_list,leads_retrieval,pages_manage_ads,pages_read_engagement",
+          config_id: configId,
           response_type: "code",
           override_default_response_type: true,
         },
@@ -113,7 +121,7 @@ export default function FacebookLeadAdsConnect({ status, onConnected, onDisconne
   if (!configured) {
     return (
       <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 16, padding: "10px 12px", background: "var(--bg-surface)", borderRadius: 8 }}>
-        Meta Lead Ads connect isn't set up on this server yet.
+        Meta Lead Ads connect isn't set up on this server yet (missing NEXT_PUBLIC_META_LEADS_CONFIG_ID).
       </div>
     );
   }
